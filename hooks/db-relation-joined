@@ -1,0 +1,31 @@
+#!/usr/bin/env python
+
+from common import *
+
+import urllib
+import subprocess
+import os
+import sys
+import string
+import random
+import pickle
+
+if database_already_exists(database_name):
+    print "database exists, assuming configuration has happened already"
+    sys.exit(0)
+
+create_user(user,database_name)
+
+hostname = subprocess.check_output(['hostname','-f']).strip()
+
+# Create new database or touch slave.configured file
+runsql("create database `%s` character set utf8" % database_name)
+
+# Store new values in relation settings.
+subprocess.call(
+    ["relation-set",
+     "database=%s" % database_name,
+     "user=%s" % user,
+     "password=%s" % service_password,
+     'host=%s' % hostname])
+

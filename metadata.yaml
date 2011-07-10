@@ -1,0 +1,17 @@
+ensemble: formula
+name: postgresql
+revision: 1
+summary: "object-relational SQL database (supported version)"
+description: |
+  PostgreSQL is a fully featured object-relational database management
+  system.  It supports a large part of the SQL standard and is designed
+  to be extensible by users in many aspects.  Some of the features are:
+  ACID transactions, foreign keys, views, sequences, subqueries,
+  triggers, user-defined types and functions, outer joins, multiversion
+  concurrency control.  Graphical user interfaces and bindings for many
+  programming languages are available as well.
+provides:
+  db:
+    interface: postgresql
+  db-admin:
+    interface: postgresql
