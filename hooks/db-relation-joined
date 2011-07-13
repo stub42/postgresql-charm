@@ -1,31 +1,27 @@
-#!/usr/bin/env python
+#!/bin/bash
 
-from common import *
+#ENSEMBLE_REMOTE_UNIT
 
-import urllib
-import subprocess
-import os
-import sys
-import string
-import random
-import pickle
+    #change_unit  = subprocess.check_output(['relation-list']).strip().split("\n")[0]
 
-if database_already_exists(database_name):
-    print "database exists, assuming configuration has happened already"
-    sys.exit(0)
 
-service_password = "".join(random.sample(string.letters, 10))
+#lastrun_path= "/var/lib/ensemble/${db_name}.${db_user}.lastrun"
 
-create_user(user,service_password)
-create_database(database_name,user)
+#if database_already_exists(database_name):
+#    print "database exists, assuming configuration has happened already"
+#    sys.exit(0)
 
-hostname = subprocess.check_output(['hostname','-f']).strip()
 
-# Store new values in relation settings.
-subprocess.call(
-    ["relation-set",
-     "database=%s" % database_name,
-     "user=%s" % user,
-     "password=%s" % service_password,
-     'host=%s' % hostname])
+database=${ENSEMBLE_REMOTE_UNIT///*}
+user=${ENSEMBLE_REMOTE_UNIT///*}
+host=`hostname -f`
+password=`pwgen -s 16`
+
+password_path= "/var/lib/ensemble/${database}.${user}.password"
+
+sudo -su postgres psql -c"create user '${user}' with superuser password '${password}'"
+sudo -su postgres psql -c"create database ${database} owner ${user}" 
+sudo -su postgres psql -c"grant all privileges on database ${database} to ${user}"
+
+relation-set database=${database} user=${user} password=${password} host=${host}
 
