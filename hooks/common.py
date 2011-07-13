@@ -33,18 +33,19 @@ def database_already_exists(database_name):
         return true
     return false
 
-def create_user(user,database_name):
-    # Create database user and grant access
-    service_password = "".join(random.sample(string.letters, 10))
-
+def create_user(user, password):
     runsql(
-        "grant replication client on *.* to `%s` identified by '%s'"  % (
+        "create user '%s' with [superuser] password '%s'" % (
         user,
-        service_password))
+        password))
 
+def create_database(database_name, user):
     runsql(
-        "grant all on `%s`.* to `%s` identified by '%s'" % (
+        "create database %s owner %s" % (
         database_name,
-        user,
-        service_password))
+        user))
+    runsql(
+        "grant all privileges on database %s to %s" % (
+        database_name,
+        user))
 
