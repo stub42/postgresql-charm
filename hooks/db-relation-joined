@@ -17,9 +17,9 @@ user=${ENSEMBLE_REMOTE_UNIT///*}
 host=`hostname -f`
 password=`pwgen -s 16`
 
-password_path= "/var/lib/ensemble/${database}.${user}.password"
+echo ${password} > /var/lib/ensemble/${database}.${user}.password
 
-sudo -su postgres psql -c"create user '${user}' with superuser password '${password}'"
+sudo -su postgres psql -c"create user ${user} with superuser password '${password}'"
 sudo -su postgres psql -c"create database ${database} owner ${user}" 
 sudo -su postgres psql -c"grant all privileges on database ${database} to ${user}"
 

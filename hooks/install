@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sudo apt-get install -qqy --no-install-recommends  postgresql python-pgsql
+sudo apt-get install -qqy --no-install-recommends  postgresql python-pgsql pwgen
 
-service postgresql stop 
+#service postgresql stop 
 
