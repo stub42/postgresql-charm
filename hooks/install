@@ -2,5 +2,6 @@
 
 sudo apt-get install -qqy --no-install-recommends  postgresql python-pgsql pwgen
 
-#service postgresql stop 
+echo "listen_addresses = '*'" >> /etc/postgresql/*/main/postgresql.conf
+
 
