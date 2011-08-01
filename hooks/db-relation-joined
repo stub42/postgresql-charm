@@ -1,6 +1,11 @@
 #!/bin/bash
 
-remote_host="0.0.0.0"
+remote_host=`relation-get ip`
+if [ -z "$remote_host" ]; then   #if [ -z $ENSEMBLE_REMOTE_UNIT ]; then
+  ensemble-log "remote host not set yet"
+  exit 0
+fi
+
 database=${ENSEMBLE_REMOTE_UNIT///*}
 user=${ENSEMBLE_REMOTE_UNIT///*}
 host=`hostname -f`
@@ -33,7 +38,8 @@ host_can_access() {
 }
 host_can_access || grant_host_access
 
-service postgresql restart
+ensemble-log "starting postgresql"
+service postgresql restart || service postgresql start
 
 relation-set database=${database} user=${user} password=${password} host=${host} database_type='postgresql'
 
