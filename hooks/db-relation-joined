@@ -1,30 +1,37 @@
 #!/bin/bash
 
-#ENSEMBLE_REMOTE_UNIT
-
-    #change_unit  = subprocess.check_output(['relation-list']).strip().split("\n")[0]
-
-
-#lastrun_path= "/var/lib/ensemble/${db_name}.${db_user}.lastrun"
-
-#if database_already_exists(database_name):
-#    print "database exists, assuming configuration has happened already"
-#    sys.exit(0)
-
-
 remote_host="0.0.0.0"
 database=${ENSEMBLE_REMOTE_UNIT///*}
 user=${ENSEMBLE_REMOTE_UNIT///*}
 host=`hostname -f`
-password=`pwgen -s 16`
 
-echo ${password} > /var/lib/ensemble/${database}.${user}.password
+service_password_file="/var/lib/ensemble/${database}.${user}.password"
+create_password() {
+  password=`pwgen -s 16`
+  echo ${password} > ${service_password_file}
+}
+has_password() {
+  [ -f ${service_password_file} ] && password=`cat ${service_password_file}`
+}
+has_password || create_password
 
-sudo -su postgres psql -c"create user ${user} with superuser password '${password}'"
-sudo -su postgres psql -c"create database ${database} owner ${user}" 
-sudo -su postgres psql -c"grant all privileges on database ${database} to ${user}"
+create_database() {
+  sudo -su postgres psql -c"create user ${user} with superuser password '${password}'"
+  sudo -su postgres psql -c"create database ${database} owner ${user}" 
+  sudo -su postgres psql -c"grant all privileges on database ${database} to ${user}"
+}
+has_database() {
+  sudo -su postgres psql -c"select datname from pg_database;" | grep -q ${database}
+}
+has_database || create_database
 
-echo "host ${database} ${user} ${remote_host}/0 md5" >> /etc/postgresql/*/main/pg_hba.conf
+grant_host_access() {
+  echo "host ${database} ${user} ${remote_host}/0 md5" >> /etc/postgresql/*/main/pg_hba.conf
+}
+host_can_access() {
+  grep -q ${remote_host} /etc/postgresql/*/main/pg_hba.conf
+}
+host_can_access || grant_host_access
 
 service postgresql restart
 

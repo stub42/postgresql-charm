@@ -1,1 +1,4 @@
 #!/bin/bash
+
+#service is (re)started when relations are created
+

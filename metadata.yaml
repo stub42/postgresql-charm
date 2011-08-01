@@ -1,6 +1,6 @@
 ensemble: formula
 name: postgresql
-revision: 9
+revision: 10
 summary: "object-relational SQL database (supported version)"
 description: |
   PostgreSQL is a fully featured object-relational database management
