@@ -1,6 +1,6 @@
 ensemble: formula
 name: postgresql
-revision: 11
+revision: 12
 summary: "object-relational SQL database (supported version)"
 description: |
   PostgreSQL is a fully featured object-relational database management
@@ -12,4 +12,6 @@ description: |
   programming languages are available as well.
 provides:
   db:
+    interface: pgsql
+  db-admin:
     interface: pgsql

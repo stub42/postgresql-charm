@@ -9,10 +9,10 @@ if [ -z "$remote_host" ]; then   #if [ -z $ENSEMBLE_REMOTE_UNIT ]; then
 fi
 
 grant_host_access() {
-  echo "host ${database} ${user} ${remote_host}/0 md5" >> /etc/postgresql/*/main/pg_hba.conf
+  echo "host ${database_name} ${user} ${remote_host}/0 md5" >> /etc/postgresql/*/main/pg_hba.conf
 }
 host_can_access() {
-  grep -q ${remote_host} /etc/postgresql/*/main/pg_hba.conf
+  grep -q "${database_name}.*${user}.*${remote_host}" /etc/postgresql/*/main/pg_hba.conf
 }
 host_can_access || grant_host_access
 
