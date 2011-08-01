@@ -13,5 +13,3 @@ description: |
 provides:
   db:
     interface: pgsql
-  db-admin:
-    interface: pgsql
