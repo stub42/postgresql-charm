@@ -22,5 +22,8 @@ has_database() {
 }
 has_database || create_database
 
-relation-set database=${database} user=${user} password=${password} host=${host} database_type='pgsql'
+relation-set host=${host} \
+             user=${user} \
+             password=${password} \
+             database=${database} 
 

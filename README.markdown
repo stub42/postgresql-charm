@@ -1,7 +1,28 @@
 
-# Redirect
+# Postgresql Service
 
-This is maintained on launchpad until I can get a bridge working.
-Please see `lp:~mark-mims/+junk/principia-postgresql`
 
+## During db-relation-joined,
+
+
+### the postgresql service provides:
+
+- `host`
+- `user`
+- `database`
+- `password`
+
+### and requires
+
+- `ip`: the client ip address to enable access
+
+
+
+## During db-relation-changed,
+
+### provides
+
+### accepts
+
+- `ip`: the client ip address to enable access
 
