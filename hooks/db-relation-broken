@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 ensemble-log "Relationship with ${database} broken."
 
 revoke_access() {

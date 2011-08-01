@@ -4,6 +4,4 @@ sudo apt-get install -qqy --no-install-recommends  postgresql pwgen
 
 echo "listen_addresses = '*'" >> /etc/postgresql/*/main/postgresql.conf
 
-# delay startup until relation is created
-service postgresql stop
 

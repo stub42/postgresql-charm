@@ -1,14 +1,6 @@
 #!/bin/bash
 
-remote_host=`relation-get ip`
-if [ -z "$remote_host" ]; then   #if [ -z $ENSEMBLE_REMOTE_UNIT ]; then
-  ensemble-log "remote host not set yet"
-  exit 0
-fi
-
-database=${ENSEMBLE_REMOTE_UNIT///*}
-user=${ENSEMBLE_REMOTE_UNIT///*}
-host=`hostname -f`
+[[ -f "$(dirname $0)/common.sh" ]] && source "$(dirname $0)/common.sh"
 
 service_password_file="/var/lib/ensemble/${database}.${user}.password"
 create_password() {
@@ -30,16 +22,5 @@ has_database() {
 }
 has_database || create_database
 
-grant_host_access() {
-  echo "host ${database} ${user} ${remote_host}/0 md5" >> /etc/postgresql/*/main/pg_hba.conf
-}
-host_can_access() {
-  grep -q ${remote_host} /etc/postgresql/*/main/pg_hba.conf
-}
-host_can_access || grant_host_access
-
-ensemble-log "starting postgresql"
-service postgresql restart || service postgresql start
-
-relation-set database=${database} user=${user} password=${password} host=${host} database_type='postgresql'
+relation-set database=${database} user=${user} password=${password} host=${host} database_type='pgsql'
 

@@ -1,0 +1,21 @@
+#!/bin/bash
+
+[[ -f "$(dirname $0)/common.sh" ]] && source "$(dirname $0)/common.sh"
+
+remote_host=`relation-get ip`
+if [ -z "$remote_host" ]; then   #if [ -z $ENSEMBLE_REMOTE_UNIT ]; then
+  ensemble-log "remote host not set yet"
+  exit 0
+fi
+
+grant_host_access() {
+  echo "host ${database} ${user} ${remote_host}/0 md5" >> /etc/postgresql/*/main/pg_hba.conf
+}
+host_can_access() {
+  grep -q ${remote_host} /etc/postgresql/*/main/pg_hba.conf
+}
+host_can_access || grant_host_access
+
+ensemble-log "starting postgresql"
+service postgresql restart || service postgresql start
+
