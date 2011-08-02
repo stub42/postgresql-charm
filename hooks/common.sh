@@ -5,14 +5,14 @@ user=${ENSEMBLE_REMOTE_UNIT///*}
 host=`hostname -f`
 
 admin() {
-  [[ $(basename $0) =~ /admin/ ]]
+  [[ $(basename $0) =~ admin ]]
 }
 
-database_name() {
+get_database_name() {
   if admin; then
-    "all"
+    echo "all"
   else
-    ${database}
+    echo "${database}"
   fi
 }
 
