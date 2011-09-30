@@ -3,8 +3,8 @@
 [[ -f "$(dirname $0)/common.sh" ]] && source "$(dirname $0)/common.sh"
 
 remote_host=`relation-get ip`
-if [ -z "$remote_host" ]; then   #if [ -z $ENSEMBLE_REMOTE_UNIT ]; then
-  ensemble-log "remote host not set yet"
+if [ -z "$remote_host" ]; then   #if [ -z $JUJU_REMOTE_UNIT ]; then
+  juju-log "remote host not set yet"
   exit 0
 fi
 
@@ -16,6 +16,6 @@ host_can_access() {
 }
 host_can_access || grant_host_access
 
-ensemble-log "starting postgresql"
+juju-log "starting postgresql"
 service postgresql restart || service postgresql start
 

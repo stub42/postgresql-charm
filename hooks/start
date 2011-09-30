@@ -1,6 +1,6 @@
 #!/bin/bash
 
 #service is (re)started when relations are created
-ensemble-log "starting postgresql"
+juju-log "starting postgresql"
 service postgresql restart || service postgresql start
 

@@ -1,4 +1,3 @@
-ensemble: formula
 name: postgresql
 revision: 12
 summary: "object-relational SQL database (supported version)"

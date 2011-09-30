@@ -2,7 +2,7 @@
 
 [[ -f "$(dirname $0)/common.sh" ]] && source "$(dirname $0)/common.sh"
 
-ensemble-log "Relationship with ${database} broken."
+juju-log "Relationship with ${database} broken."
 
 revoke_access() {
   sudo -su postgres psql -c"revoke all privileges on database ${database} from ${user};"
@@ -12,5 +12,5 @@ revoke_access() {
 }
 revoke_access 
 
-#ensemble-log "revoked privileges for ${user} on database ${database}"
-#ensemble-log "revoking failed"
+#juju-log "revoked privileges for ${user} on database ${database}"
+#juju-log "revoking failed"

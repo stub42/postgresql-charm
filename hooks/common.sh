@@ -1,7 +1,7 @@
 
 
-database=${ENSEMBLE_REMOTE_UNIT///*}
-user=${ENSEMBLE_REMOTE_UNIT///*}
+database=${JUJU_REMOTE_UNIT///*}
+user=${JUJU_REMOTE_UNIT///*}
 host=`hostname -f`
 
 admin() {
