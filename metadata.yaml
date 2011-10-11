@@ -1,5 +1,4 @@
 name: postgresql
-revision: 12
 summary: "object-relational SQL database (supported version)"
 description: |
   PostgreSQL is a fully featured object-relational database management
