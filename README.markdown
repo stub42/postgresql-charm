@@ -14,14 +14,14 @@
 
 ### and requires
 
-- `ip`: the client ip address to enable access
+- `ip`: deprecated way to specify the client ip address to enable
+        access from. This is no longer necessary, you can rely on the
+        implicit 'private-address' relation component.
 
 Here's an example client hook providing that
 
     #!/bin/sh
-    IP=`ifconfig  | grep 'inet addr:'| grep -v '127.0.0.1' | cut -d: -f2 | awk '{ print $1}'|head -n 1`
-    echo setting ip to $IP
-    relation-set ip=$IP
+    relation-set ip=`unit-get private-address`
 
 
 ## During db-relation-changed,

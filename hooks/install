@@ -4,4 +4,4 @@ sudo apt-get install -qqy --no-install-recommends  postgresql pwgen
 
 echo "listen_addresses = '*'" >> /etc/postgresql/*/main/postgresql.conf
 
-
+open-port 5432/TCP
