@@ -2,7 +2,7 @@
 
 database=${JUJU_REMOTE_UNIT///*}
 user=${JUJU_REMOTE_UNIT///*}
-host=`hostname -f`
+host=`unit-get private-address`
 
 admin() {
   [[ $(basename $0) =~ admin ]]
