@@ -1,9 +1,9 @@
 
 
 database=${JUJU_REMOTE_UNIT///*}
-database=${database/-/_}
+database=${database//-/_}
 user=${JUJU_REMOTE_UNIT///*}
-user=${user/-/_}
+user=${user//-/_}
 host=`unit-get private-address`
 
 admin() {
