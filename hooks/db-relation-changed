@@ -14,7 +14,7 @@ if [ -z "$remote_host" ]; then   #if [ -z $JUJU_REMOTE_UNIT ]; then
 fi
 
 grant_host_access() {
-  echo "host $(get_database_name) ${user} ${remote_host}/0 md5" >> /etc/postgresql/*/main/pg_hba.conf
+  echo "host $(get_database_name) ${user} ${remote_host} md5" >> /etc/postgresql/*/main/pg_hba.conf
 }
 host_can_access() {
   grep -q "$(get_database_name).*${user}.*${remote_host}" /etc/postgresql/*/main/pg_hba.conf
