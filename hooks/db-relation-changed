@@ -13,11 +13,13 @@ if [ -z "$remote_host" ]; then   #if [ -z $JUJU_REMOTE_UNIT ]; then
   exit 0
 fi
 
+remote_ip=`gethostip $remote_host | awk '{print $2}'`
+
 grant_host_access() {
-  echo "host $(get_database_name) ${user} ${remote_host}/32 md5" >> /etc/postgresql/*/main/pg_hba.conf
+  echo "host $(get_database_name) ${user} ${remote_ip}/32 md5" >> /etc/postgresql/*/main/pg_hba.conf
 }
 host_can_access() {
-  grep -q "$(get_database_name).*${user}.*${remote_host}" /etc/postgresql/*/main/pg_hba.conf
+  grep -q "$(get_database_name).*${user}.*${remote_ip}" /etc/postgresql/*/main/pg_hba.conf
 }
 host_can_access || grant_host_access
 

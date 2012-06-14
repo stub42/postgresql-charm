@@ -1,10 +1,10 @@
 
-
+ip=$(unit-get private-address)
 database=${JUJU_REMOTE_UNIT///*}
 database=${database//-/_}
 user=${JUJU_REMOTE_UNIT///*}
 user=${user//-/_}
-host=`unit-get private-address`
+host=`gethostip $ip | awk '{print $2}'`
 
 admin() {
   [[ $(basename $0) =~ admin ]]
