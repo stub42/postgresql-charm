@@ -23,6 +23,5 @@ host_can_access() {
 }
 host_can_access || grant_host_access
 
-juju-log "starting postgresql"
-service postgresql restart || service postgresql start
-
+juju-log "reloading postgresql"
+service postgresql reload || exit 1
