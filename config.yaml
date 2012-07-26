@@ -132,3 +132,41 @@ options:
     default: 0.2
     type: float
     description: Fraction of table size before vacuum
+  autovacuum_analyze_scale_factor:
+    default: 0.1  
+    type: float
+    description: Fraction of table size before analyze
+  autovacuum_vacuum_cost_delay:
+    default: "20ms"
+    type: string
+    description: |
+        Default vacuum cost delay for autovacuum, in milliseconds;
+        -1 means use vacuum_cost_delay
+  search_path:
+    default: "'\"$user\",public'"
+    type: string
+    descripton: Schema names
+  standard_conforming_strings:
+    default: "on"
+    type: string
+    description: Standard conforming strings
+  hot_standby:
+    default: ""
+    type: string
+    description: Hot standby
+  hot_standby_feedback:
+    default: ""
+    type: string
+    description: Hot standby feedback
+  wal_level:
+    default: ""
+    type: string
+    description: WAL level
+  max_wal_senders:
+    default: ""
+    type: string
+    description: WAL level senders
+  wal_keep_segments:
+    default: ""
+    type: string
+    description: WAL keep segments
