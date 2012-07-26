@@ -48,9 +48,10 @@ options:
     type: string
     description: Maintenance working memory
   wal_buffers:
-    default: "True"
+    default: "-1"
     type: string
-    description: WAL buffers 
+    description: |
+        min 32kB, -1 sets based on shared_buffers (change requires restart)
   checkpoint_segments:
     default: 3
     type: int
@@ -143,7 +144,7 @@ options:
         Default vacuum cost delay for autovacuum, in milliseconds;
         -1 means use vacuum_cost_delay
   search_path:
-    default: "'\"$user\",public'"
+    default: "\"$user\",public"
     type: string
     descripton: Schema names
   standard_conforming_strings:

@@ -43,11 +43,15 @@ def config_get(scope=None):
 #                     being used.  This is necessary to know which port(s)
 #                     to open and close when exposing/unexposing a service
 #------------------------------------------------------------------------------
-def get_service_port(postgresql_config_file="/etc/postgresql/9.1/main/postgresql.conf"):
-    postgresql_config = load_postgresql_config(postgresql_config_file)
+def get_service_port(postgresql_config):
+    postgresql_config = load_postgresql_config(postgresql_config)
     if postgresql_config is None:
         return(None)
-    return(re.findall("port.*=(.*)", postgresql_config))
+    port = re.search("port.*=(.*)", postgresql_config).group(1).strip()
+    try:
+        return int(port)
+    except:
+        return None
 
 
 #------------------------------------------------------------------------------
@@ -88,12 +92,12 @@ def apt_get_install(packages=None):
 #------------------------------------------------------------------------------
 # create_postgresql_config:   Creates the postgresql.conf file
 #------------------------------------------------------------------------------
-def create_postgresql_config():
+def create_postgresql_config(postgresql_config):
     # Send config data to the template
     # Return it as pg_config
-    pg_config = Template(open("templates/postgresql.conf.tmpl").read(), config_data)
+    pg_config = Template(open("templates/postgresql.conf.tmpl").read(), searchList=[config_data])
     with open(postgresql_config, 'w') as postgres_config:
-        postgres_config.write(pg_config)
+        postgres_config.write(str(pg_config))
 
 
 #------------------------------------------------------------------------------
@@ -102,7 +106,7 @@ def create_postgresql_config():
 #                          Returns a string containing the postgresql config or
 #                          None
 #------------------------------------------------------------------------------
-def load_postgresql_config():
+def load_postgresql_config(postgresql_config):
     if os.path.isfile(postgresql_config):
         return(open(postgresql_config).read())
     else:
@@ -136,15 +140,12 @@ def close_port(port=None, protocol="TCP"):
 #                        service ports to decide which ports need to be
 #                        opened and which to close
 #------------------------------------------------------------------------------
-def update_service_ports(old_service_ports=None, new_service_ports=None):
-    if old_service_ports is None or new_service_ports is None:
+def update_service_port(old_service_port=None, new_service_port=None):
+    if old_service_port is None or new_service_port is None:
         return(None)
-    for port in old_service_ports:
-        if port not in new_service_ports:
-            close_port(port)
-    for port in new_service_ports:
-        if port not in old_service_ports:
-            open_port(port)
+    if new_service_port != old_service_port:
+        close_port(old_service_port)
+        open_port(new_service_port)
 
 
 #------------------------------------------------------------------------------
@@ -163,12 +164,11 @@ def pwgen(pwd_length=20):
 ###############################################################################
 # Hook functions
 ###############################################################################
-def config_changed():
-    current_service_port = get_service_port()
-    create_postgresql_config()
+def config_changed(postgresql_config):
+    current_service_port = get_service_port(postgresql_config)
+    create_postgresql_config(postgresql_config)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
-    service_postgresql("reload")
 
 
 ###############################################################################
@@ -180,7 +180,7 @@ version = config_data['version']
 config_data['version_float'] = float(version)
 cluster_name = config_data['cluster_name']
 postgresql_config_dir = "/etc/postgresql"
-postgresql_config = "%s/%s/%s/postgresql.conf" % (version, cluster_name, postgresql_config_dir)
+postgresql_config = "%s/%s/%s/postgresql.conf" % (postgresql_config_dir, version, cluster_name)
 postgresql_service_config_dir = "/var/run/postgresql"
 hook_name = os.path.basename(sys.argv[0])
 
@@ -188,7 +188,7 @@ hook_name = os.path.basename(sys.argv[0])
 # Main section
 ###############################################################################
 if hook_name == "config-changed":
-    config_changed()
+    config_changed(postgresql_config)
 else:
     print "Unknown hook"
     sys.exit(1)
