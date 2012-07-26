@@ -3,12 +3,12 @@
 [[ -f "$(dirname $0)/common.sh" ]] && source "$(dirname $0)/common.sh"
 
 service_password_file="/var/lib/juju/${database}.${user}.password"
-# Some semblance of security - make the file only readable by postgres
-chmod 600 $service_password_file
-chown postgres:postgres $service_password_file
 create_password() {
   password=`pwgen -s 16`
   echo ${password} > ${service_password_file}
+  # Some semblance of security - make the file only readable by postgres
+  chmod 600 $service_password_file
+  chown postgres:postgres $service_password_file
 }
 has_password() {
   [ -f ${service_password_file} ] && password=`cat ${service_password_file}`
