@@ -3,6 +3,9 @@
 [[ -f "$(dirname $0)/common.sh" ]] && source "$(dirname $0)/common.sh"
 
 service_password_file="/var/lib/juju/${database}.${user}.password"
+# Some semblance of security - make the file only readable by postgres
+chmod 600 $service_password_file
+chown postgres:postgres $service_password_file
 create_password() {
   password=`pwgen -s 16`
   echo ${password} > ${service_password_file}
@@ -13,22 +16,22 @@ has_password() {
 has_password || create_password
 
 create_user() {
-  sudo -su postgres psql -c"create user ${user} with superuser password '${password}'"
+  sudo -su postgres psql -c"CREATE USER ${user} WITH SUPERUSER PASSWORD '${password}'"
   if admin; then
-    sudo -su postgres psql -c"alter user ${user} createdb createuser" 
+    sudo -su postgres psql -c"ALTER USER ${user} CREATEDB CREATEDB" 
   fi
 }
 has_user() {
-  sudo -su postgres psql -c"select rolname from pg_roles;" | grep -q ${user}
+  sudo -su postgres psql -c"SELECT rolname FROM pg_roles;" | grep -q ${user}
 }
 has_user || create_user
 
 create_database() {
-  sudo -su postgres psql -c"create database ${database} owner ${user}" 
-  sudo -su postgres psql -c"grant all privileges on database ${database} to ${user}"
+  sudo -su postgres psql -c"CREATE DATABASE ${database} OWNER ${user}" 
+  sudo -su postgres psql -c"GRANT ALL PRIVILEGES ON ${database} TO ${user}"
 }
 has_database() {
-  sudo -su postgres psql -c"select datname from pg_database;" | grep -q ${database}
+  sudo -su postgres psql -c"SELECT datname FROM pg_database" | grep -q ${database}
 }
 admin || has_database || create_database
 
