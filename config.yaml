@@ -51,3 +51,84 @@ options:
     default: "True"
     type: string
     description: WAL buffers 
+  checkpoint_segments:
+    default: 3
+    type: int
+    description: in logfile segments, min 1, 16MB each
+  random_page_cost:
+    default: 4.0
+    type: float
+    description: Random page cost
+  effective_cache_size:
+    default: "128MB"
+    type: string
+    description: Effective cache size
+  log_min_duration_statement:
+    default: -1
+    type: int
+    description: |
+        -1 is disabled, 0 logs all statements
+        and their durations, > 0 logs only
+        statements running at least this number
+        of milliseconds
+  log_checkpoints:
+    default: "off"
+    type: string
+    description: Log checkpoints
+  log_connections:
+    default: "off"
+    type: string
+    description: Log connections
+  log_disconnections:
+    default: "off"
+    type: string
+    description: Log disconnections
+  log_line_prefix:
+    default: "%t "
+    type: string
+    description: |
+        special values:
+          %a = application name
+          %u = user name
+          %d = database name
+          %r = remote host and port
+          %h = remote host
+          %p = process ID
+          %t = timestamp without milliseconds
+          %m = timestamp with milliseconds
+          %i = command tag
+          %e = SQL state
+          %c = session ID
+          %l = session line number
+          %s = session start timestamp
+          %v = virtual transaction ID
+          %x = transaction ID (0 if none)
+          %q = stop here in non-session processes
+          %% = '%'
+        e.g. '<%u%%%d> '
+  log_lock_waits:
+    default: "off"
+    type: string
+    description: log lock waits >= deadlock_timeout
+  log_timezone:
+    default: "UTC"
+    type: string
+    description: Log timezone
+  autovacuum:
+    default: "on"
+    type: string
+    description: Autovacuum
+  log_autovacuum_min_duration:
+    default: -1
+    type: int
+    description: |
+        -1 disables, 0 logs all actions and their durations, > 0 logs only
+        actions running at least this number of milliseconds.
+  autovacuum_analyze_threshold:
+    default: 50
+    type: int
+    description: min number of row updates before analyze
+  autovacuum_vacuum_scale_factor:
+    default: 0.2
+    type: float
+    description: Fraction of table size before vacuum
