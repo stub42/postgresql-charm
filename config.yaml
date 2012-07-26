@@ -27,3 +27,27 @@ options:
     default: 100
     type: int
     description: Maximum number of connections to allow to the PG database
+  ssl:
+    default: "True"
+    type: string
+    description: Whether PostgreSQL should talk SSL
+  shared_buffers:
+    default: "8MB"
+    type: string
+    description: Shared buffers
+  temp_buffers:
+    default: "1MB"
+    type: string
+    description: Temp buffers
+  work_mem:
+    default: "1MB"
+    type: string
+    description: Working Memory
+  maintenance_work_mem:
+    default: "1MB"
+    type: string
+    description: Maintenance working memory
+  wal_buffers:
+    default: "True"
+    type: string
+    description: WAL buffers 

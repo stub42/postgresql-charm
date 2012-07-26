@@ -91,7 +91,7 @@ def apt_get_install(packages=None):
 def create_postgresql_config():
     # Send config data to the template
     # Return it as pg_config
-    pg_config = Template(open("templates/postgresql.conf.tmp").read(), config_data)
+    pg_config = Template(open("templates/postgresql.conf.tmpl").read(), config_data)
     with open(postgresql_config, 'w') as postgres_config:
         postgres_config.write(pg_config)
 
@@ -176,9 +176,11 @@ def config_changed():
 ###############################################################################
 config_data = config_get()
 version = config_data['version']
+# We need this to evaluate if we're on a version greater than a given number
+config_data['version_float'] = float(version)
 cluster_name = config_data['cluster_name']
 postgresql_config_dir = "/etc/postgresql"
-postgresql_config = "%s/%s/%s/postgresql.conf" % (version, cluster_name, postgreql_config_dir)
+postgresql_config = "%s/%s/%s/postgresql.conf" % (version, cluster_name, postgresql_config_dir)
 postgresql_service_config_dir = "/var/run/postgresql"
 hook_name = os.path.basename(sys.argv[0])
 
