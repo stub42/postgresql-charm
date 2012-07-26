@@ -55,7 +55,7 @@ wal_buffers = $wal_buffers
 #end if
 #if $checkpoint_segments != ""
 checkpoint_segments = $checkpoint_segments
-end if
+#end if
 
 
 #------------------------------------------------------------------------------
@@ -65,7 +65,7 @@ end if
 #if $random_page_cost != ""
 random_page_cost = $random_page_cost
 #end if
-#if effective_cache_size != ""
+#if $effective_cache_size != ""
 effective_cache_size = $effective_cache_size
 #end if
 
@@ -76,7 +76,7 @@ effective_cache_size = $effective_cache_size
 
 #if $log_min_duration_statement != ""
 log_min_duration_statement = $log_min_duration_statement
-end if
+#end if
 #if $log_checkpoints != ""
 log_checkpoints = $log_checkpoints
 #end if
