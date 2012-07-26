@@ -47,7 +47,7 @@ def get_service_port(postgresql_config_file="/etc/postgresql/9.1/main/postgresql
     postgresql_config = load_postgresql_config(postgresql_config_file)
     if postgresql_config is None:
         return(None)
-    return(re.findall("port.*=(.*)", haproxy_config))
+    return(re.findall("port.*=(.*)", postgresql_config))
 
 
 #------------------------------------------------------------------------------
@@ -160,112 +160,15 @@ def pwgen(pwd_length=20):
     return(''.join(random_chars))
 
 
-#------------------------------------------------------------------------------
-# construct_haproxy_config:  Convenience function to write haproxy.cfg
-#                            haproxy_globals, haproxy_defaults,
-#                            haproxy_monitoring, haproxy_services
-#                            are all strings that will be written without
-#                            any checks.
-#                            haproxy_monitoring and haproxy_services are
-#                            optional arguments
-#------------------------------------------------------------------------------
-def construct_haproxy_config(haproxy_globals=None,
-                         haproxy_defaults=None,
-                         haproxy_monitoring=None,
-                         haproxy_services=None):
-    if haproxy_globals is None or \
-       haproxy_defaults is None:
-        return(None)
-    with open(default_haproxy_config, 'w') as haproxy_config:
-        haproxy_config.write(haproxy_globals)
-        haproxy_config.write("\n")
-        haproxy_config.write("\n")
-        haproxy_config.write(haproxy_defaults)
-        haproxy_config.write("\n")
-        haproxy_config.write("\n")
-        if haproxy_monitoring is not None:
-            haproxy_config.write(haproxy_monitoring)
-            haproxy_config.write("\n")
-            haproxy_config.write("\n")
-        if haproxy_services is not None:
-            haproxy_config.write(haproxy_services)
-            haproxy_config.write("\n")
-            haproxy_config.write("\n")
-
-
-#------------------------------------------------------------------------------
-# service_haproxy:  Convenience function to start/stop/restart/reload
-#                   the haproxy service
-#------------------------------------------------------------------------------
-def service_haproxy(action=None, haproxy_config=default_haproxy_config):
-    if action is None or haproxy_config is None:
-        return(None)
-    elif action == "check":
-        retVal = subprocess.call(\
-        ['/usr/sbin/haproxy', '-f', haproxy_config, '-c'])
-        if retVal == 1:
-            return(False)
-        elif retVal == 0:
-            return(True)
-        else:
-            return(False)
-    else:
-        retVal = subprocess.call(['service', 'haproxy', action])
-        if retVal == 0:
-            return(True)
-        else:
-            return(False)
-
-
 ###############################################################################
 # Hook functions
 ###############################################################################
-def install_hook():
-    return (apt_get_install("postgresql-%s" % version) == True)
-
-
 def config_changed():
     current_service_port = get_service_port()
     create_postgresql_config()
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
     service_postgresql("reload")
-
-
-def start_hook():
-    if service_postgresql("status"):
-        return(service_postgresql("restart"))
-    else:
-        return(service_postgresql("start"))
-
-
-def stop_hook():
-    if service_postgresql("status"):
-        return(service_postgresql("stop"))
-
-
-def reverseproxy_interface(hook_name=None):
-    if hook_name is None:
-        return(None)
-    if hook_name == "changed":
-        config_changed()
-
-
-def website_interface(hook_name=None):
-    if hook_name is None:
-        return(None)
-    my_fqdn = socket.getfqdn(socket.gethostname())
-    default_port = 80
-    relation_data = relation_get()
-    if hook_name == "joined":
-        subprocess.call(['relation-set', 'port=%d' % \
-        default_port, 'hostname=%s' % my_fqdn])
-    elif hook_name == "changed":
-        if 'is-proxy' in relation_data:
-            service_name = "%s__%d" % \
-            (relation_data['hostname'], relation_data['port'])
-            open("%s/%s.is.proxy" % \
-            (default_haproxy_service_config_dir, service_name), 'a').close()
 
 
 ###############################################################################
@@ -282,22 +185,8 @@ hook_name = os.path.basename(sys.argv[0])
 ###############################################################################
 # Main section
 ###############################################################################
-if hook_name == "install":
-    install_hook()
-elif hook_name == "config-changed":
+if hook_name == "config-changed":
     config_changed()
-elif hook_name == "start":
-    start_hook()
-elif hook_name == "stop":
-    stop_hook()
-elif hook_name == "reverseproxy-relation-broken":
-    config_changed()
-elif hook_name == "reverseproxy-relation-changed":
-    reverseproxy_interface("changed")
-elif hook_name == "website-relation-joined":
-    website_interface("joined")
-elif hook_name == "website-relation-changed":
-    website_interface("changed")
 else:
     print "Unknown hook"
     sys.exit(1)

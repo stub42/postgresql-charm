@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sudo apt-get install -qqy --no-install-recommends  postgresql pwgen syslinux
+sudo apt-get install -qqy --no-install-recommends  postgresql pwgen python-cheetah syslinux
 
 echo "listen_addresses = '*'" >> /etc/postgresql/*/main/postgresql.conf
 
