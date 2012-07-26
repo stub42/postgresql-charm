@@ -8,7 +8,7 @@ description: |
   triggers, user-defined types and functions, outer joins, multiversion
   concurrency control.  Graphical user interfaces and bindings for many
   programming languages are available as well.
-maintainer: Mark Mims <mark.mims@canonical.com>
+maintainer: Tom Haddon <tom.haddon@canonical.com>
 provides:
   db:
     interface: pgsql
