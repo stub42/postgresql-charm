@@ -170,6 +170,10 @@ def config_changed(postgresql_config):
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
 
+def install():
+    install_packages="postgresql pwgen python-cheetah syslinux"
+    apt_get_install(install_packages)
+    open_port(5432)
 
 ###############################################################################
 # Global variables
@@ -187,6 +191,8 @@ hook_name = os.path.basename(sys.argv[0])
 ###############################################################################
 # Main section
 ###############################################################################
+if hook_name == "install":
+    install()
 if hook_name == "config-changed":
     config_changed(postgresql_config)
 else:
