@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import commands
 import json
 import glob
 import os
@@ -92,6 +93,12 @@ def apt_get_install(packages=None):
 # create_postgresql_config:   Creates the postgresql.conf file
 #------------------------------------------------------------------------------
 def create_postgresql_config(postgresql_config):
+    if config_data["performance_tuning"] == "auto":
+        status, num_cpus = commands.getstatusoutput("cat /proc/cpuinfo | grep processor | wc -l")
+        if status != 0: sys.exit(status)
+        status, total_ram = commands.getstatusoutput("free -m | grep Mem | awk '{print $2}'")    
+        if status != 0: sys.exit(status)
+        config_data["effective_cache_size"] = "%sMB" % (int( int(total_ram) * 0.75 ), )
     # Send config data to the template
     # Return it as pg_config
     pg_config = Template(open("templates/postgresql.conf.tmpl").read(), searchList=[config_data])
