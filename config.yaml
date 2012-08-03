@@ -6,7 +6,10 @@ options:
         The command to run whenever config has changed. Accepted values are
         "reload" or "restart" - any other value will mean neither is executed
         after a config change (which may be desired, if you're running a
-        production server and would rather handle these out of band).
+        production server and would rather handle these out of band). Note that
+        postgresql will still need to be reloaded whenever authentication and
+        access details are updated, so disabling either doesn't mean PostgreSQL
+        will never be reloaded.
   version:
     default: "9.1"
     type: string
