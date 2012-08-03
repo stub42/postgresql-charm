@@ -164,7 +164,6 @@ def pwgen(pwd_length=20):
 # Hook functions
 ###############################################################################
 def config_changed(postgresql_config):
-    from Cheetah.Template import Template
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
     updated_service_port = config_data["listen_port"]
@@ -174,7 +173,7 @@ def config_changed(postgresql_config):
 
 def install():
     for package in ["postgresql", "pwgen", "python-cheetah", "syslinux"]:
-        apt_get_install(install_package)
+        apt_get_install(package)
     open_port(5432)
 
 ###############################################################################
@@ -196,6 +195,7 @@ hook_name = os.path.basename(sys.argv[0])
 if hook_name == "install":
     install()
 if hook_name == "config-changed":
+    from Cheetah.Template import Template
     config_changed(postgresql_config)
 else:
     print "Unknown hook"
