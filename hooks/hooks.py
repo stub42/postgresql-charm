@@ -194,7 +194,7 @@ hook_name = os.path.basename(sys.argv[0])
 ###############################################################################
 if hook_name == "install":
     install()
-if hook_name == "config-changed":
+elif hook_name == "config-changed":
     from Cheetah.Template import Template
     config_changed(postgresql_config)
 else:
