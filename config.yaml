@@ -15,14 +15,6 @@ options:
     default: "main"
     type: string
     description: Name of the cluster we want to install the DBs into
-  kernel_shmall:
-    default: 0
-    type: int
-    description: Kernel/shmall
-  kernel_shmmax:
-    default: 0
-    type: int
-    description: Kernel/shmmax
   listen_ip:
     default: "*"
     type: string
@@ -39,39 +31,6 @@ options:
     default: "True"
     type: string
     description: Whether PostgreSQL should talk SSL
-  shared_buffers:
-    default: "8MB"
-    type: string
-    description: Shared buffers
-  temp_buffers:
-    default: "1MB"
-    type: string
-    description: Temp buffers
-  work_mem:
-    default: "1MB"
-    type: string
-    description: Working Memory
-  maintenance_work_mem:
-    default: "1MB"
-    type: string
-    description: Maintenance working memory
-  wal_buffers:
-    default: "-1"
-    type: string
-    description: |
-        min 32kB, -1 sets based on shared_buffers (change requires restart)
-  checkpoint_segments:
-    default: 3
-    type: int
-    description: in logfile segments, min 1, 16MB each
-  random_page_cost:
-    default: 4.0
-    type: float
-    description: Random page cost
-  effective_cache_size:
-    default: "128MB"
-    type: string
-    description: Effective cache size
   log_min_duration_statement:
     default: -1
     type: int
@@ -179,3 +138,55 @@ options:
     default: ""
     type: string
     description: WAL keep segments
+  performance_tuning:
+    default: "auto"
+    type: string
+    description: |
+        Possible values here are "auto" or "manual". If we set "auto" then the
+        charm will attempt to automatically tune all the performance paramaters
+        as below. If manual, then it will use the defaults below unless
+        overridden. "auto" gathers information about the node you're deployed
+        on and tries to make intelligent guesses about what tuning parameters
+        to set based on available RAM and CPU under the assumption that it's
+        the only significant service running on this node.
+  kernel_shmall:
+    default: 0
+    type: int
+    description: Kernel/shmall
+  kernel_shmmax:
+    default: 0
+    type: int
+    description: Kernel/shmmax
+  shared_buffers:
+    default: "8MB"
+    type: string
+    description: Shared buffers
+  temp_buffers:
+    default: "1MB"
+    type: string
+    description: Temp buffers
+  work_mem:
+    default: "1MB"
+    type: string
+    description: Working Memory
+  maintenance_work_mem:
+    default: "1MB"
+    type: string
+    description: Maintenance working memory
+  wal_buffers:
+    default: "-1"
+    type: string
+    description: |
+        min 32kB, -1 sets based on shared_buffers (change requires restart)
+  checkpoint_segments:
+    default: 3
+    type: int
+    description: in logfile segments, min 1, 16MB each
+  random_page_cost:
+    default: 4.0
+    type: float
+    description: Random page cost
+  effective_cache_size:
+    default: "128MB"
+    type: string
+    description: Effective cache size
