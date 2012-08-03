@@ -169,6 +169,8 @@ def config_changed(postgresql_config):
     create_postgresql_config(postgresql_config)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
+    if config_data["config_change_command"] in ["reload", "restart"]:
+        retVal = subprocess.call(['service', 'postgresql', config_data["config_change_command"]])
 
 def install():
     for package in ["postgresql", "pwgen", "python-cheetah", "syslinux"]:
