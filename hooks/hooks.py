@@ -10,7 +10,6 @@ import string
 import subprocess
 import sys
 import yaml
-from Cheetah.Template import Template
 
 
 ###############################################################################
@@ -165,14 +164,15 @@ def pwgen(pwd_length=20):
 # Hook functions
 ###############################################################################
 def config_changed(postgresql_config):
+    from Cheetah.Template import Template
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
 
 def install():
-    install_packages="postgresql pwgen python-cheetah syslinux"
-    apt_get_install(install_packages)
+    for package in ["postgresql", "pwgen", "python-cheetah", "syslinux"]:
+        apt_get_install(install_package)
     open_port(5432)
 
 ###############################################################################
