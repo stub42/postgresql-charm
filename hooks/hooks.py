@@ -204,6 +204,19 @@ if hook_name == "install":
 elif hook_name == "config-changed":
     from Cheetah.Template import Template
     config_changed(postgresql_config)
+elif hook_name == "start":
+    subprocess.call("juju-log", "starting postgresql")
+    status, output = commands.getstatusoutput("service postgresql restart")
+    if status != 0:
+        status.output = commands.getstatusoutput("service postgresql start")
+        if status != 0:
+            subprocess.call("juju-log", "Error starting service: %s, %s" % (status, output))
+            sys.exit(status)
+elif hook_name == "stop":
+    status, output = commands.getstatusoutput("service postgresql stop")
+    if status != 0:
+        subprocess.call("juju-log", "Error stopping service: %s, %s" % (status, output))
+        sys.exit(status)
 else:
     print "Unknown hook"
     sys.exit(1)

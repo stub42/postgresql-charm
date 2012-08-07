@@ -1,6 +1,1 @@
-#!/bin/bash
-
-#service is (re)started when relations are created
-juju-log "starting postgresql"
-service postgresql restart || service postgresql start
-
+hooks.py
