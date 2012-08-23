@@ -141,6 +141,14 @@ options:
     default: ""
     type: string
     description: WAL keep segments
+  work_mem:
+    default: "1MB"
+    type: string
+    description: Working Memory
+  maintenance_work_mem:
+    default: "1MB"
+    type: string
+    description: Maintenance working memory
   performance_tuning:
     default: "auto"
     type: string
@@ -168,14 +176,6 @@ options:
     default: "1MB"
     type: string
     description: Temp buffers
-  work_mem:
-    default: "1MB"
-    type: string
-    description: Working Memory
-  maintenance_work_mem:
-    default: "1MB"
-    type: string
-    description: Maintenance working memory
   wal_buffers:
     default: "-1"
     type: string

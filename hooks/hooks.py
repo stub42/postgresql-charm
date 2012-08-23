@@ -94,11 +94,24 @@ def apt_get_install(packages=None):
 #------------------------------------------------------------------------------
 def create_postgresql_config(postgresql_config):
     if config_data["performance_tuning"] == "auto":
+        # Taken from http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
         status, num_cpus = commands.getstatusoutput("cat /proc/cpuinfo | grep processor | wc -l")
         if status != 0: sys.exit(status)
         status, total_ram = commands.getstatusoutput("free -m | grep Mem | awk '{print $2}'")    
         if status != 0: sys.exit(status)
         config_data["effective_cache_size"] = "%sMB" % (int( int(total_ram) * 0.75 ), )
+        if total_ram > 1023:
+            config_data["shared_buffers"] = "%sMB" % (int( int(total_ram) * 0.25 ), )
+        else:
+            config_data["shared_buffers"] = "%sMB" % (int( int(total_ram) * 0.15 ), )
+        # XXX: This is very messy - should probably be a subordinate charm
+        file = open("/etc/sysctl.d/50-postgresql.conf", "w")
+        file.write("kernel.sem = 250 32000 100 1024")
+        file.write("kernel.shmall = %s" % ((int(total_ram) * 1024 * 1024) + 1024),)
+        file.write("kernel.shmmax = %s" % ((int(total_ram) * 1024 * 1024) + 1024),)
+        file.close()
+        status, output = commands.getstatusoutput("sysctl -p /etc/sysctl.d/50-postgresql.conf")
+        if status != 0: sys.exit(status)    
     # Send config data to the template
     # Return it as pg_config
     pg_config = Template(open("templates/postgresql.conf.tmpl").read(), searchList=[config_data])
@@ -205,17 +218,14 @@ elif hook_name == "config-changed":
     from Cheetah.Template import Template
     config_changed(postgresql_config)
 elif hook_name == "start":
-    subprocess.call("juju-log", "starting postgresql")
     status, output = commands.getstatusoutput("service postgresql restart")
     if status != 0:
-        status.output = commands.getstatusoutput("service postgresql start")
+        status, output = commands.getstatusoutput("service postgresql start")
         if status != 0:
-            subprocess.call("juju-log", "Error starting service: %s, %s" % (status, output))
             sys.exit(status)
 elif hook_name == "stop":
     status, output = commands.getstatusoutput("service postgresql stop")
     if status != 0:
-        subprocess.call("juju-log", "Error stopping service: %s, %s" % (status, output))
         sys.exit(status)
 else:
     print "Unknown hook"
