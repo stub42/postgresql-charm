@@ -106,9 +106,9 @@ def create_postgresql_config(postgresql_config):
             config_data["shared_buffers"] = "%sMB" % (int( int(total_ram) * 0.15 ), )
         # XXX: This is very messy - should probably be a subordinate charm
         file = open("/etc/sysctl.d/50-postgresql.conf", "w")
-        file.write("kernel.sem = 250 32000 100 1024")
-        file.write("kernel.shmall = %s" % ((int(total_ram) * 1024 * 1024) + 1024),)
-        file.write("kernel.shmmax = %s" % ((int(total_ram) * 1024 * 1024) + 1024),)
+        file.write("kernel.sem = 250 32000 100 1024\n")
+        file.write("kernel.shmall = %s\n" % ((int(total_ram) * 1024 * 1024) + 1024),)
+        file.write("kernel.shmmax = %s\n" % ((int(total_ram) * 1024 * 1024) + 1024),)
         file.close()
         status, output = commands.getstatusoutput("sysctl -p /etc/sysctl.d/50-postgresql.conf")
         if status != 0: sys.exit(status)    
