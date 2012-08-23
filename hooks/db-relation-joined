@@ -22,6 +22,7 @@ create_user() {
   fi
 }
 has_user() {
+  # XXX: This will return true if there's a substring match on the username
   sudo -su postgres psql -c"SELECT rolname FROM pg_roles;" | grep -q ${user}
 }
 has_user || create_user
@@ -31,6 +32,8 @@ create_database() {
   sudo -su postgres psql -c"GRANT ALL PRIVILEGES ON ${database} TO ${user}"
 }
 has_database() {
+  # XXX: This will return true if there's a substring match on the database
+  # name
   sudo -su postgres psql -c"SELECT datname FROM pg_database" | grep -q ${database}
 }
 admin || has_database || create_database
