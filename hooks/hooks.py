@@ -1,5 +1,12 @@
 #!/usr/bin/env python
 
+from shelltoolbox import su
+from helpers import (
+    log,
+    log_entry,
+    log_exit,
+    run,
+)
 import commands
 import json
 import glob
@@ -95,10 +102,8 @@ def apt_get_install(packages=None):
 def create_postgresql_config(postgresql_config):
     if config_data["performance_tuning"] == "auto":
         # Taken from http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
-        status, num_cpus = commands.getstatusoutput("cat /proc/cpuinfo | grep processor | wc -l")
-        if status != 0: sys.exit(status)
-        status, total_ram = commands.getstatusoutput("free -m | grep Mem | awk '{print $2}'")    
-        if status != 0: sys.exit(status)
+        num_cpus = run("cat /proc/cpuinfo | grep processor | wc -l")
+        total_ram = run("free -m | grep Mem | awk '{print $2}'")    
         config_data["effective_cache_size"] = "%sMB" % (int( int(total_ram) * 0.75 ), )
         if total_ram > 1023:
             config_data["shared_buffers"] = "%sMB" % (int( int(total_ram) * 0.25 ), )
@@ -110,8 +115,7 @@ def create_postgresql_config(postgresql_config):
         file.write("kernel.shmall = %s\n" % ((int(total_ram) * 1024 * 1024) + 1024),)
         file.write("kernel.shmmax = %s\n" % ((int(total_ram) * 1024 * 1024) + 1024),)
         file.close()
-        status, output = commands.getstatusoutput("sysctl -p /etc/sysctl.d/50-postgresql.conf")
-        if status != 0: sys.exit(status)    
+        run("sysctl -p /etc/sysctl.d/50-postgresql.conf")
     # Send config data to the template
     # Return it as pg_config
     pg_config = Template(open("templates/postgresql.conf.tmpl").read(), searchList=[config_data])
@@ -179,6 +183,8 @@ def pwgen(pwd_length=20):
     for i in range(pwd_length)]
     return(''.join(random_chars))
 
+def run_sql_as_postgres(sql)
+    run("""sudo -su postgres psql -c "%s" """ % sql)
 
 ###############################################################################
 # Hook functions
@@ -196,6 +202,73 @@ def install():
         apt_get_install(package)
     open_port(5432)
 
+def get_db_password(user, database)
+    if os.path.exists("/var/lib/juju/pgsql.%s.%s.password" % (database, user)):
+        f = open("/var/lib/juju/pgsql.%s.%s.password" % (database, user))
+        return f.read()
+    else:
+        password = pwgen()
+        password_file = open("/var/lib/juju/pgsql.%s.%s.password" % (database, user), "w")
+        password_file.write(password)
+        password_file.close()
+        return password
+
+def ensure_db_user(user, password):
+    sql = "SELECT rolname FROM pg_roles WHERE rolname = '%s'" % (user, )
+    if run_sql_as_postgres(sql):
+        # User already exists
+        pass
+    else:
+        sql = "CREATE USER %s WITH SUPERUSER PASSWORD '%s'" % (user, password)
+        run_sql_as_postgres(sql)
+
+def ensure_database(user, database):
+    sql = "SELECT datname FROM pg_database WHERE datname = '%s'" % (database)
+    if run_sql_as_postgres(sql):
+        # DB already exists
+        pass
+    else:
+        sql = "CREATE DATABASE %s OWNER %s" % (database, user)
+        run_sql_as_postgres(sql)
+        sql = "GRANT ALL PRIVILEGES ON %s TO %s" % (database, user)
+        run_sql_as_postgres(sql)
+
+def db_relation_joined(user, database):
+    password = get_db_password(user, database)
+    ensure_db_user(user, password)
+    ensure_database(user, database)
+    host = run("gethostip $ip | awk '{print $2}'")
+    run("relation-set host=%s user=%s password=%s database=%s" % (host, user,
+        password, database))
+
+def db_relation_broken(user, database):
+    # Need to handle "all" value
+    sql = "REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s" % (user, database)
+    run_sql_as_postgres(sql)
+
+def db_relation_broken_admin(user):
+    sql = "ALTER USER %s NOCREATEDB NOCREATEUSER" % (user, )
+    run_sql_as_postgres(sql)
+
+def db_relation_changed(user, database):
+    remote_host = run("relation-get ip")
+    if not remote_host:
+        # remote unit $JUJU_REMOTE_UNIT uses deprecated 'ip=' component of
+        # interface.
+        remote_host = run("relation-get private-address")
+    if not remote_host:
+        # remote host not set yet
+        sys.exit(0)
+    remote_ip = run("gethostip $remote_host | awk '{print $2}'")
+    if re.search("%s.*%s.*%s" % (database, user, remote_ip), postgresql_hba):
+        # we already have access
+        pass
+    else:
+        pg_hba = Template(open("templates/pg_hba.conf.tmpl").read(), searchList=[config_data])
+        with open(postgresql_hba, 'w') as postgres_hba:
+        postgres_hba.write(str(pg_hba)) 
+        
+
 ###############################################################################
 # Global variables
 ###############################################################################
@@ -206,6 +279,7 @@ config_data['version_float'] = float(version)
 cluster_name = config_data['cluster_name']
 postgresql_config_dir = "/etc/postgresql"
 postgresql_config = "%s/%s/%s/postgresql.conf" % (postgresql_config_dir, version, cluster_name)
+postgresql_hba = "%s/%s/%s/hba.conf" % (postgresql_config_dir, version, cluster_name)
 postgresql_service_config_dir = "/var/run/postgresql"
 hook_name = os.path.basename(sys.argv[0])
 
@@ -227,6 +301,19 @@ elif hook_name == "stop":
     status, output = commands.getstatusoutput("service postgresql stop")
     if status != 0:
         sys.exit(status)
+elif hook_name == "db-relation-joined":
+    db_relation_joined(user, database)
+elif hook_name == "db-admin-relation-joined":
+    db_relation_joined(user, "all")
+elif hook_name == "db-relation-changed":
+    db_relation_changed(user, database)
+elif hook_name == "db-admin-relation-changed":
+    db_relation_changed(user, "all")
+elif hook_name == "db-relation-broken":
+    db_relation_broken(user, database)
+elif hook_name == "db-admin-relation-broken":
+    db_relation_broken(user, "all")
+    db_relation_broken_admin(user)
 else:
     print "Unknown hook"
     sys.exit(1)

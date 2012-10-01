@@ -1,4 +1,9 @@
 options:
+  dumpfile_location:
+    default: "None"
+    type: string
+    description: |
+        Path to a dumpfile to load into DB when service is initiated.
   config_change_command:
     default: "reload"
     type: string
