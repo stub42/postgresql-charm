@@ -1,12 +1,5 @@
 #!/usr/bin/env python
 
-from shelltoolbox import su
-from helpers import (
-    log,
-    log_entry,
-    log_exit,
-    run,
-)
 import commands
 import json
 import glob
@@ -183,8 +176,10 @@ def pwgen(pwd_length=20):
     for i in range(pwd_length)]
     return(''.join(random_chars))
 
-def run_sql_as_postgres(sql)
-    run("""sudo -su postgres psql -c "%s" """ % sql)
+def run_sql_as_postgres(sql):
+    status, output = commands.getstatusoutput("""sudo -su postgres psql -c "%s" """ % sql)
+    if status != 0:
+        sys.exit(status)
 
 ###############################################################################
 # Hook functions
@@ -202,7 +197,7 @@ def install():
         apt_get_install(package)
     open_port(5432)
 
-def get_db_password(user, database)
+def get_db_password(user, database):
     if os.path.exists("/var/lib/juju/pgsql.%s.%s.password" % (database, user)):
         f = open("/var/lib/juju/pgsql.%s.%s.password" % (database, user))
         return f.read()
@@ -266,7 +261,7 @@ def db_relation_changed(user, database):
     else:
         pg_hba = Template(open("templates/pg_hba.conf.tmpl").read(), searchList=[config_data])
         with open(postgresql_hba, 'w') as postgres_hba:
-        postgres_hba.write(str(pg_hba)) 
+            postgres_hba.write(str(pg_hba)) 
         
 
 ###############################################################################
