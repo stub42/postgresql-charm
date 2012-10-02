@@ -17,6 +17,15 @@ import yaml
 # Supporting functions
 ###############################################################################
 
+#------------------------------------------------------------------------------
+# run: Run a command, return the output
+#------------------------------------------------------------------------------
+def run(command):
+    status, output = commands.getstatusoutput(command)
+    if status != 0:
+        sys.exit(status)
+    return output
+
 
 #------------------------------------------------------------------------------
 # config_get:  Returns a dictionary containing all of the config information
