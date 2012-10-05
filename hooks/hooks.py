@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# vim: et ai ts=4 sw=4:
 
 import commands
 import json
@@ -48,11 +49,11 @@ def mntpoint_from_volid (volid):
 def volume_get_volid_from_volume_map():
     volume_map = {}
     try:
-      volume_map = yaml.load(config_get('volume-map'))
+      volume_map = config_data['volume-map']
       if volume_map:
         return volume_map.get(os.environ['JUJU_UNIT_NAME'])    
-    except ConstructorError:
-      juju_log("WARNING: invalid YAML in 'volume-map'")
+    except ConstructorError as e:
+      juju_log("WARNING: invalid YAML in 'volume-map': %s", e)
     return None
 
 # Is this volume_id permanent ?
@@ -68,29 +69,35 @@ def volume_mount_point_from_volid(volid):
 	    return "/srv/juju/%s" % volid
     return None
 
+
 # Do we have a valid storage state?
 # @returns  volid   
 #           None    config state is invalid - we should not serve
 def volume_get_volume_id():
-    ephermeral_storage = config_get('volume-ephemeral-storage')
+    ephermeral_storage = config_data['volume-ephemeral-storage']
     volid = volume_get_volid_from_volume_map()
     juju_unit_name = os.environ['JUJU_UNIT_NAME']
     if ephermeral_storage:
         if volid:
-            juju_log("ERROR: volume-ephemeral-storage is True, but volume-map[%s] -> %s" % (juju_unit_name, volid))
+            juju_log("ERROR: volume-ephemeral-storage is True, but " +
+                     "volume-map['%s'] -> %s" % (juju_unit_name, volid))
             return None
         else:
             return "--ephemeral"
     else:
         if not volid:
-            juju_log( "ERROR: volume-ephemeral-storage is False, but no volid found for volume-map[%s]" % (
-                    juju_unit_name ))
+            juju_log("ERROR: volume-ephemeral-storage is False, but " +
+                     "no volid found for volume-map['%s']" % (juju_unit_name ))
             return None
     return volid
 
 
+# Initialize and/or mount permanent storage, it straightly calls
+# shell helper 
+# TODO(jjo): consider using python-pbs and re-implementing each step here
 def volume_init_and_mount(volid):
-    run("/bin/bash scripts/volume-common.sh call volume_init_and_mount %s" % volid)
+    return run("/bin/bash scripts/volume-common.sh call " + 
+               "volume_init_and_mount %s" % volid)
 
 #------------------------------------------------------------------------------
 # Enable/disable service start by manipulating policy-rc.d
@@ -98,9 +105,12 @@ def volume_init_and_mount(volid):
 def enable_service_start(service):
     ### NOTE: doesn't implement per-service, this can be an issue
     ###       for colocated charms (subordinates)
-    os.unlink('/usr/sbin/policy-rc.d')
+    juju_log("NOTICE: enabling %s start by policy-rc.d" % service)
+    if os.exists('/usr/sbin/policy-rc.d'):
+        os.unlink('/usr/sbin/policy-rc.d')
   
 def disable_service_start(service):
+    juju_log("NOTICE: disabling %s start by policy-rc.d" % service)
     policy_rc = '/usr/sbin/policy-rc.d'
     policy_rc_tmp = "%s.tmp" % policy_rc
     open('%s.tmp' % policy_rc_tmp, 'w').write("""
@@ -333,11 +343,12 @@ def config_changed(postgresql_config):
     if volid:
       if volume_is_permanent(volid):
         # TODO(jjo):
-        # - initialize empty volume
         # - link /var/lib/postgres/... mount point
-        pass
+        volume_init_and_mount(volid)
     else:
-      juju_log("Invalid volume storage configuration, not applying changes")
+      juju_log("ERROR: Invalid volume storage configuration", +
+               "not applying changes")
+      disable_service_start("postgresql")
       sys.exit(1)
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
@@ -346,7 +357,7 @@ def config_changed(postgresql_config):
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
     if config_data["config_change_command"] in ["reload", "restart"]:
-        subprocess.call(['service', 'postgresql', config_data["config_change_command"]])
+        subprocess.call(['invoke-rc.d', 'postgresql', config_data["config_change_command"]])
 
 def token_sql_safe(value):
     # Only allow alphanumeric + underscore in database identifiers
@@ -454,14 +465,14 @@ elif hook_name == "config-changed":
     config_changed(postgresql_config)
 #-------- start
 elif hook_name == "start":
-    status, output = commands.getstatusoutput("service postgresql restart")
+    status, output = commands.getstatusoutput("invoke-rc.d postgresql restart")
     if status != 0:
-        status, output = commands.getstatusoutput("service postgresql start")
+        status, output = commands.getstatusoutput("invoke-rc.d postgresql start")
         if status != 0:
             sys.exit(status)
 #-------- stop
 elif hook_name == "stop":
-    status, output = commands.getstatusoutput("service postgresql stop")
+    status, output = commands.getstatusoutput("invoke-rc.d postgresql stop")
     if status != 0:
         sys.exit(status)
 #-------- db-relation-joined, db-relation-changed
