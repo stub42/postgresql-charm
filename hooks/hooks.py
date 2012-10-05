@@ -206,15 +206,27 @@ def pwgen(pwd_length=None):
     for i in range(pwd_length)]
     return(''.join(random_chars))
 
-def run_sql_as_postgres(sql, *parameters):
+def db_cursor(autocommit=False):
     conn = psycopg2.connect("dbname=template1 user=postgres")
-    cur = conn.cursor()
-    cur.execute(sql, parameters)
-    return cur.statusmessage
+    conn.autocommit = autocommit
+    try:
+        return conn.cursor()
+    except psycopg2.ProgrammingError:
+        print sql
+        raise
+
+
+def run_sql_as_postgres(sql, *parameters):
+    cur = db_cursor(autocommit=True)
+    try:
+        cur.execute(sql, parameters)
+        return cur.statusmessage
+    except psycopg2.ProgrammingError:
+        print sql
+        raise
 
 def run_select_as_postgres(sql, *parameters):
-    conn = psycopg2.connect("dbname=template1 user=postgres")
-    cur = conn.cursor()
+    cur = db_cursor()
     cur.execute(sql, parameters)
     return cur.rowcount
 
@@ -244,8 +256,8 @@ def install():
 
 def user_name(admin=False):
     components = []
-    components.append(os.environ['JUJU_RELATION_ID'].replace(":","-"))
-    components.append(os.environ['JUJU_REMOTE_UNIT'].replace("/","-"))
+    components.append(os.environ['JUJU_RELATION_ID'].replace(":","_"))
+    components.append(os.environ['JUJU_REMOTE_UNIT'].replace("/","_"))
     if admin:
         components.append("admin")
     return "_".join(components)
@@ -254,7 +266,7 @@ def ensure_user(user, admin=False):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
     password = pwgen()
     action = "CREATE"
-    if run_select_as_postgres(sql, user):
+    if run_select_as_postgres(sql, user) != 0:
         action = "ALTER"
     if admin:
         sql = "{} USER {} SUPERUSER PASSWORD %s".format(action, user)
@@ -264,16 +276,16 @@ def ensure_user(user, admin=False):
     return password
 
 def ensure_database(user, schema_user, database):
-    sql = "SELECT datname FROM pg_database WHERE datname = %s" % (database)
-    if run_select_as_postgres(sql):
+    sql = "SELECT datname FROM pg_database WHERE datname = %s"
+    if run_select_as_postgres(sql, database) != 0:
         # DB already exists
         pass
     else:
         sql = "CREATE DATABASE {} OWNER {}".format(database, schema_user)
         run_sql_as_postgres(sql)
-    sql = "GRANT ALL PRIVILEGES ON {} TO {}".format(database, schema_user)
+    sql = "GRANT ALL PRIVILEGES ON DATABASE {} TO {}".format(database, schema_user)
     run_sql_as_postgres(sql)
-    sql = "GRANT CONNECT ON {} TO {}".format(database, user)
+    sql = "GRANT CONNECT ON DATABASE {} TO {}".format(database, user)
     run_sql_as_postgres(sql)
 
 def get_relation_host():
@@ -322,7 +334,7 @@ cluster_name = config_data['cluster_name']
 postgresql_config_dir = "/etc/postgresql"
 postgresql_config = "%s/%s/%s/postgresql.conf" % (postgresql_config_dir, version, cluster_name)
 postgresql_ident = "%s/%s/%s/pg_ident.conf" % (postgresql_config_dir, version, cluster_name)
-postgresql_hba = "%s/%s/%s/hba.conf" % (postgresql_config_dir, version, cluster_name)
+postgresql_hba = "%s/%s/%s/pg_hba.conf" % (postgresql_config_dir, version, cluster_name)
 postgresql_service_config_dir = "/var/run/postgresql"
 hook_name = os.path.basename(sys.argv[0])
 
