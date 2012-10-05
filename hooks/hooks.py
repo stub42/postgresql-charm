@@ -2,15 +2,17 @@
 
 import commands
 import json
-import glob
 import os
 import random
 import re
-import socket
 import string
 import subprocess
 import sys
-import yaml
+try:
+    import psycopg2
+except ImportError:
+    # likely in the install hook
+    pass
 
 
 ###############################################################################
@@ -86,7 +88,6 @@ def relation_get(scope=None, unit_name=None):
     finally:
         return(relation_data)
 
-
 #------------------------------------------------------------------------------
 # apt_get_install( package ):  Installs a package
 #------------------------------------------------------------------------------
@@ -105,7 +106,7 @@ def create_postgresql_config(postgresql_config):
     if config_data["performance_tuning"] == "auto":
         # Taken from http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
         num_cpus = run("cat /proc/cpuinfo | grep processor | wc -l")
-        total_ram = run("free -m | grep Mem | awk '{print $2}'")    
+        total_ram = run("free -m | grep Mem | awk '{print $2}'")
         config_data["effective_cache_size"] = "%sMB" % (int( int(total_ram) * 0.75 ), )
         if total_ram > 1023:
             config_data["shared_buffers"] = "%sMB" % (int( int(total_ram) * 0.25 ), )
@@ -178,17 +179,26 @@ def update_service_port(old_service_port=None, new_service_port=None):
 #         pwd_length:  Defines the length of the password to generate
 #                      default: 20
 #------------------------------------------------------------------------------
-def pwgen(pwd_length=20):
+def pwgen(pwd_length=None):
+    if pwd_length is None:
+        pwd_length = random.choice(range(20,30))
     alphanumeric_chars = [l for l in (string.letters + string.digits) \
     if l not in 'Iil0oO1']
     random_chars = [random.choice(alphanumeric_chars) \
     for i in range(pwd_length)]
     return(''.join(random_chars))
 
-def run_sql_as_postgres(sql):
-    status, output = commands.getstatusoutput("""sudo -su postgres psql -c "%s" """ % sql)
-    if status != 0:
-        sys.exit(status)
+def run_sql_as_postgres(sql, *parameters):
+    conn = psycopg2.connect("dbname=template1 user=postgres")
+    cur = conn.cursor()
+    cur.execute(sql, parameters)
+    return cur.statusmessage
+
+def run_select_as_postgres(sql, *parameters):
+    conn = psycopg2.connect("dbname=template1 user=postgres")
+    cur = conn.cursor()
+    cur.execute(sql, parameters)
+    return cur.rowcount
 
 ###############################################################################
 # Hook functions
@@ -199,79 +209,87 @@ def config_changed(postgresql_config):
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
     if config_data["config_change_command"] in ["reload", "restart"]:
-        retVal = subprocess.call(['service', 'postgresql', config_data["config_change_command"]])
+        subprocess.call(['service', 'postgresql', config_data["config_change_command"]])
+
+def token_sql_safe(value):
+    # Only allow alphanumeric + underscore in database identifiers
+    if re.search('[^A-Za-z0-9_]', value):
+        return False
+    return True
 
 def install():
-    for package in ["postgresql", "pwgen", "python-cheetah", "syslinux"]:
+    for package in ["postgresql", "pwgen", "python-cheetah", "syslinux", "python-psycopg2"]:
         apt_get_install(package)
     open_port(5432)
 
-def get_db_password(user, database):
-    if os.path.exists("/var/lib/juju/pgsql.%s.%s.password" % (database, user)):
-        f = open("/var/lib/juju/pgsql.%s.%s.password" % (database, user))
-        return f.read()
-    else:
-        password = pwgen()
-        password_file = open("/var/lib/juju/pgsql.%s.%s.password" % (database, user), "w")
-        password_file.write(password)
-        password_file.close()
-        return password
+def user_name(admin=False):
+    components = []
+    components.append(os.environ['RELATION_ID'].replace(":","-"))
+    components.append(os.environ['JUJU_REMOTE_UNIT'].replace("/","-"))
+    if admin:
+        components.append("admin")
+    return "_".join(components)
 
-def ensure_db_user(user, password):
-    sql = "SELECT rolname FROM pg_roles WHERE rolname = '%s'" % (user, )
-    if run_sql_as_postgres(sql):
-        # User already exists
-        pass
+def ensure_user(user, admin=False):
+    sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
+    password = pwgen()
+    action = "CREATE"
+    if run_select_as_postgres(sql, user):
+        action = "ALTER"
+    if admin:
+        sql = "{} USER {} SUPERUSER PASSWORD %s".format(action, user)
     else:
-        sql = "CREATE USER %s WITH SUPERUSER PASSWORD '%s'" % (user, password)
-        run_sql_as_postgres(sql)
+        sql = "{} USER {} PASSWORD %s".format(action, user)
+    run_sql_as_postgres(sql, password)
+    return password
 
-def ensure_database(user, database):
-    sql = "SELECT datname FROM pg_database WHERE datname = '%s'" % (database)
-    if run_sql_as_postgres(sql):
+def ensure_database(user, schema_user, database):
+    sql = "SELECT datname FROM pg_database WHERE datname = %s" % (database)
+    if run_select_as_postgres(sql):
         # DB already exists
         pass
     else:
-        sql = "CREATE DATABASE %s OWNER %s" % (database, user)
+        sql = "CREATE DATABASE {} OWNER {}".format(database, schema_user)
         run_sql_as_postgres(sql)
-        sql = "GRANT ALL PRIVILEGES ON %s TO %s" % (database, user)
-        run_sql_as_postgres(sql)
-
-def db_relation_joined(user, database):
-    password = get_db_password(user, database)
-    ensure_db_user(user, password)
-    ensure_database(user, database)
-    host = run("gethostip $ip | awk '{print $2}'")
-    run("relation-set host=%s user=%s password=%s database=%s" % (host, user,
-        password, database))
-
-def db_relation_broken(user, database):
-    # Need to handle "all" value
-    sql = "REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s" % (user, database)
+    sql = "GRANT ALL PRIVILEGES ON {} TO {}".format(database, schema_user)
+    run_sql_as_postgres(sql)
+    sql = "GRANT CONNECT ON {} TO {}".format(database, user)
     run_sql_as_postgres(sql)
 
-def db_relation_broken_admin(user):
-    sql = "ALTER USER %s NOCREATEDB NOCREATEUSER" % (user, )
-    run_sql_as_postgres(sql)
-
-def db_relation_changed(user, database):
+def get_relation_host():
     remote_host = run("relation-get ip")
     if not remote_host:
         # remote unit $JUJU_REMOTE_UNIT uses deprecated 'ip=' component of
         # interface.
         remote_host = run("relation-get private-address")
-    if not remote_host:
-        # remote host not set yet
-        sys.exit(0)
-    remote_ip = run("gethostip $remote_host | awk '{print $2}'")
-    if re.search("%s.*%s.*%s" % (database, user, remote_ip), postgresql_hba):
-        # we already have access
-        pass
-    else:
-        pg_hba = Template(open("templates/pg_hba.conf.tmpl").read(), searchList=[config_data])
-        with open(postgresql_hba, 'w') as postgres_hba:
-            postgres_hba.write(str(pg_hba)) 
-        
+    return remote_host
+
+def db_relation_joined_changed(user, database):
+    password = ensure_user(user)
+    schema_user = "{}_schema".format(user)
+    schema_password = ensure_user(schema_user)
+    ensure_database(user, schema_user, database)
+    host = get_relation_host()
+    run("relation-set host='{}' user='{}' password='{}' schema_user='{}' schema_password='{}' database='{}'".format(
+                      host,     user,     password,     schema_user,     schema_password,     database))
+
+def db_admin_relation_joined_changed(user):
+    password = ensure_user(user)
+    host = get_relation_host()
+    run("relation-set host='{}' user='{}' password='{}'".format(
+                      host,     user,     password))
+
+def db_relation_broken(user, database):
+    # Need to handle "all" value
+    sql = "REVOKE ALL PRIVILEGES FROM {}_schema".format(user)
+    run_sql_as_postgres(sql)
+    sql = "REVOKE ALL PRIVILEGES FROM {}".format(user)
+    run_sql_as_postgres(sql)
+
+def db_admin_relation_broken(user):
+    sql = "REVOKE ALL PRIVILEGES FROM {}".format(user)
+    run_sql_as_postgres(sql)
+
 
 ###############################################################################
 # Global variables
@@ -305,19 +323,19 @@ elif hook_name == "stop":
     status, output = commands.getstatusoutput("service postgresql stop")
     if status != 0:
         sys.exit(status)
-elif hook_name == "db-relation-joined":
-    db_relation_joined(user, database)
-elif hook_name == "db-admin-relation-joined":
-    db_relation_joined(user, "all")
-elif hook_name == "db-relation-changed":
-    db_relation_changed(user, database)
-elif hook_name == "db-admin-relation-changed":
-    db_relation_changed(user, "all")
+elif hook_name in ["db-relation-joined","db-relation-changed"]:
+    user = user_name()
+    database = relation_get('database')
+    if user != '' and database != '':
+        db_relation_joined_changed(user, database)
+elif hook_name in ["db-admin-relation-joined","db-admin-relation-changed"]:
+    user = user_name(admin=True)
+    db_admin_relation_joined_changed(user, "all")
 elif hook_name == "db-relation-broken":
     db_relation_broken(user, database)
 elif hook_name == "db-admin-relation-broken":
-    db_relation_broken(user, "all")
-    db_relation_broken_admin(user)
+    user = user_name(admin=True)
+    db_admin_relation_broken(user, "all")
 else:
     print "Unknown hook"
     sys.exit(1)
