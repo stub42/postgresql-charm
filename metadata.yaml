@@ -15,3 +15,6 @@ provides:
     interface: pgsql
   db-admin:
     interface: pgsql
+requires:
+  persistent-storage:
+    interface: directory-path

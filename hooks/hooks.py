@@ -125,6 +125,24 @@ def create_postgresql_config(postgresql_config):
     with open(postgresql_config, 'w') as postgres_config:
         postgres_config.write(str(pg_config))
 
+#------------------------------------------------------------------------------
+# create_postgresql_ident:  Creates the pg_ident.conf file
+#------------------------------------------------------------------------------
+def create_postgresql_ident(postgresql_ident):
+    ident_data = {}
+    pg_ident_template = Template(open("templates/pg_ident.conf.tmpl").read(), searchList=[ident_data])
+    with open(postgresql_ident, 'w') as ident_file:
+        ident_file.write(str(pg_ident_template))
+
+#------------------------------------------------------------------------------
+# create_postgresql_hba:  Creates the pg_hba.conf file
+#------------------------------------------------------------------------------
+def create_postgresql_hba(postgresql_hba):
+    hba_data = {}
+    pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read(), searchList=[hba_data])
+    with open(postgresql_hba, 'w') as hba_file:
+        hba_file.write(str(pg_hba_template))
+
 
 #------------------------------------------------------------------------------
 # load_postgresql_config:  Convenience function that loads (as a string) the
@@ -206,6 +224,8 @@ def run_select_as_postgres(sql, *parameters):
 def config_changed(postgresql_config):
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
+    create_postgresql_hba(postgresql_hba)
+    create_postgresql_ident(postgresql_ident)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
     if config_data["config_change_command"] in ["reload", "restart"]:
@@ -224,7 +244,7 @@ def install():
 
 def user_name(admin=False):
     components = []
-    components.append(os.environ['RELATION_ID'].replace(":","-"))
+    components.append(os.environ['JUJU_RELATION_ID'].replace(":","-"))
     components.append(os.environ['JUJU_REMOTE_UNIT'].replace("/","-"))
     if admin:
         components.append("admin")
@@ -301,6 +321,7 @@ config_data['version_float'] = float(version)
 cluster_name = config_data['cluster_name']
 postgresql_config_dir = "/etc/postgresql"
 postgresql_config = "%s/%s/%s/postgresql.conf" % (postgresql_config_dir, version, cluster_name)
+postgresql_ident = "%s/%s/%s/pg_ident.conf" % (postgresql_config_dir, version, cluster_name)
 postgresql_hba = "%s/%s/%s/hba.conf" % (postgresql_config_dir, version, cluster_name)
 postgresql_service_config_dir = "/var/run/postgresql"
 hook_name = os.path.basename(sys.argv[0])
@@ -310,32 +331,49 @@ hook_name = os.path.basename(sys.argv[0])
 ###############################################################################
 if hook_name == "install":
     install()
+#-------- config-changed
 elif hook_name == "config-changed":
     from Cheetah.Template import Template
     config_changed(postgresql_config)
+#-------- start
 elif hook_name == "start":
     status, output = commands.getstatusoutput("service postgresql restart")
     if status != 0:
         status, output = commands.getstatusoutput("service postgresql start")
         if status != 0:
             sys.exit(status)
+#-------- stop
 elif hook_name == "stop":
     status, output = commands.getstatusoutput("service postgresql stop")
     if status != 0:
         sys.exit(status)
+#-------- db-relation-joined, db-relation-changed
 elif hook_name in ["db-relation-joined","db-relation-changed"]:
-    user = user_name()
     database = relation_get('database')
+    if database == '':
+        # Missing some information. We expect it to appear in a
+        # future call to the hook.
+        sys.exit(0)
+    user = user_name()
     if user != '' and database != '':
         db_relation_joined_changed(user, database)
+#-------- db-relation-broken
+elif hook_name == "db-relation-broken":
+    db_relation_broken(user, database)
+#-------- db-admin-relation-joined, db-admin-relation-changed
 elif hook_name in ["db-admin-relation-joined","db-admin-relation-changed"]:
     user = user_name(admin=True)
     db_admin_relation_joined_changed(user, "all")
-elif hook_name == "db-relation-broken":
-    db_relation_broken(user, database)
+#-------- db-admin-relation-broken
 elif hook_name == "db-admin-relation-broken":
     user = user_name(admin=True)
     db_admin_relation_broken(user, "all")
+#-------- persistent-storage-relation-joined, persistent-storage-relation-changed
+elif hook_name in ["persistent-storage-relation-joined","persistent-storage-relation-changed"]:
+    persistent_storage_relation_joined_changed()
+#-------- persistent-storage-relation-broken
+elif hook_name == "persistent-storage-relation-broken":
+    persistent_storage_relation_broken()
 else:
     print "Unknown hook"
     sys.exit(1)

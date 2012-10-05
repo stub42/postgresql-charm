@@ -3,7 +3,7 @@
 #------------------------------------------------------------------------------
 
 # Database administrative login by UNIX sockets
-local   all         postgres                          ident
+local   all         postgres                          ident map=superusers
 
 #for $database, $user, $remote_ip in $access_list():
 host ${database} ${user} ${remote_ip}/32 md5
