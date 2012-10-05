@@ -8,10 +8,11 @@ import re
 import string
 import subprocess
 import sys
+# these modules are installed during the install hook
 try:
     import psycopg2
+    from Cheetah.Template import Template
 except ImportError:
-    # likely in the install hook
     pass
 
 
@@ -125,6 +126,7 @@ def create_postgresql_config(postgresql_config):
     with open(postgresql_config, 'w') as postgres_config:
         postgres_config.write(str(pg_config))
 
+
 #------------------------------------------------------------------------------
 # create_postgresql_ident:  Creates the pg_ident.conf file
 #------------------------------------------------------------------------------
@@ -133,6 +135,7 @@ def create_postgresql_ident(postgresql_ident):
     pg_ident_template = Template(open("templates/pg_ident.conf.tmpl").read(), searchList=[ident_data])
     with open(postgresql_ident, 'w') as ident_file:
         ident_file.write(str(pg_ident_template))
+
 
 #------------------------------------------------------------------------------
 # create_postgresql_hba:  Creates the pg_hba.conf file
@@ -143,6 +146,19 @@ def create_postgresql_hba(postgresql_hba):
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
 
+
+#------------------------------------------------------------------------------
+# update_postgresql_crontab:  Creates the postgresql crontab file
+#------------------------------------------------------------------------------
+def update_postgresql_crontab(postgresql_ident):
+    crontab_data = {
+        'backup_schedule': config_data["backup_schedule"],
+        'charm_dir': os.environ['CHARM_DIR'],
+        'databases': " ".join(database_names()),
+    }
+    crontab_template = Template(open("templates/postgres.cron.tmpl").read(), searchList=[crontab_data])
+    with open(postgresql_ident, 'w') as ident_file:
+        ident_file.write(str(crontab_template))
 
 #------------------------------------------------------------------------------
 # load_postgresql_config:  Convenience function that loads (as a string) the
@@ -228,7 +244,7 @@ def run_sql_as_postgres(sql, *parameters):
 def run_select_as_postgres(sql, *parameters):
     cur = db_cursor()
     cur.execute(sql, parameters)
-    return cur.rowcount
+    return (cur.rowcount, cur.fetchall())
 
 ###############################################################################
 # Hook functions
@@ -262,11 +278,17 @@ def user_name(admin=False):
         components.append("admin")
     return "_".join(components)
 
+def database_names(admin=False):
+    omit_tables = ['template0','template1']
+    sql = "SELECT datname FROM pg_database WHERE datname NOT IN (" + ",".join(["%s"] * len(omit_tables)) + ")"
+    return [t for (t,) in run_select_as_postgres(sql, *omit_tables)[1]]
+
+
 def ensure_user(user, admin=False):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
     password = pwgen()
     action = "CREATE"
-    if run_select_as_postgres(sql, user) != 0:
+    if run_select_as_postgres(sql, user)[0] != 0:
         action = "ALTER"
     if admin:
         sql = "{} USER {} SUPERUSER PASSWORD %s".format(action, user)
@@ -277,7 +299,7 @@ def ensure_user(user, admin=False):
 
 def ensure_database(user, schema_user, database):
     sql = "SELECT datname FROM pg_database WHERE datname = %s"
-    if run_select_as_postgres(sql, database) != 0:
+    if run_select_as_postgres(sql, database)[0] != 0:
         # DB already exists
         pass
     else:
@@ -301,6 +323,7 @@ def db_relation_joined_changed(user, database):
     schema_user = "{}_schema".format(user)
     schema_password = ensure_user(schema_user)
     ensure_database(user, schema_user, database)
+    update_postgresql_crontab(postgresql_crontab)
     host = get_relation_host()
     run("relation-set host='{}' user='{}' password='{}' schema_user='{}' schema_password='{}' database='{}'".format(
                       host,     user,     password,     schema_user,     schema_password,     database))
@@ -317,6 +340,7 @@ def db_relation_broken(user, database):
     run_sql_as_postgres(sql)
     sql = "REVOKE ALL PRIVILEGES FROM {}".format(user)
     run_sql_as_postgres(sql)
+    update_postgresql_crontab(postgresql_crontab)
 
 def db_admin_relation_broken(user):
     sql = "REVOKE ALL PRIVILEGES FROM {}".format(user)
@@ -335,6 +359,7 @@ postgresql_config_dir = "/etc/postgresql"
 postgresql_config = "%s/%s/%s/postgresql.conf" % (postgresql_config_dir, version, cluster_name)
 postgresql_ident = "%s/%s/%s/pg_ident.conf" % (postgresql_config_dir, version, cluster_name)
 postgresql_hba = "%s/%s/%s/pg_hba.conf" % (postgresql_config_dir, version, cluster_name)
+postgresql_crontab = "/etc/cron.d/postgresql"
 postgresql_service_config_dir = "/var/run/postgresql"
 hook_name = os.path.basename(sys.argv[0])
 
@@ -345,7 +370,6 @@ if hook_name == "install":
     install()
 #-------- config-changed
 elif hook_name == "config-changed":
-    from Cheetah.Template import Template
     config_changed(postgresql_config)
 #-------- start
 elif hook_name == "start":

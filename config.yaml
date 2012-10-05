@@ -198,3 +198,7 @@ options:
     default: "128MB"
     type: string
     description: Effective cache size
+  backup_schedule:
+    default: "13 4 * * *"
+    type: string
+    description: Cron-formatted schedule for database backups.
