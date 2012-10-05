@@ -198,3 +198,32 @@ options:
     default: "128MB"
     type: string
     description: Effective cache size
+  #------------------------------------------------------------------------
+  # Volume management
+  #   volume-map, volume-dev_regexp are only used 
+  #   if volume-ephemeral-storage == False
+  #------------------------------------------------------------------------
+  volume-ephemeral-storage:
+    type: boolean
+    default: true
+    description: >
+      If false, a configure-error state will be raised if
+         volume-map[$JUJU_UNIT_NAME] is not set (see "volume-map"
+         below) - see "volume-map" below.
+      If true, service units won't try to use "volume-map" (and
+         related variables) to mount and use external (EBS) volumes,
+         thus storage lifetime will equal VM, thus ephemeral.
+         YOU'VE BEEN WARNED.
+  volume-map:
+    type: string
+    default: ""
+    description: >
+      YAML map as e.g. "{ postgres/0: vol-0000010, postgres/1: vol-0000016 }".
+      Service units will raise a "configure-error" condition if no volume-map
+      value is set for it - it's expected a human to set it properly to resolve it.
+  volume-dev-regexp:
+    type: string
+    default: "/dev/vd[b-z]"
+    description: >
+      Block device for attached volumes as seen by the VM, will be "scanned"
+      for an unused device when "volume-map" is valid for the unit.

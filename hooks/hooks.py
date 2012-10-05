@@ -2,12 +2,16 @@
 
 import commands
 import json
+import yaml
 import os
 import random
 import re
 import string
 import subprocess
 import sys
+import yaml
+from yaml.constructor import ConstructorError
+
 try:
     import psycopg2
 except ImportError:
@@ -19,6 +23,98 @@ except ImportError:
 # Supporting functions
 ###############################################################################
 
+###############################################################################
+
+# Volume managment
+###############################################################################
+#------------------------------
+# Returns a mount point from passed vol-id, e.g. /srv/juju/vol-000012345
+#
+# @param  volid          volume id (as e.g. EBS volid)
+# @return mntpoint_path  eg /srv/juju/vol-000012345
+#------------------------------
+def mntpoint_from_volid (volid):
+    if volid:
+        return "/srv/juju/%s" % volid
+    else:
+        return None
+
+#------------------------------
+# Get volume-id from juju config "volume-map" dictionary as
+#     volume-map[JUJU_UNIT_NAME]
+# @return  volid
+#
+#------------------------------
+def volume_get_volid_from_volume_map():
+    volume_map = {}
+    try:
+      volume_map = yaml.load(config_get('volume-map'))
+      if volume_map:
+        return volume_map.get(os.environ['JUJU_UNIT_NAME'])    
+    except ConstructorError:
+      juju_log("WARNING: invalid YAML in 'volume-map'")
+    return None
+
+# Is this volume_id permanent ?
+# @returns  True if volid set and not --ephermeral, else:
+#           False
+def volume_is_permanent(volid):
+    if volid and volid != "--ephermeral":
+        return True
+    return False
+
+def volume_mount_point_from_volid(volid):
+    if volid and volume_is_permanent(volid):
+	    return "/srv/juju/%s" % volid
+    return None
+
+# Do we have a valid storage state?
+# @returns  volid   
+#           None    config state is invalid - we should not serve
+def volume_get_volume_id():
+    ephermeral_storage = config_get('volume-ephemeral-storage')
+    volid = volume_get_volid_from_volume_map()
+    juju_unit_name = os.environ['JUJU_UNIT_NAME']
+    if ephermeral_storage:
+        if volid:
+            juju_log("ERROR: volume-ephemeral-storage is True, but volume-map[%s] -> %s" % (juju_unit_name, volid))
+            return None
+        else:
+            return "--ephemeral"
+    else:
+        if not volid:
+            juju_log( "ERROR: volume-ephemeral-storage is False, but no volid found for volume-map[%s]" % (
+                    juju_unit_name ))
+            return None
+    return volid
+
+
+def volume_init_and_mount(volid):
+    run("/bin/bash scripts/volume-common.sh call volume_init_and_mount %s" % volid)
+
+#------------------------------------------------------------------------------
+# Enable/disable service start by manipulating policy-rc.d
+#------------------------------------------------------------------------------
+def enable_service_start(service):
+    ### NOTE: doesn't implement per-service, this can be an issue
+    ###       for colocated charms (subordinates)
+    os.unlink('/usr/sbin/policy-rc.d')
+  
+def disable_service_start(service):
+    policy_rc = '/usr/sbin/policy-rc.d'
+    policy_rc_tmp = "%s.tmp" % policy_rc
+    open('%s.tmp' % policy_rc_tmp, 'w').write("""
+#!/bin/bash
+[[ "$1"-"$2" == %s-start ]] && exit 101
+exit 0
+EOF
+""" % service)
+    os.chmod(policy_rc_tmp, 0755)
+    os.rename(policy_rc_tmp, policy_rc)
+
+def juju_log(msg):
+    subprocess.call(['/usr/bin/juju-log', msg])
+
 #------------------------------------------------------------------------------
 # run: Run a command, return the output
 #------------------------------------------------------------------------------
@@ -27,7 +123,6 @@ def run(command):
     if status != 0:
         sys.exit(status)
     return output
-
 
 #------------------------------------------------------------------------------
 # config_get:  Returns a dictionary containing all of the config information
@@ -234,6 +329,16 @@ def run_select_as_postgres(sql, *parameters):
 # Hook functions
 ###############################################################################
 def config_changed(postgresql_config):
+    volid = volume_get_volume_id()
+    if volid:
+      if volume_is_permanent(volid):
+        # TODO(jjo):
+        # - initialize empty volume
+        # - link /var/lib/postgres/... mount point
+        pass
+    else:
+      juju_log("Invalid volume storage configuration, not applying changes")
+      sys.exit(1)
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
     create_postgresql_hba(postgresql_hba)
