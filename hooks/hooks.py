@@ -349,6 +349,7 @@ def config_changed_volume_apply():
     volid = volume_get_volume_id()
     if volid:
       if volume_is_permanent(volid):
+        # TODO(jjo): [P0]: assert stop database is successful
         if not volume_init_and_mount(volid):
             juju_log(MSG_ERROR, "volume_init_and_mount failed, " +
                      "not applying changes")
