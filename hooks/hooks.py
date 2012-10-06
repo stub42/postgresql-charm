@@ -11,6 +11,7 @@ import string
 import subprocess
 import sys
 import yaml
+import time
 from yaml.constructor import ConstructorError
 
 try:
@@ -23,23 +24,19 @@ except ImportError:
 ###############################################################################
 # Supporting functions
 ###############################################################################
+MSG_CRITICAL = "CRITICAL"
+MSG_DEBUG    = "DEBUG"
+MSG_INFO     = "INFO"
+MSG_ERROR    = "ERROR"
+MSG_WARNING  = "WARNING"
+
+def juju_log(level, msg):
+    subprocess.call(['/usr/bin/juju-log', '-l', level, msg])
 
 ###############################################################################
 
 # Volume managment
 ###############################################################################
-#------------------------------
-# Returns a mount point from passed vol-id, e.g. /srv/juju/vol-000012345
-#
-# @param  volid          volume id (as e.g. EBS volid)
-# @return mntpoint_path  eg /srv/juju/vol-000012345
-#------------------------------
-def mntpoint_from_volid (volid):
-    if volid:
-        return "/srv/juju/%s" % volid
-    else:
-        return None
-
 #------------------------------
 # Get volume-id from juju config "volume-map" dictionary as
 #     volume-map[JUJU_UNIT_NAME]
@@ -49,11 +46,11 @@ def mntpoint_from_volid (volid):
 def volume_get_volid_from_volume_map():
     volume_map = {}
     try:
-      volume_map = config_data['volume-map']
+      volume_map = yaml.load(config_data['volume-map'])
       if volume_map:
         return volume_map.get(os.environ['JUJU_UNIT_NAME'])    
     except ConstructorError as e:
-      juju_log("WARNING: invalid YAML in 'volume-map': %s", e)
+      juju_log(MSG_WARNING, "invalid YAML in 'volume-map': %s", e)
     return None
 
 # Is this volume_id permanent ?
@@ -64,6 +61,12 @@ def volume_is_permanent(volid):
         return True
     return False
 
+#------------------------------
+# Returns a mount point from passed vol-id, e.g. /srv/juju/vol-000012345
+#
+# @param  volid          volume id (as e.g. EBS volid)
+# @return mntpoint_path  eg /srv/juju/vol-000012345
+#------------------------------
 def volume_mount_point_from_volid(volid):
     if volid and volume_is_permanent(volid):
 	    return "/srv/juju/%s" % volid
@@ -79,14 +82,14 @@ def volume_get_volume_id():
     juju_unit_name = os.environ['JUJU_UNIT_NAME']
     if ephermeral_storage:
         if volid:
-            juju_log("ERROR: volume-ephemeral-storage is True, but " +
+            juju_log(MSG_ERROR, "volume-ephemeral-storage is True, but " +
                      "volume-map['%s'] -> %s" % (juju_unit_name, volid))
             return None
         else:
             return "--ephemeral"
     else:
         if not volid:
-            juju_log("ERROR: volume-ephemeral-storage is False, but " +
+            juju_log(MSG_ERROR, "volume-ephemeral-storage is False, but " +
                      "no volid found for volume-map['%s']" % (juju_unit_name ))
             return None
     return volid
@@ -96,8 +99,15 @@ def volume_get_volume_id():
 # shell helper 
 # TODO(jjo): consider using python-pbs and re-implementing each step here
 def volume_init_and_mount(volid):
-    return run("/bin/bash scripts/volume-common.sh call " + 
-               "volume_init_and_mount %s" % volid)
+    command = ("/bin/bash -x scripts/volume-common.sh call " +
+              "volume_init_and_mount %s 2>/tmp/err" % volid)
+    status, output = commands.getstatusoutput(command)
+    juju_log(MSG_INFO, "status=%d, output=%s" % (status, output))
+    if status != 0 or output.find("ERROR") >= 0:
+        juju_log(MSG_CRITICAL, "boooH")
+        return False
+    return True
+
 
 #------------------------------------------------------------------------------
 # Enable/disable service start by manipulating policy-rc.d
@@ -105,26 +115,23 @@ def volume_init_and_mount(volid):
 def enable_service_start(service):
     ### NOTE: doesn't implement per-service, this can be an issue
     ###       for colocated charms (subordinates)
-    juju_log("NOTICE: enabling %s start by policy-rc.d" % service)
-    if os.exists('/usr/sbin/policy-rc.d'):
+    juju_log(MSG_INFO, "NOTICE: enabling %s start by policy-rc.d" % service)
+    if os.path.exists('/usr/sbin/policy-rc.d'):
         os.unlink('/usr/sbin/policy-rc.d')
+        return True
+    return False
   
 def disable_service_start(service):
-    juju_log("NOTICE: disabling %s start by policy-rc.d" % service)
+    juju_log(MSG_INFO, "NOTICE: disabling %s start by policy-rc.d" % service)
     policy_rc = '/usr/sbin/policy-rc.d'
     policy_rc_tmp = "%s.tmp" % policy_rc
-    open('%s.tmp' % policy_rc_tmp, 'w').write("""
-#!/bin/bash
+    open('%s' % policy_rc_tmp, 'w').write("""#!/bin/bash
 [[ "$1"-"$2" == %s-start ]] && exit 101
 exit 0
 EOF
 """ % service)
     os.chmod(policy_rc_tmp, 0755)
     os.rename(policy_rc_tmp, policy_rc)
-
-def juju_log(msg):
-    subprocess.call(['/usr/bin/juju-log', msg])
-
 #------------------------------------------------------------------------------
 # run: Run a command, return the output
 #------------------------------------------------------------------------------
@@ -335,28 +342,86 @@ def run_select_as_postgres(sql, *parameters):
     cur.execute(sql, parameters)
     return cur.rowcount
 
+
+def config_changed_volume_apply():
+    data_directory_path = config_data['data_directory_path']
+    assert(data_directory_path)
+    volid = volume_get_volume_id()
+    if volid:
+      if volume_is_permanent(volid):
+        if not volume_init_and_mount(volid):
+            juju_log(MSG_ERROR, "volume_init_and_mount failed, " +
+                     "not applying changes")
+            return False
+
+        if not os.path.exists(data_directory_path):
+            juju_log(MSG_CRITICAL, ("postgresql data dir = %s not found, " +
+                     "not applying changes.") % data_directory_path)
+            return False
+
+        mount_point = volume_mount_point_from_volid(volid)
+        new_data_dir = os.path.join(mount_point, "postgresql")
+        new_data_dir_full = os.path.join(new_data_dir, config_data["version"],
+                                         config_data["cluster_name"])
+        if not mount_point:
+            juju_log(MSG_ERROR, "invalid mount point from volid = \"%s\", " +
+                     "not applying changes." % mount_point)
+            return False  
+
+        if (os.path.islink(data_directory_path) and 
+            os.readlink(data_directory_path) == new_data_dir_full and
+            os.path.isdir(new_data_dir_full)):
+            juju_log(MSG_INFO, "NOTICE: postgresql data dir '%s' already points to '%s', skipping storage changes." % ( data_directory_path, new_data_dir_full))
+            return True
+
+        # create a serving directories below mount_point
+        curr_dir_stat = os.stat(data_directory_path)
+        for new_dir in [new_data_dir,
+                    os.path.join(new_data_dir, config_data["version"]),
+                    new_data_dir_full]:
+            if not os.path.isdir(new_dir):
+                os.mkdir(new_dir)
+                # copy permissions from current data_directory_path
+                os.chown(new_dir, curr_dir_stat.st_uid, curr_dir_stat.st_gid)
+                os.chmod(new_dir, curr_dir_stat.st_mode)
+                juju_log(MSG_INFO, "mkdir %s" % new_dir)
+        if not os.path.exists(os.path.join(new_data_dir_full, "PG_VERSION")):
+            command = "rsync -a %s/ %s/" % (data_directory_path, new_data_dir_full)
+            juju_log(MSG_INFO, "run: %s" % command)
+            status, output = commands.getstatusoutput(command)
+            juju_log(MSG_INFO, "status = %d, output: %s" % (status, output))
+        try:
+            os.rename(data_directory_path, "%s-%d" % (
+                          data_directory_path, int(time.time())))
+            os.symlink(new_data_dir_full, data_directory_path)
+            return True
+        except OSError as e:
+            juju_log(MSG_CRITICAL, "failed to symlink \"%s\" -> \"%s\"" % (
+                          data_directory_path, mount_point))
+            return False
+    else:
+        juju_log(MSG_ERROR, "ERROR: Invalid volume storage configuration, " +
+                 "not applying changes")
+    return False
+
 ###############################################################################
 # Hook functions
 ###############################################################################
 def config_changed(postgresql_config):
-    volid = volume_get_volume_id()
-    if volid:
-      if volume_is_permanent(volid):
-        # TODO(jjo):
-        # - link /var/lib/postgres/... mount point
-        volume_init_and_mount(volid)
-    else:
-      juju_log("ERROR: Invalid volume storage configuration", +
-               "not applying changes")
-      disable_service_start("postgresql")
-      sys.exit(1)
+                          
+    config_change_command = config_data["config_change_command"]
+    if not config_changed_volume_apply():
+        disable_service_start("postgresql")
+        sys.exit(1)
+    if enable_service_start("postgresql"):
+        config_change_command = "restart"
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
     create_postgresql_hba(postgresql_hba)
     create_postgresql_ident(postgresql_ident)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
-    if config_data["config_change_command"] in ["reload", "restart"]:
+    if config_change_command in ["reload", "restart"]:
         subprocess.call(['invoke-rc.d', 'postgresql', config_data["config_change_command"]])
 
 def token_sql_safe(value):
@@ -447,6 +512,7 @@ version = config_data['version']
 # We need this to evaluate if we're on a version greater than a given number
 config_data['version_float'] = float(version)
 cluster_name = config_data['cluster_name']
+config_data['data_directory_path'] = "/var/lib/postgresql/%s/%s" % (version, cluster_name)
 postgresql_config_dir = "/etc/postgresql"
 postgresql_config = "%s/%s/%s/postgresql.conf" % (postgresql_config_dir, version, cluster_name)
 postgresql_ident = "%s/%s/%s/pg_ident.conf" % (postgresql_config_dir, version, cluster_name)

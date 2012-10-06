@@ -7,7 +7,7 @@
 # FILE LOCATIONS
 #------------------------------------------------------------------------------
 
-data_directory = '/var/lib/postgresql/${version}/${cluster_name}'
+data_directory = '${data_directory_path}'
 hba_file = '/etc/postgresql/${version}/${cluster_name}/pg_hba.conf'
 ident_file = '/etc/postgresql/${version}/${cluster_name}/pg_ident.conf'
 external_pid_file = '/var/run/postgresql/${version}-${cluster_name}.pid'

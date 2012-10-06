@@ -29,10 +29,22 @@ volume_init_and_mount() {
   local dev found_dev=
   local label="${volid}"
   local func=${FUNCNAME[0]}
-  dev_regexp=$(config-get volume-dev_regexp) || return 1
+  dev_regexp=$(config-get volume-dev-regexp) || return 1
   mntpoint=$(_mntpoint_from_volid ${volid})
 
   [[ -z ${mntpoint} ]] && return 1
+
+  # Sanitize
+  case "${dev_regexp?}" in
+    # Careful: this is glob matching against an regexp -
+    # quite narrowed
+    /dev/*|/dev/disk/by-*)
+      ;; ## Ok
+    *)
+      juju-log "ERROR: invalid 'volume-dev-regexp' specified"
+      return 1
+      ;;
+  esac
 
   # Assume udev will create only existing devices
   for dev in $(ls -r ${dev_regexp} 2>/dev/null);do
@@ -40,7 +52,7 @@ volume_init_and_mount() {
     mount | fgrep -q "${dev}[1-9]?" || { found_dev=${dev}; break;}
   done
   [[ -n "${found_dev}" ]] || {
-    juju-log "ERROR: ${func}: coult not find an unused for: ${dev_regexp}"
+    juju-log "ERROR: ${func}: coult not find an unused device for regexp: ${dev_regexp}"
     return 1
   }
   partition1_dev=${found_dev}1
@@ -79,12 +91,12 @@ volume_init_and_mount() {
   [[ -d "${mntpoint}" ]] || mkdir -p "${mntpoint}"
   mount | fgrep -wq "${partition1_dev}" || {
     mount -L "${label}" "${mntpoint}"
-    juju-log "INFO: ${func}: mounted as: $(mount | fgrep -w ${found_dev})"
+    juju-log "INFO: ${func}: mounted as: $(mount | fgrep -w ${partition1_dev})"
   }
 
   # Add it to fstab is not already there
   fgrep -wq "LABEL=${label}" /etc/fstab || {
-    echo "LABEL=${label}    ${mntpoint}    auto    defaults,nobootwait,comment=${volid}" | tee -a /etc/fstab
+    echo "LABEL=${label}    ${mntpoint}    ext4    defaults,nobootwait,comment=${volid}" | tee -a /etc/fstab
     juju-log "INFO: ${func}: LABEL=${label} added to /etc/fstab"
   }
   )
@@ -152,6 +164,5 @@ case "$1" in
     shift;
     function="${1:?usage: ${0##*/} call function arg1 arg2 ...}"
     shift;
-    ${function} "$@"
-    exit $?
+    ${function} "$@" && exit 0 || exit 1
 esac
