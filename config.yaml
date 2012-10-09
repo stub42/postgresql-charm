@@ -202,3 +202,7 @@ options:
     default: "13 4 * * *"
     type: string
     description: Cron-formatted schedule for database backups.
+  backup_retension_count:
+    default: 7
+    type: int
+    description: Number of recent backups to retain.
