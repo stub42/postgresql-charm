@@ -3,10 +3,10 @@
 #------------------------------------------------------------------------------
 
 # Database administrative login by UNIX sockets
-local   all         postgres                          ident map=superusers
+local   all        postgres                          ident map=superusers
 
-#if $varExists('access_list')
-#for $database, $user, $remote_ip in $access_list():
-host ${database} ${user} ${remote_ip}/32 md5
+#if $varExists('hba_data')
+#for $unit in $hba_data
+host    $hba_data[$unit].database        $hba_data[$unit].user        ${hba_data[$unit]['private-address']}/32         md5
 #end for
 #end if

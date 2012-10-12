@@ -176,6 +176,32 @@ def get_service_port(postgresql_config):
     except:
         return None
 
+#------------------------------------------------------------------------------
+# relation_json:  Returns json-formatted relation data
+#                Optional parameters: scope, relation_id
+#                scope:        limits the scope of the returned data to the
+#                              desired item.
+#                unit_name:    limits the data ( and optionally the scope )
+#                              to the specified unit
+#                relation_id:  specify relation id for out of context usage.
+#------------------------------------------------------------------------------
+def relation_json(scope=None, unit_name=None, relation_id=None):
+    try:
+        relation_cmd_line = ['relation-get', '--format=json']
+        if relation_id is not None:
+            relation_cmd_line.extend(('-r', relation_id))
+        if scope is not None:
+            relation_cmd_line.append(scope)
+        else:
+            relation_cmd_line.append('-')
+        relation_cmd_line.append(unit_name)
+        relation_data = subprocess.check_output(relation_cmd_line)
+    except Exception, e:
+        subprocess.call(['juju-log', str(e)])
+        relation_data = None
+    finally:
+        return(relation_data)
+
 
 #------------------------------------------------------------------------------
 # relation_get:  Returns a dictionary containing the relation information
@@ -201,6 +227,23 @@ def relation_get(scope=None, unit_name=None):
         return(relation_data)
 
 #------------------------------------------------------------------------------
+# relation_ids:  Returns a list of relation ids
+#                optional parameters: relation_type
+#                relation_type: return relations only of this type
+#------------------------------------------------------------------------------
+def relation_ids(relation_types=['db']):
+    # accept strings or iterators
+    if isinstance(relation_types, basestring):
+        reltypes = [relation_types,]
+    else:
+        reltypes = relation_types
+    relids = []
+    for reltype in reltypes:
+        relid_cmd_line = ['relation-ids', '--format=json',reltype]
+        relids.extend(json.loads(subprocess.check_output(relid_cmd_line)))
+    return relids
+
+#------------------------------------------------------------------------------
 # apt_get_install( package ):  Installs a package
 #------------------------------------------------------------------------------
 def apt_get_install(packages=None):
@@ -209,7 +252,6 @@ def apt_get_install(packages=None):
     cmd_line = ['apt-get', '-y', 'install', '-qq']
     cmd_line.append(packages)
     return(subprocess.call(cmd_line))
-
 
 #------------------------------------------------------------------------------
 # create_postgresql_config:   Creates the postgresql.conf file
@@ -250,11 +292,21 @@ def create_postgresql_ident(postgresql_ident):
 # create_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
 def create_postgresql_hba(postgresql_hba):
-    hba_data = {}
-    pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read(), searchList=[hba_data])
+    reldata = {}
+    relids= relation_ids(relation_types=['db','db-admin'])
+    for relid in relids:
+        units_cmd_line = ['relation-list','--format=json','-r',relid]
+        units = json.loads(subprocess.check_output(units_cmd_line))
+        for unit in units:
+            reldata[unit] = json.loads(relation_json(relation_id=relid,unit_name=unit))
+            reldata[unit]['user'] = user_name(relid, unit)
+            if re.search('db-admin', relid):
+                reldata[unit]['user'] = 'all'
+            	reldata[unit]['database'] = 'all'
+    templ_vars = { 'hba_data': reldata }
+    pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read(), searchList=[templ_vars])
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
-
 
 #------------------------------------------------------------------------------
 # load_postgresql_config:  Convenience function that loads (as a string) the
@@ -409,11 +461,11 @@ def config_changed_volume_apply():
 # Hook functions
 ###############################################################################
 def config_changed(postgresql_config):
-                          
     config_change_command = config_data["config_change_command"]
     if not config_changed_volume_apply():
         disable_service_start("postgresql")
-        sys.exit(1)
+        juju_log(MSG_WARNING, "Disabled service and exiting config_changed_volume_apply returned false")
+        #sys.exit(1)
     if enable_service_start("postgresql"):
         config_change_command = "restart"
     current_service_port = get_service_port(postgresql_config)
@@ -436,10 +488,10 @@ def install():
         apt_get_install(package)
     open_port(5432)
 
-def user_name(admin=False):
+def user_name(relid, remote_unit, admin=False):
     components = []
-    components.append(os.environ['JUJU_RELATION_ID'].replace(":","_"))
-    components.append(os.environ['JUJU_REMOTE_UNIT'].replace("/","_"))
+    components.append(relid.replace(":","_").replace("-","_"))
+    components.append(remote_unit.replace("/","_"))
     if admin:
         components.append("admin")
     return "_".join(components)
@@ -448,6 +500,8 @@ def ensure_user(user, admin=False):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
     password = pwgen()
     action = "CREATE"
+    # XXX: This appears to reset the password every time
+    # this might not end well
     if run_select_as_postgres(sql, user) != 0:
         action = "ALTER"
     if admin:
@@ -478,30 +532,33 @@ def get_relation_host():
         remote_host = run("relation-get private-address")
     return remote_host
 
+def get_unit_host():
+    this_host = run("unit-get private-address")
+    return this_host
+
 def db_relation_joined_changed(user, database):
     password = ensure_user(user)
     schema_user = "{}_schema".format(user)
     schema_password = ensure_user(schema_user)
     ensure_database(user, schema_user, database)
-    host = get_relation_host()
+    host = get_unit_host()
     run("relation-set host='{}' user='{}' password='{}' schema_user='{}' schema_password='{}' database='{}'".format(
                       host,     user,     password,     schema_user,     schema_password,     database))
 
-def db_admin_relation_joined_changed(user):
-    password = ensure_user(user)
-    host = get_relation_host()
+def db_admin_relation_joined_changed(user, database='all'):
+    password = ensure_user(user,admin=True)
+    host = get_unit_host()
     run("relation-set host='{}' user='{}' password='{}'".format(
                       host,     user,     password))
 
 def db_relation_broken(user, database):
-    # Need to handle "all" value
-    sql = "REVOKE ALL PRIVILEGES FROM {}_schema".format(user)
+    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}_schema".format(database, user)
     run_sql_as_postgres(sql)
-    sql = "REVOKE ALL PRIVILEGES FROM {}".format(user)
+    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}".format(database, user)
     run_sql_as_postgres(sql)
 
-def db_admin_relation_broken(user):
-    sql = "REVOKE ALL PRIVILEGES FROM {}".format(user)
+def db_admin_relation_broken(user, database):
+    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}".format(database, user)
     run_sql_as_postgres(sql)
 
 
@@ -549,20 +606,22 @@ elif hook_name in ["db-relation-joined","db-relation-changed"]:
         # Missing some information. We expect it to appear in a
         # future call to the hook.
         sys.exit(0)
-    user = user_name()
+    user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
     if user != '' and database != '':
         db_relation_joined_changed(user, database)
 #-------- db-relation-broken
 elif hook_name == "db-relation-broken":
+    database = relation_get('database')
+    user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
     db_relation_broken(user, database)
 #-------- db-admin-relation-joined, db-admin-relation-changed
 elif hook_name in ["db-admin-relation-joined","db-admin-relation-changed"]:
-    user = user_name(admin=True)
-    db_admin_relation_joined_changed(user, "all")
+    user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'], admin=True)
+    db_admin_relation_joined_changed(user, 'all')
 #-------- db-admin-relation-broken
 elif hook_name == "db-admin-relation-broken":
-    user = user_name(admin=True)
-    db_admin_relation_broken(user, "all")
+    user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'], admin=True)
+    db_admin_relation_broken(user, 'all')
 #-------- persistent-storage-relation-joined, persistent-storage-relation-changed
 elif hook_name in ["persistent-storage-relation-joined","persistent-storage-relation-changed"]:
     persistent_storage_relation_joined_changed()
