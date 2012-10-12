@@ -289,9 +289,9 @@ def create_postgresql_ident(postgresql_ident):
         ident_file.write(str(pg_ident_template))
 
 #------------------------------------------------------------------------------
-# create_postgresql_hba:  Creates the pg_hba.conf file
+# generate_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
-def create_postgresql_hba(postgresql_hba):
+def generate_postgresql_hba(postgresql_hba):
     reldata = {}
     relids= relation_ids(relation_types=['db','db-admin'])
     for relid in relids:
@@ -470,7 +470,7 @@ def config_changed(postgresql_config):
         config_change_command = "restart"
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
-    create_postgresql_hba(postgresql_hba)
+    generate_postgresql_hba(postgresql_hba)
     create_postgresql_ident(postgresql_ident)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
@@ -544,22 +544,26 @@ def db_relation_joined_changed(user, database):
     host = get_unit_host()
     run("relation-set host='{}' user='{}' password='{}' schema_user='{}' schema_password='{}' database='{}'".format(
                       host,     user,     password,     schema_user,     schema_password,     database))
+    generate_postgresql_hba(postgresql_hba)
 
 def db_admin_relation_joined_changed(user, database='all'):
     password = ensure_user(user,admin=True)
     host = get_unit_host()
     run("relation-set host='{}' user='{}' password='{}'".format(
                       host,     user,     password))
+    generate_postgresql_hba(postgresql_hba)
 
 def db_relation_broken(user, database):
     sql = "REVOKE ALL PRIVILEGES ON {} FROM {}_schema".format(database, user)
     run_sql_as_postgres(sql)
     sql = "REVOKE ALL PRIVILEGES ON {} FROM {}".format(database, user)
     run_sql_as_postgres(sql)
+    generate_postgresql_hba(postgresql_hba)
 
-def db_admin_relation_broken(user, database):
-    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}".format(database, user)
+def db_admin_relation_broken(user):
+    sql = "ALTER USER {} NOSUPERUSER".format(user)
     run_sql_as_postgres(sql)
+    generate_postgresql_hba(postgresql_hba)
 
 
 ###############################################################################
@@ -601,6 +605,7 @@ elif hook_name == "stop":
         sys.exit(status)
 #-------- db-relation-joined, db-relation-changed
 elif hook_name in ["db-relation-joined","db-relation-changed"]:
+    from Cheetah.Template import Template
     database = relation_get('database')
     if database == '':
         # Missing some information. We expect it to appear in a
@@ -611,17 +616,22 @@ elif hook_name in ["db-relation-joined","db-relation-changed"]:
         db_relation_joined_changed(user, database)
 #-------- db-relation-broken
 elif hook_name == "db-relation-broken":
+    from Cheetah.Template import Template
     database = relation_get('database')
     user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
     db_relation_broken(user, database)
 #-------- db-admin-relation-joined, db-admin-relation-changed
 elif hook_name in ["db-admin-relation-joined","db-admin-relation-changed"]:
+    from Cheetah.Template import Template
     user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'], admin=True)
     db_admin_relation_joined_changed(user, 'all')
 #-------- db-admin-relation-broken
 elif hook_name == "db-admin-relation-broken":
+    from Cheetah.Template import Template
+    # XXX: Fix: relation is not set when it is already broken
+    # cannot determine the user name
     user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'], admin=True)
-    db_admin_relation_broken(user, 'all')
+    db_admin_relation_broken(user)
 #-------- persistent-storage-relation-joined, persistent-storage-relation-changed
 elif hook_name in ["persistent-storage-relation-joined","persistent-storage-relation-changed"]:
     persistent_storage_relation_joined_changed()
