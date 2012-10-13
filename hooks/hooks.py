@@ -293,6 +293,7 @@ def create_postgresql_ident(postgresql_ident):
 #------------------------------------------------------------------------------
 def generate_postgresql_hba(postgresql_hba):
     reldata = {}
+    config_change_command = config_data["config_change_command"]
     relids= relation_ids(relation_types=['db','db-admin'])
     for relid in relids:
         units_cmd_line = ['relation-list','--format=json','-r',relid]
@@ -307,6 +308,8 @@ def generate_postgresql_hba(postgresql_hba):
     pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read(), searchList=[templ_vars])
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
+    if config_change_command in ["reload", "restart"]:
+        subprocess.call(['invoke-rc.d', 'postgresql', config_data["config_change_command"]])
 
 #------------------------------------------------------------------------------
 # load_postgresql_config:  Convenience function that loads (as a string) the
