@@ -460,6 +460,15 @@ def config_changed_volume_apply():
                  "not applying changes")
     return False
 
+### BASENODE BEGIN ####
+def basenode_setup():
+    subprocess.call(['juju-log', 'basenode_setup: begin'])
+    subprocess.call(['sh', '-c', 'cd basenode && python setup.py install'])
+    import basenode
+    basenode.basenode_init()
+    subprocess.call(['juju-log', 'basenode_setup: end'])
+### BASENODE END   ####
+
 ###############################################################################
 # Hook functions
 ###############################################################################
@@ -487,6 +496,7 @@ def token_sql_safe(value):
     return True
 
 def install():
+    basenode_setup()
     for package in ["postgresql", "pwgen", "python-cheetah", "syslinux", "python-psycopg2"]:
         apt_get_install(package)
     open_port(5432)
