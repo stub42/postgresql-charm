@@ -142,6 +142,47 @@ def run(command):
     return output
 
 #------------------------------------------------------------------------------
+# postgresql_stop, postgresql_start, postgresql_is_running: 
+# wrappers over invoke-rc.d, with extra check for postgresql_is_running()
+#------------------------------------------------------------------------------
+def postgresql_is_running()
+    # init script always return true (9.1), add extra check to make it useful
+    status, output = commands.getstatusoutput("invoke-rc.d postgresql status")
+    if status != 0:
+        return False
+    # e.g. output: "Running clusters: 9.1/main"
+    vc = "%s/%s" % (config_data["version"], config_data["cluster_name"])
+    return vc % in status.split()
+
+
+def postgresql_stop():
+    status, output = commands.getstatusoutput("invoke-rc.d postgresql stop")
+    if status != 0:
+        return False
+    return not postgresql_is_running()
+
+
+def postgresql_start():
+    status, output = commands.getstatusoutput("invoke-rc.d postgresql start")
+    if status != 0:
+        return False
+    return postgresql_is_running()
+
+def postgresql_restart():
+    if postgresql_is_running():
+        status, output = commands.getstatusoutput("invoke-rc.d postgresql restart")
+        if status != 0:
+            return False
+    else:
+        postgresql_start()
+    return postgresql_is_running()
+
+def postgresql_reload():
+    # reload returns a reliable exit status
+    status, output = commands.getstatusoutput("invoke-rc.d postgresql reload")
+    return status == 0:
+
+#------------------------------------------------------------------------------
 # config_get:  Returns a dictionary containing all of the config information
 #              Optional parameter: scope
 #              scope: limits the scope of the returned configuration to the
@@ -397,14 +438,22 @@ def run_select_as_postgres(sql, *parameters):
     cur.execute(sql, parameters)
     return cur.rowcount
 
-
+#------------------------------------------------------------------------------
+# Core logic for permanent storage changes:
+# NOTE the only 2 "True" return points:
+#   1) symlink already pointing to existing storage (no-op)
+#   2) new storage properly initialized:
+#     - volume: initialized if not already (fdisk, mkfs),
+#       mounts it to e.g.:  /srv/juju/vol-000012345
+#     - if fresh new storage dir: rsync existing data 
+#     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink 
+#------------------------------------------------------------------------------
 def config_changed_volume_apply():
     data_directory_path = config_data['data_directory_path']
     assert(data_directory_path)
     volid = volume_get_volume_id()
     if volid:
       if volume_is_permanent(volid):
-        # TODO(jjo): [P0]: assert stop database is successful
         if not volume_init_and_mount(volid):
             juju_log(MSG_ERROR, "volume_init_and_mount failed, " +
                      "not applying changes")
@@ -416,8 +465,8 @@ def config_changed_volume_apply():
             return False
 
         mount_point = volume_mount_point_from_volid(volid)
-        new_data_dir = os.path.join(mount_point, "postgresql")
-        new_data_dir_full = os.path.join(new_data_dir, config_data["version"],
+        new_pg_dir = os.path.join(mount_point, "postgresql")
+        new_pg_version_cluster_dir = os.path.join(new_pg_dir, config_data["version"],
                                          config_data["cluster_name"])
         if not mount_point:
             juju_log(MSG_ERROR, "invalid mount point from volid = \"%s\", " +
@@ -425,31 +474,36 @@ def config_changed_volume_apply():
             return False  
 
         if (os.path.islink(data_directory_path) and 
-            os.readlink(data_directory_path) == new_data_dir_full and
-            os.path.isdir(new_data_dir_full)):
-            juju_log(MSG_INFO, "NOTICE: postgresql data dir '%s' already points to '%s', skipping storage changes." % ( data_directory_path, new_data_dir_full))
+            os.readlink(data_directory_path) == new_pg_version_cluster_dir and
+            os.path.isdir(new_pg_version_cluster_dir)):
+            juju_log(MSG_INFO, "NOTICE: postgresql data dir '%s' already points to '%s', skipping storage changes." % ( data_directory_path, new_pg_version_cluster_dir))
             return True
 
         # create a serving directories below mount_point
         curr_dir_stat = os.stat(data_directory_path)
-        for new_dir in [new_data_dir,
-                    os.path.join(new_data_dir, config_data["version"]),
-                    new_data_dir_full]:
+        for new_dir in [new_pg_dir,
+                    os.path.join(new_pg_dir, config_data["version"]),
+                    new_pg_version_cluster_dir]:
             if not os.path.isdir(new_dir):
                 os.mkdir(new_dir)
                 # copy permissions from current data_directory_path
                 os.chown(new_dir, curr_dir_stat.st_uid, curr_dir_stat.st_gid)
                 os.chmod(new_dir, curr_dir_stat.st_mode)
                 juju_log(MSG_INFO, "mkdir %s" % new_dir)
-        if not os.path.exists(os.path.join(new_data_dir_full, "PG_VERSION")):
-            command = "rsync -a %s/ %s/" % (data_directory_path, new_data_dir_full)
+        if not os.path.exists(os.path.join(new_pg_version_cluster_dir, "PG_VERSION")):
+            if not postgresql_stop()
+                juju_log(MSG_ERROR, "postgresql_stop() returned False - can't migrate data.")
+                return False
+            juju_log(MSG_WARNING, "migrating PG data %s/ -> %s/" % (
+                     data_directory_path, new_pg_version_cluster_dir))
+            command = "rsync -a %s/ %s/" % (data_directory_path, new_pg_version_cluster_dir)
             juju_log(MSG_INFO, "run: %s" % command)
             status, output = commands.getstatusoutput(command)
             juju_log(MSG_INFO, "status = %d, output: %s" % (status, output))
         try:
             os.rename(data_directory_path, "%s-%d" % (
                           data_directory_path, int(time.time())))
-            os.symlink(new_data_dir_full, data_directory_path)
+            os.symlink(new_pg_version_cluster_dir, data_directory_path)
             return True
         except OSError as e:
             juju_log(MSG_CRITICAL, "failed to symlink \"%s\" -> \"%s\"" % (
@@ -486,8 +540,13 @@ def config_changed(postgresql_config):
     create_postgresql_ident(postgresql_ident)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
-    if config_change_command in ["reload", "restart"]:
-        subprocess.call(['invoke-rc.d', 'postgresql', config_data["config_change_command"]])
+    if config_change_command == "reload"
+        return postgresql_reload()
+    elif config_change_command == "restart"
+        return postgresql_restart()
+    juju_log(MSG_ERROR, "invalid config_change_command = '%s'" % config_change_command)
+    return False
+        
 
 def token_sql_safe(value):
     # Only allow alphanumeric + underscore in database identifiers
@@ -606,16 +665,12 @@ elif hook_name == "config-changed":
     config_changed(postgresql_config)
 #-------- start
 elif hook_name == "start":
-    status, output = commands.getstatusoutput("invoke-rc.d postgresql restart")
-    if status != 0:
-        status, output = commands.getstatusoutput("invoke-rc.d postgresql start")
-        if status != 0:
-            sys.exit(status)
+    if not postgresql_restart():
+        sys.exit(1)
 #-------- stop
 elif hook_name == "stop":
-    status, output = commands.getstatusoutput("invoke-rc.d postgresql stop")
-    if status != 0:
-        sys.exit(status)
+    if not postgresql_stop():
+        sys.exit(1)
 #-------- db-relation-joined, db-relation-changed
 elif hook_name in ["db-relation-joined","db-relation-changed"]:
     from Cheetah.Template import Template
