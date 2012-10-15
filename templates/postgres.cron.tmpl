@@ -1,1 +1,1 @@
-$backup_schedule postgres nice -n 19 $charm_dir/libexec/pgbackup.py --dir=/var/lib/postgres/backups --compression=postgres $databases
+{{backup_schedule}} postgres {{scripts_dir}}/pg_backup_job {{backup_days}} {{databases}}
