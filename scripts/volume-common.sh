@@ -117,11 +117,11 @@ volume_get_volid_from_volume_map() {
 }
 
 # Returns true if permanent storage (considers --ephemeral)
-# @returns  0 if volid set and not --ephermeral, else:
+# @returns  0 if volid set and not --ephemeral, else:
 #           1 
 volume_is_permanent() {
   local volid=${1:?missing volid}
-  [[ -n ${volid} && ${volid} != --ephermeral ]] && return 0 || return 1
+  [[ -n ${volid} && ${volid} != --ephemeral ]] && return 0 || return 1
 }
 volume_mount_point_from_volid(){
   local volid=${1:?missing volid}
