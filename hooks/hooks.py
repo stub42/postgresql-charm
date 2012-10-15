@@ -145,14 +145,14 @@ def run(command):
 # postgresql_stop, postgresql_start, postgresql_is_running: 
 # wrappers over invoke-rc.d, with extra check for postgresql_is_running()
 #------------------------------------------------------------------------------
-def postgresql_is_running()
+def postgresql_is_running():
     # init script always return true (9.1), add extra check to make it useful
     status, output = commands.getstatusoutput("invoke-rc.d postgresql status")
     if status != 0:
         return False
     # e.g. output: "Running clusters: 9.1/main"
     vc = "%s/%s" % (config_data["version"], config_data["cluster_name"])
-    return vc % in status.split()
+    return vc in status.split()
 
 
 def postgresql_stop():
@@ -180,7 +180,7 @@ def postgresql_restart():
 def postgresql_reload():
     # reload returns a reliable exit status
     status, output = commands.getstatusoutput("invoke-rc.d postgresql reload")
-    return status == 0:
+    return (status == 0)
 
 #------------------------------------------------------------------------------
 # config_get:  Returns a dictionary containing all of the config information
@@ -491,7 +491,7 @@ def config_changed_volume_apply():
                 os.chmod(new_dir, curr_dir_stat.st_mode)
                 juju_log(MSG_INFO, "mkdir %s" % new_dir)
         if not os.path.exists(os.path.join(new_pg_version_cluster_dir, "PG_VERSION")):
-            if not postgresql_stop()
+            if not postgresql_stop():
                 juju_log(MSG_ERROR, "postgresql_stop() returned False - can't migrate data.")
                 return False
             juju_log(MSG_WARNING, "migrating PG data %s/ -> %s/" % (
@@ -540,9 +540,9 @@ def config_changed(postgresql_config):
     create_postgresql_ident(postgresql_ident)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
-    if config_change_command == "reload"
+    if config_change_command == "reload":
         return postgresql_reload()
-    elif config_change_command == "restart"
+    elif config_change_command == "restart":
         return postgresql_restart()
     juju_log(MSG_ERROR, "invalid config_change_command = '%s'" % config_change_command)
     return False
