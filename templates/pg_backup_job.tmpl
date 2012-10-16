@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -e
-set -u
 
 export LANG=C
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -16,6 +15,8 @@ if [ $DAYS -le 0 ]; then
     usage
     exit 1
 fi
+
+set -u
 
 DATABASES=$(psql -tAc "select datname from pg_database where datname not in ('template0','template1','postgres')")
 if [ -z "${DATABASES}" ]; then
