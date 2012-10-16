@@ -1,3 +1,8 @@
+#!/bin/bash
+# Author: JuanJo Ciarlante <jjo@canonical.com>
+# Copyright: Canonical Ltd. 2012
+# License: GPLv2
+#
 # juju storage common shell library
 # 
 
@@ -33,6 +38,10 @@ volume_init_and_mount() {
   mntpoint=$(_mntpoint_from_volid ${volid})
 
   [[ -z ${mntpoint} ]] && return 1
+  if mount | egrep -qw "${mntpoint}";then
+    juju-log "NOTICE: mntpoint=${mntpoint} already mounted, skipping volume_init_and_mount"
+    return 0
+  fi
 
   # Sanitize
   case "${dev_regexp?}" in
@@ -47,9 +56,9 @@ volume_init_and_mount() {
   esac
 
   # Assume udev will create only existing devices
-  for dev in $(ls -r ${dev_regexp} 2>/dev/null);do
+  for dev in $(ls -rd1 /dev/* | egrep ${dev_regexp} 2>/dev/null);do
     ## Check it's not already mounted
-    mount | fgrep -q "${dev}[1-9]?" || { found_dev=${dev}; break;}
+    mount | egrep -q "${dev}[1-9]?" || { found_dev=${dev}; break;}
   done
   [[ -n "${found_dev}" ]] || {
     juju-log "ERROR: ${func}: coult not find an unused device for regexp: ${dev_regexp}"
