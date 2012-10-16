@@ -358,13 +358,12 @@ def generate_postgresql_hba(postgresql_hba):
         subprocess.call(['invoke-rc.d', 'postgresql', config_data["config_change_command"]])
 
 #------------------------------------------------------------------------------
-# update_postgresql_crontab:  Creates the postgresql crontab file
+# install_postgresql_crontab:  Creates the postgresql crontab file
 #------------------------------------------------------------------------------
-def update_postgresql_crontab(postgresql_ident):
+def install_postgresql_crontab(postgresql_ident):
     crontab_data = {
         'backup_schedule': config_data["backup_schedule"],
         'scripts_dir': postgresql_scripts_dir,
-        'databases': " ".join(database_names()),
     }
     crontab_template = Template(open("templates/postgres.cron.tmpl").read()).render(crontab_data)
     install_file(str(crontab_template),"/etc/cron.d/postgres", mode=0644)
@@ -559,6 +558,7 @@ def install():
     backup_job = Template(open("templates/pg_backup_job.tmpl").read()).render(paths)
     install_file(dump_script,'{}/dump-pg-db'.format(postgresql_scripts_dir),mode=0755)
     install_file(backup_job,'{}/pg_backup_job'.format(postgresql_scripts_dir),mode=0755)
+    install_postgresql_crontab(postgresql_crontab)
     open_port(5432)
 
 def user_name(relid, remote_unit, admin=False):
@@ -621,7 +621,6 @@ def db_relation_joined_changed(user, database):
     schema_password = ensure_user(schema_user)
     ensure_database(user, schema_user, database)
     host = get_unit_host()
-    update_postgresql_crontab(postgresql_crontab)
     run("relation-set host='{}' user='{}' password='{}' schema_user='{}' schema_password='{}' database='{}'".format(
                       host,     user,     password,     schema_user,     schema_password,     database))
     generate_postgresql_hba(postgresql_hba)
@@ -638,7 +637,6 @@ def db_relation_broken(user, database):
     run_sql_as_postgres(sql)
     sql = "REVOKE ALL PRIVILEGES FROM {}".format(user)
     run_sql_as_postgres(sql)
-    update_postgresql_crontab(postgresql_crontab)
 
 def db_admin_relation_broken(user):
     sql = "ALTER USER {} NOSUPERUSER".format(user)
@@ -674,6 +672,9 @@ if hook_name == "install":
     install()
 #-------- config-changed
 elif hook_name == "config-changed":
+    config_changed(postgresql_config)
+elif hook_name == "upgrade-charm":
+    install()
     config_changed(postgresql_config)
 #-------- start
 elif hook_name == "start":
