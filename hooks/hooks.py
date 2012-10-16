@@ -261,7 +261,7 @@ def relation_json(scope=None, unit_name=None, relation_id=None):
         else:
             relation_cmd_line.append('-')
         relation_cmd_line.append(unit_name)
-        relation_data = run(relation_cmd_line)
+        relation_data = run(relation_cmd_line, exit_on_error=False)
     except:
         relation_data = None
     finally:
