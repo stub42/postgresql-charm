@@ -227,3 +227,11 @@ options:
     description: >
       Block device for attached volumes as seen by the VM, will be "scanned"
       for an unused device when "volume-map" is valid for the unit.
+  backup_schedule:
+    default: "13 4 * * *"
+    type: string
+    description: Cron-formatted schedule for database backups.
+  backup_retension_count:
+    default: 7
+    type: int
+    description: Number of recent backups to retain.

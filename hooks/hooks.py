@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # vim: et ai ts=4 sw=4:
 
-import commands
 import json
 import yaml
 import os
@@ -10,14 +9,15 @@ import re
 import string
 import subprocess
 import sys
-import yaml
 import time
 from yaml.constructor import ConstructorError
-
+import commands
+from pwd import getpwnam
+from grp import getgrnam
 try:
     import psycopg2
+    from jinja2 import Template
 except ImportError:
-    # likely in the install hook
     pass
 
 
@@ -54,10 +54,10 @@ def volume_get_volid_from_volume_map():
     return None
 
 # Is this volume_id permanent ?
-# @returns  True if volid set and not --ephermeral, else:
+# @returns  True if volid set and not --ephemeral, else:
 #           False
 def volume_is_permanent(volid):
-    if volid and volid != "--ephermeral":
+    if volid and volid != "--ephemeral":
         return True
     return False
 
@@ -77,10 +77,10 @@ def volume_mount_point_from_volid(volid):
 # @returns  volid   
 #           None    config state is invalid - we should not serve
 def volume_get_volume_id():
-    ephermeral_storage = config_data['volume-ephemeral-storage']
+    ephemeral_storage = config_data['volume-ephemeral-storage']
     volid = volume_get_volid_from_volume_map()
     juju_unit_name = os.environ['JUJU_UNIT_NAME']
-    if ephermeral_storage:
+    if ephemeral_storage in [True,'yes','Yes','true','True']:
         if volid:
             juju_log(MSG_ERROR, "volume-ephemeral-storage is True, but " +
                      "volume-map['%s'] -> %s" % (juju_unit_name, volid))
@@ -100,9 +100,8 @@ def volume_get_volume_id():
 def volume_init_and_mount(volid):
     command = ("scripts/volume-common.sh call " +
               "volume_init_and_mount %s" % volid)
-    status, output = commands.getstatusoutput(command)
-    juju_log(MSG_INFO, "status=%d, output=%s" % (status, output))
-    if status != 0 or output.find("ERROR") >= 0:
+    output = run(command)
+    if output.find("ERROR") >= 0:
         return False
     return True
 
@@ -140,10 +139,31 @@ EOF
 # run: Run a command, return the output
 #------------------------------------------------------------------------------
 def run(command):
-    status, output = commands.getstatusoutput(command)
-    if status != 0:
-        sys.exit(status)
-    return output
+    try:
+        juju_log(MSG_INFO, command)
+        return subprocess.check_output(command, shell=True)
+    except subprocess.CalledProcessError, e:
+        juju_log(MSG_ERROR, "status=%d, output=%s" % (e.returncode, e.output))
+        sys.exit(e.returncode)
+
+
+#------------------------------------------------------------------------------
+# install_file: install a file resource. overwites existing files.
+#------------------------------------------------------------------------------
+def install_file(contents, dest, owner="root", group="root", mode=0600):
+        uid = getpwnam(owner)[2]
+        gid = getgrnam(group)[2]
+        dest_fd = os.open(dest, os.O_WRONLY|os.O_TRUNC|os.O_CREAT, mode)
+        os.fchown(dest_fd,uid,gid)
+        with os.fdopen(dest_fd,'w') as destfile:
+            destfile.write(str(contents))
+
+#------------------------------------------------------------------------------
+# install_dir: create a directory
+#------------------------------------------------------------------------------
+def install_dir(dirname, owner="root", group="root", mode=0700):
+    command = '/usr/bin/install -o {} -g {} -m {} -d {}'.format(owner,group,oct(mode),dirname)
+    return run(command)
 
 #------------------------------------------------------------------------------
 # postgresql_stop, postgresql_start, postgresql_is_running: 
@@ -286,6 +306,35 @@ def relation_ids(relation_types=['db']):
         relids.extend(json.loads(subprocess.check_output(relid_cmd_line)))
     return relids
 
+
+#------------------------------------------------------------------------------
+# relation_get_all:  Returns a dictionary containing the relation information
+#                optional parameters: relation_type
+#                relation_type: limits the scope of the returned data to the
+#                               desired item.
+#------------------------------------------------------------------------------
+def relation_get_all(*args,**kwargs):
+    relation_data = []
+    try:
+        relids = relation_ids(*args, **kwargs)
+        for relid in relids:
+            units_cmd_line = ['relation-list','--format=json','-r',relid]
+            units = json.loads(subprocess.check_output(units_cmd_line))
+            for unit in units:
+                unit_data = json.loads(relation_json(relation_id=relid,unit_name=unit))
+                for key in unit_data:
+                    if key.endswith('-list'):
+                        unit_data[key] = unit_data[key].split()
+                unit_data['relation-id'] = relid
+                unit_data['unit'] = unit
+            relation_data.append(unit_data)
+    except Exception, e:
+        subprocess.call(['juju-log', str(e)])
+        relation_data = []
+    finally:
+        return(relation_data)
+
+
 #------------------------------------------------------------------------------
 # apt_get_install( package ):  Installs a package
 #------------------------------------------------------------------------------
@@ -318,42 +367,50 @@ def create_postgresql_config(postgresql_config):
         run("sysctl -p /etc/sysctl.d/50-postgresql.conf")
     # Send config data to the template
     # Return it as pg_config
-    pg_config = Template(open("templates/postgresql.conf.tmpl").read(), searchList=[config_data])
-    with open(postgresql_config, 'w') as postgres_config:
-        postgres_config.write(str(pg_config))
+    pg_config = Template(open("templates/postgresql.conf.tmpl").read()).render(config_data)
+    install_file(pg_config, postgresql_config)
+
 
 #------------------------------------------------------------------------------
 # create_postgresql_ident:  Creates the pg_ident.conf file
 #------------------------------------------------------------------------------
 def create_postgresql_ident(postgresql_ident):
     ident_data = {}
-    pg_ident_template = Template(open("templates/pg_ident.conf.tmpl").read(), searchList=[ident_data])
+    pg_ident_template = Template(open("templates/pg_ident.conf.tmpl").read()).render(ident_data)
     with open(postgresql_ident, 'w') as ident_file:
         ident_file.write(str(pg_ident_template))
+
 
 #------------------------------------------------------------------------------
 # generate_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
 def generate_postgresql_hba(postgresql_hba, do_reload = True):
-    reldata = {}
+    relation_data = relation_get_all(relation_types=['db','db-admin'])
     config_change_command = config_data["config_change_command"]
-    relids= relation_ids(relation_types=['db','db-admin'])
-    for relid in relids:
-        units_cmd_line = ['relation-list','--format=json','-r',relid]
-        units = json.loads(subprocess.check_output(units_cmd_line))
-        for unit in units:
-            reldata[unit] = json.loads(relation_json(relation_id=relid,unit_name=unit))
-            reldata[unit]['user'] = user_name(relid, unit)
-            if re.search('db-admin', relid):
-                reldata[unit]['user'] = 'all'
-            	reldata[unit]['database'] = 'all'
-    templ_vars = { 'hba_data': reldata }
-    pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read(), searchList=[templ_vars])
+    for relation in relation_data:
+        if re.search('db-admin', relation['relation-id']):
+            relation['user'] = 'all'
+            relation['database'] = 'all'
+        else:
+            relation['user'] = user_name(relation['relation-id'], relation['unit'])
+    juju_log(MSG_INFO, str(relation_data))
+    pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read()).render(access_list=relation_data)
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
     if do_reload:
         if config_change_command in ["reload", "restart"]:
             subprocess.call(['invoke-rc.d', 'postgresql', config_data["config_change_command"]])
+
+#------------------------------------------------------------------------------
+# install_postgresql_crontab:  Creates the postgresql crontab file
+#------------------------------------------------------------------------------
+def install_postgresql_crontab(postgresql_ident):
+    crontab_data = {
+        'backup_schedule': config_data["backup_schedule"],
+        'scripts_dir': postgresql_scripts_dir,
+    }
+    crontab_template = Template(open("templates/postgres.cron.tmpl").read()).render(crontab_data)
+    install_file(str(crontab_template),"/etc/cron.d/postgres", mode=0644)
 
 #------------------------------------------------------------------------------
 # load_postgresql_config:  Convenience function that loads (as a string) the
@@ -439,7 +496,7 @@ def run_sql_as_postgres(sql, *parameters):
 def run_select_as_postgres(sql, *parameters):
     cur = db_cursor()
     cur.execute(sql, parameters)
-    return cur.rowcount
+    return (cur.rowcount, cur.fetchall())
 
 #------------------------------------------------------------------------------
 # Core logic for permanent storage changes:
@@ -452,7 +509,7 @@ def run_select_as_postgres(sql, *parameters):
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink 
 #------------------------------------------------------------------------------
 def config_changed_volume_apply():
-    data_directory_path = config_data['data_directory_path']
+    data_directory_path = postgresql_cluster_dir
     assert(data_directory_path)
     volid = volume_get_volume_id()
     if volid:
@@ -506,8 +563,7 @@ def config_changed_volume_apply():
                      data_directory_path, new_pg_version_cluster_dir))
             command = "rsync -a %s/ %s/" % (data_directory_path, new_pg_version_cluster_dir)
             juju_log(MSG_INFO, "run: %s" % command)
-            status, output = commands.getstatusoutput(command)
-            juju_log(MSG_INFO, "status = %d, output: %s" % (status, output))
+            output = run(command)
         try:
             os.rename(data_directory_path, "%s-%d" % (
                           data_directory_path, int(time.time())))
@@ -586,8 +642,22 @@ def token_sql_safe(value):
 
 def install():
     basenode_setup()
-    for package in ["postgresql", "pwgen", "python-cheetah", "syslinux", "python-psycopg2"]:
+    for package in ["postgresql", "pwgen", "python-jinja2", "syslinux", "python-psycopg2"]:
         apt_get_install(package)
+    from jinja2 import Template
+    install_dir(postgresql_backups_dir,mode=0755)
+    install_dir(postgresql_scripts_dir,mode=0755)
+    paths = {
+        'base_dir': postgresql_data_dir,
+        'backup_dir': postgresql_backups_dir,
+        'scripts_dir': postgresql_scripts_dir,
+        'logs_dir': postgresql_logs_dir,
+    }
+    dump_script = Template(open("templates/dump-pg-db.tmpl").read()).render(paths)
+    backup_job = Template(open("templates/pg_backup_job.tmpl").read()).render(paths)
+    install_file(dump_script,'{}/dump-pg-db'.format(postgresql_scripts_dir),mode=0755)
+    install_file(backup_job,'{}/pg_backup_job'.format(postgresql_scripts_dir),mode=0755)
+    install_postgresql_crontab(postgresql_crontab)
     open_port(5432)
 
 def user_name(relid, remote_unit, admin=False):
@@ -598,13 +668,19 @@ def user_name(relid, remote_unit, admin=False):
         components.append("admin")
     return "_".join(components)
 
+def database_names(admin=False):
+    omit_tables = ['template0','template1']
+    sql = "SELECT datname FROM pg_database WHERE datname NOT IN (" + ",".join(["%s"] * len(omit_tables)) + ")"
+    return [t for (t,) in run_select_as_postgres(sql, *omit_tables)[1]]
+
+
 def ensure_user(user, admin=False):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
     password = pwgen()
     action = "CREATE"
     # XXX: This appears to reset the password every time
     # this might not end well
-    if run_select_as_postgres(sql, user) != 0:
+    if run_select_as_postgres(sql, user)[0] != 0:
         action = "ALTER"
     if admin:
         sql = "{} USER {} SUPERUSER PASSWORD %s".format(action, user)
@@ -615,11 +691,11 @@ def ensure_user(user, admin=False):
 
 def ensure_database(user, schema_user, database):
     sql = "SELECT datname FROM pg_database WHERE datname = %s"
-    if run_select_as_postgres(sql, database) != 0:
+    if run_select_as_postgres(sql, database)[0] != 0:
         # DB already exists
         pass
     else:
-        sql = "CREATE DATABASE {} OWNER {}".format(database, schema_user)
+        sql = "CREATE DATABASE {}".format(database)
         run_sql_as_postgres(sql)
     sql = "GRANT ALL PRIVILEGES ON DATABASE {} TO {}".format(database, schema_user)
     run_sql_as_postgres(sql)
@@ -656,11 +732,10 @@ def db_admin_relation_joined_changed(user, database='all'):
     generate_postgresql_hba(postgresql_hba)
 
 def db_relation_broken(user, database):
-    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}_schema".format(database, user)
+    sql = "REVOKE ALL PRIVILEGES FROM {}_schema".format(user)
     run_sql_as_postgres(sql)
-    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}".format(database, user)
+    sql = "REVOKE ALL PRIVILEGES FROM {}".format(user)
     run_sql_as_postgres(sql)
-    generate_postgresql_hba(postgresql_hba)
 
 def db_admin_relation_broken(user):
     sql = "ALTER USER {} NOSUPERUSER".format(user)
@@ -676,12 +751,17 @@ version = config_data['version']
 # We need this to evaluate if we're on a version greater than a given number
 config_data['version_float'] = float(version)
 cluster_name = config_data['cluster_name']
-config_data['data_directory_path'] = "/var/lib/postgresql/%s/%s" % (version, cluster_name)
-postgresql_config_dir = "/etc/postgresql"
-postgresql_config = "%s/%s/%s/postgresql.conf" % (postgresql_config_dir, version, cluster_name)
-postgresql_ident = "%s/%s/%s/pg_ident.conf" % (postgresql_config_dir, version, cluster_name)
-postgresql_hba = "%s/%s/%s/pg_hba.conf" % (postgresql_config_dir, version, cluster_name)
+postgresql_data_dir = "/var/lib/postgresql"
+postgresql_cluster_dir = "%s/%s/%s" % (postgresql_data_dir, version, cluster_name)
+postgresql_config_dir = "/etc/postgresql/%s/%s" % (version, cluster_name)
+postgresql_config = "%s/postgresql.conf" % (postgresql_config_dir,)
+postgresql_ident = "%s/pg_ident.conf" % (postgresql_config_dir,)
+postgresql_hba = "%s/pg_hba.conf" % (postgresql_config_dir,)
+postgresql_crontab = "/etc/cron.d/postgresql"
 postgresql_service_config_dir = "/var/run/postgresql"
+postgresql_scripts_dir = '{}/scripts'.format(postgresql_data_dir)
+postgresql_backups_dir = '{}/backups'.format(postgresql_data_dir)
+postgresql_logs_dir = '{}/logs'.format(postgresql_data_dir)
 hook_name = os.path.basename(sys.argv[0])
 
 ###############################################################################
@@ -691,7 +771,9 @@ if hook_name == "install":
     install()
 #-------- config-changed
 elif hook_name == "config-changed":
-    from Cheetah.Template import Template
+    config_changed(postgresql_config)
+elif hook_name == "upgrade-charm":
+    install()
     config_changed(postgresql_config)
 #-------- start
 elif hook_name == "start":
@@ -703,7 +785,6 @@ elif hook_name == "stop":
         sys.exit(1)
 #-------- db-relation-joined, db-relation-changed
 elif hook_name in ["db-relation-joined","db-relation-changed"]:
-    from Cheetah.Template import Template
     database = relation_get('database')
     if database == '':
         # Missing some information. We expect it to appear in a
@@ -714,18 +795,15 @@ elif hook_name in ["db-relation-joined","db-relation-changed"]:
         db_relation_joined_changed(user, database)
 #-------- db-relation-broken
 elif hook_name == "db-relation-broken":
-    from Cheetah.Template import Template
     database = relation_get('database')
     user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
     db_relation_broken(user, database)
 #-------- db-admin-relation-joined, db-admin-relation-changed
 elif hook_name in ["db-admin-relation-joined","db-admin-relation-changed"]:
-    from Cheetah.Template import Template
     user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'], admin=True)
     db_admin_relation_joined_changed(user, 'all')
 #-------- db-admin-relation-broken
 elif hook_name == "db-admin-relation-broken":
-    from Cheetah.Template import Template
     # XXX: Fix: relation is not set when it is already broken
     # cannot determine the user name
     user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'], admin=True)
