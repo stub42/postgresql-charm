@@ -141,7 +141,7 @@ search_path = '{{search_path}}'
 {% if standard_conforming_strings  != "" -%}
 standard_conforming_strings = {{standard_conforming_strings}}
 {% endif -%}
-{% if version_float != "9.1" -%}
+{% if version_float >= "9.1" -%}
 
 {% if hot_standby  != "" -%}
 hot_standby = {{hot_standby}}
