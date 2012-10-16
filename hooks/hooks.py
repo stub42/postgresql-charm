@@ -138,13 +138,16 @@ EOF
 #------------------------------------------------------------------------------
 # run: Run a command, return the output
 #------------------------------------------------------------------------------
-def run(command):
+def run(command, exit_on_error=True):
     try:
         juju_log(MSG_INFO, command)
         return subprocess.check_output(command, shell=True)
     except subprocess.CalledProcessError, e:
         juju_log(MSG_ERROR, "status=%d, output=%s" % (e.returncode, e.output))
-        sys.exit(e.returncode)
+        if exit_on_error:
+            sys.exit(e.returncode)
+        else:
+            raise
 
 
 #------------------------------------------------------------------------------
@@ -258,9 +261,8 @@ def relation_json(scope=None, unit_name=None, relation_id=None):
         else:
             relation_cmd_line.append('-')
         relation_cmd_line.append(unit_name)
-        relation_data = subprocess.check_output(relation_cmd_line)
-    except Exception, e:
-        subprocess.call(['juju-log', str(e)])
+        relation_data = run(relation_cmd_line)
+    except:
         relation_data = None
     finally:
         return(relation_data)
