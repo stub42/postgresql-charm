@@ -154,13 +154,11 @@ def postgresql_is_running():
     vc = "%s/%s" % (config_data["version"], config_data["cluster_name"])
     return vc in status.split()
 
-
 def postgresql_stop():
     status, output = commands.getstatusoutput("invoke-rc.d postgresql stop")
     if status != 0:
         return False
     return not postgresql_is_running()
-
 
 def postgresql_start():
     status, output = commands.getstatusoutput("invoke-rc.d postgresql start")
@@ -479,7 +477,9 @@ def config_changed_volume_apply():
             juju_log(MSG_INFO, "NOTICE: postgresql data dir '%s' already points to '%s', skipping storage changes." % ( data_directory_path, new_pg_version_cluster_dir))
             return True
 
-        # create a serving directories below mount_point
+        # Create a directory structure below "new" mount_point, as e.g.:
+        #   /srv/juju/vol-000012345/postgresql/9.1/main  , which "mimics":
+        #   /var/lib/postgresql/9.1/main
         curr_dir_stat = os.stat(data_directory_path)
         for new_dir in [new_pg_dir,
                     os.path.join(new_pg_dir, config_data["version"]),
@@ -490,6 +490,9 @@ def config_changed_volume_apply():
                 os.chown(new_dir, curr_dir_stat.st_uid, curr_dir_stat.st_gid)
                 os.chmod(new_dir, curr_dir_stat.st_mode)
                 juju_log(MSG_INFO, "mkdir %s" % new_dir)
+        # Carefully build this symlink, e.g.:
+        #   /var/lib/postgresql/9.1/main -> /srv/juju/vol-000012345/postgresql/9.1/main
+        # but keep previous "main/"  directory, by renaming it to main-$TIMESTAMP
         if not os.path.exists(os.path.join(new_pg_version_cluster_dir, "PG_VERSION")):
             if not postgresql_stop():
                 juju_log(MSG_ERROR, "postgresql_stop() returned False - can't migrate data.")
