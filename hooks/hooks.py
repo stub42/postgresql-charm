@@ -97,17 +97,21 @@ def volume_get_volume_id():
 
 # Initialize and/or mount permanent storage, it straightly calls
 # shell helper 
-# TODO(jjo): consider using python-pbs and re-implementing each step here
 def volume_init_and_mount(volid):
-    command = ("/bin/bash -x scripts/volume-common.sh call " +
-              "volume_init_and_mount %s 2>/tmp/err" % volid)
+    command = ("scripts/volume-common.sh call " +
+              "volume_init_and_mount %s" % volid)
     status, output = commands.getstatusoutput(command)
     juju_log(MSG_INFO, "status=%d, output=%s" % (status, output))
     if status != 0 or output.find("ERROR") >= 0:
-        juju_log(MSG_CRITICAL, "boooH")
         return False
     return True
 
+def volume_get_all_mounted():
+    command = ("mount |egrep /srv/juju")
+    status, output = commands.getstatusoutput(command)
+    if status != 0:
+        return None
+    return output
 
 #------------------------------------------------------------------------------
 # Enable/disable service start by manipulating policy-rc.d
@@ -152,7 +156,7 @@ def postgresql_is_running():
         return False
     # e.g. output: "Running clusters: 9.1/main"
     vc = "%s/%s" % (config_data["version"], config_data["cluster_name"])
-    return vc in status.split()
+    return vc in output.split()
 
 def postgresql_stop():
     status, output = commands.getstatusoutput("invoke-rc.d postgresql stop")
@@ -330,7 +334,7 @@ def create_postgresql_ident(postgresql_ident):
 #------------------------------------------------------------------------------
 # generate_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
-def generate_postgresql_hba(postgresql_hba):
+def generate_postgresql_hba(postgresql_hba, do_reload = True):
     reldata = {}
     config_change_command = config_data["config_change_command"]
     relids= relation_ids(relation_types=['db','db-admin'])
@@ -347,8 +351,9 @@ def generate_postgresql_hba(postgresql_hba):
     pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read(), searchList=[templ_vars])
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
-    if config_change_command in ["reload", "restart"]:
-        subprocess.call(['invoke-rc.d', 'postgresql', config_data["config_change_command"]])
+    if do_reload:
+        if config_change_command in ["reload", "restart"]:
+            subprocess.call(['invoke-rc.d', 'postgresql', config_data["config_change_command"]])
 
 #------------------------------------------------------------------------------
 # load_postgresql_config:  Convenience function that loads (as a string) the
@@ -506,6 +511,7 @@ def config_changed_volume_apply():
         try:
             os.rename(data_directory_path, "%s-%d" % (
                           data_directory_path, int(time.time())))
+            juju_log(MSG_INFO, "NOTICE: symlinking %s -> %s" % (new_pg_version_cluster_dir, data_directory_path))
             os.symlink(new_pg_version_cluster_dir, data_directory_path)
             return True
         except OSError as e:
@@ -531,18 +537,39 @@ def basenode_setup():
 ###############################################################################
 def config_changed(postgresql_config):
     config_change_command = config_data["config_change_command"]
-    if not config_changed_volume_apply():
+    # Trigger volume initialization logic for permanent storage
+    volid = volume_get_volume_id()
+    if not volid:
+        ## Invalid configuration (wether ephemeral, or permanent)
         disable_service_start("postgresql")
-        juju_log(MSG_WARNING, "Disabled service and exiting config_changed_volume_apply returned false")
-        #sys.exit(1)
-    if enable_service_start("postgresql"):
-        config_change_command = "restart"
+        postgresql_stop()
+        mounts = volume_get_all_mounted()
+        if mounts:
+            juju_log(MSG_INFO, "FYI current mounted volumes: %s" % mounts)
+        juju_log(MSG_ERROR, "Disabled and stopped postgresql service, because of broken volume configuration - check 'volume-ephermeral-storage' and 'volume-map'")
+        sys.exit(1)
+
+    if volume_is_permanent(volid):
+        ## config_changed_volume_apply will stop the service if it founds
+        ## it necessary, ie: new volume setup
+        if config_changed_volume_apply():
+            enable_service_start("postgresql")
+            config_change_command = "restart"
+        else:
+            disable_service_start("postgresql")
+            postgresql_stop()
+            mounts = volume_get_all_mounted()
+            if mounts:
+                juju_log(MSG_INFO, "FYI current mounted volumes: %s" % mounts)
+            juju_log(MSG_ERROR, "Disabled and stopped postgresql service (config_changed_volume_apply failure)")
+            sys.exit(1)
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
-    generate_postgresql_hba(postgresql_hba)
+    generate_postgresql_hba(postgresql_hba, do_reload = False)
     create_postgresql_ident(postgresql_ident)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
+    juju_log(MSG_INFO, "about reconfigure service with config_change_command = '%s'" % config_change_command)
     if config_change_command == "reload":
         return postgresql_reload()
     elif config_change_command == "restart":
