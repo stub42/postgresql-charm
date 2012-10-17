@@ -627,6 +627,7 @@ def config_changed(postgresql_config):
     create_postgresql_ident(postgresql_ident)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
+    update_nrpe_checks()
     juju_log(MSG_INFO, "about reconfigure service with config_change_command = '%s'" % config_change_command)
     if config_change_command == "reload":
         return postgresql_reload()
@@ -634,7 +635,6 @@ def config_changed(postgresql_config):
         return postgresql_restart()
     juju_log(MSG_ERROR, "invalid config_change_command = '%s'" % config_change_command)
     return False
-        
 
 def token_sql_safe(value):
     # Only allow alphanumeric + underscore in database identifiers
@@ -744,6 +744,57 @@ def db_admin_relation_broken(user):
     run_sql_as_postgres(sql)
     generate_postgresql_hba(postgresql_hba)
 
+def update_nrpe_checks():
+    config_data = config_get()
+    try:
+        nagios_uid = getpwnam('nagios').pw_uid
+        nagios_gid = getgrnam('nagios').gr_gid
+    except:
+        subprocess.call(['juju-log', "Nagios user not set up. Exiting."])
+        return
+
+    unit_name = os.environ['JUJU_UNIT_NAME'].replace('/', '-')
+    nagios_hostname =  "%s-%s-%s" % (config_data['nagios_context'], config_data['nagios_service_type'], unit_name)
+    nagios_logdir = '/var/log/nagios'
+    nrpe_service_file = '/var/lib/nagios/export/service__{}_check_pgsql.cfg'.format(nagios_hostname)
+    if not os.path.exists(nagios_logdir):
+        os.mkdir(nagios_logdir)
+        os.chown(nagios_logdir, nagios_uid, nagios_gid)
+    for f in os.listdir('/var/lib/nagios/export/'):
+        if re.search('.*check_pgsql.cfg', f):
+            os.remove(os.path.join('/var/lib/nagios/export/', f))
+
+    # --- exported service configuration file
+    from jinja2 import Environment, FileSystemLoader
+    template_env = Environment(\
+    loader=FileSystemLoader(os.path.join(os.environ['CHARM_DIR'], 'templates')))
+    templ_vars = {
+        'nagios_hostname': nagios_hostname,
+        'nagios_servicegroup': config_data['nagios_context'],
+    }
+    template = template_env.get_template('nrpe_service.template').render(templ_vars)
+    with open(nrpe_service_file, 'w') as nrpe_service_config:
+        nrpe_service_config.write(str(template))
+
+    # --- nrpe configuration
+    # pgsql service
+    nrpe_check_file = '/etc/nagios/nrpe.d/check_pgsql.cfg'
+    with open(nrpe_check_file, 'w') as nrpe_check_config:
+        nrpe_check_config.write("# check pgsql\n")
+        nrpe_check_config.write("command[check_pgsql]=/usr/lib/nagios/plugins/check_pgsql -p {}".format(config_data['listen_port']))
+    # pgsql backups
+    nrpe_check_file = '/etc/nagios/nrpe.d/check_pgsql_backups.cfg'
+    backup_log = "%s/backups.log".format(postgresql_logs_dir)
+    # XXX: these values _should_ be calculated from the backup schedule
+    #      perhaps warn = backup_frequency * 1.5, crit = backup_frequency * 2
+    warn_age = 172800
+    crit_age = 194400
+    with open(nrpe_check_file, 'w') as nrpe_check_config:
+        nrpe_check_config.write("# check pgsql backups\n")
+        nrpe_check_config.write("command[check_pgsql_backups]=/usr/lib/nagios/plugins/check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
+
+    if os.path.isfile('/etc/init.d/nagios-nrpe-server'):
+        subprocess.call(['service', 'nagios-nrpe-server', 'reload'])
 
 ###############################################################################
 # Global variables
@@ -810,6 +861,8 @@ elif hook_name == "db-admin-relation-broken":
     # cannot determine the user name
     user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'], admin=True)
     db_admin_relation_broken(user)
+elif hook_name == "nrpe-external-master-relation-changed":
+    update_nrpe_checks()
 #-------- persistent-storage-relation-joined, persistent-storage-relation-changed
 elif hook_name in ["persistent-storage-relation-joined","persistent-storage-relation-changed"]:
     persistent_storage_relation_joined_changed()

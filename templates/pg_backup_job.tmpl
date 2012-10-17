@@ -18,10 +18,17 @@ fi
 
 set -u
 
+backup_success () {
+    echo "Last successful backup \$(date)" > {{logs_dir}}/backups.log
+    # Now because the umask is set to 0077, we need to grant read access to the log
+    chmod a+r "{{logs_dir}}/backups.log"
+}
+
 DATABASES=$(psql -tAc "select datname from pg_database where datname not in ('template0','template1','postgres')")
 if [ -z "${DATABASES}" ]; then
     # nothing to back up
-    exit 1
+    backup_success
+    exit 0
 fi
 
 # Set umask so backups are automatically created without group and other
@@ -76,6 +83,4 @@ TODAY=`date +'%Y%m%d'`
 
 echo backups completed `date`
 
-echo "Last successful backup \$(date)" > {{logs_dir}}/backups.log
-# Now because the umask is set to 0077, we need to grant read access to the log
-chmod a+r "{{logs_dir}}/backups.log"
+backup_success
