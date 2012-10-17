@@ -642,8 +642,9 @@ def token_sql_safe(value):
         return False
     return True
 
-def install():
-    basenode_setup()
+def install(run_basenode=True):
+    if run_basenode:
+        basenode_setup()
     for package in ["postgresql", "pwgen", "python-jinja2", "syslinux", "python-psycopg2"]:
         apt_get_install(package)
     from jinja2 import Template
@@ -774,8 +775,9 @@ if hook_name == "install":
 #-------- config-changed
 elif hook_name == "config-changed":
     config_changed(postgresql_config)
+#-------- upgrade-charm
 elif hook_name == "upgrade-charm":
-    install()
+    install(run_basenode=False)
     config_changed(postgresql_config)
 #-------- start
 elif hook_name == "start":
