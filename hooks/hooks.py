@@ -774,7 +774,7 @@ def update_nrpe_checks():
         'nagios_hostname': nagios_hostname,
         'nagios_servicegroup': config_data['nagios_context'],
     }
-    template = template_env.get_template('nrpe_service.template').render(templ_vars)
+    template = template_env.get_template('nrpe_service.tmpl').render(templ_vars)
     with open(nrpe_service_file, 'w') as nrpe_service_config:
         nrpe_service_config.write(str(template))
 
