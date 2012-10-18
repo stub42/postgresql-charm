@@ -411,6 +411,7 @@ def install_postgresql_crontab(postgresql_ident):
         'backup_schedule': config_data["backup_schedule"],
         'scripts_dir': postgresql_scripts_dir,
     }
+    from jinja2 import Template
     crontab_template = Template(open("templates/postgres.cron.tmpl").read()).render(crontab_data)
     install_file(str(crontab_template),"/etc/cron.d/postgres", mode=0644)
 
