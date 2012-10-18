@@ -667,7 +667,7 @@ def install(run_basenode=True):
 def user_name(relid, remote_unit, admin=False):
     components = []
     components.append(relid.replace(":","_").replace("-","_"))
-    components.append(remote_unit.replace("/","_"))
+    components.append(remote_unit.replace("/","_").replace("-","_"))
     if admin:
         components.append("admin")
     return "_".join(components)
