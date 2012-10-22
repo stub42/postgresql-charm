@@ -56,7 +56,7 @@ volume_init_and_mount() {
   esac
 
   # Assume udev will create only existing devices
-  for dev in $(ls -rd1 /dev/* | egrep ${dev_regexp} 2>/dev/null);do
+  for dev in $(ls -rd1 /dev/* | egrep "${dev_regexp}" 2>/dev/null);do
     ## Check it's not already mounted
     mount | egrep -q "${dev}[1-9]?" || { found_dev=${dev}; break;}
   done
