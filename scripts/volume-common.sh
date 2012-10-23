@@ -17,6 +17,25 @@ _mntpoint_from_volid() {
   [[ ${volid} != "" ]] && echo /srv/juju/${volid} || echo ""
 }
 
+
+#------------------------------
+# Assert that passed mount points hold different filesystems
+#
+# @param  $1     mntpoint1
+# @param  $2     mntpoint2
+# @return  0     different FS
+#          1     same FS
+#------------------------------
+_assert_diff_fs() {
+  local mnt1="${1:?missing mntpoint1}"
+  local mnt2="${2:?missing mntpoint2}"
+  local fsid1 fsid2
+  fsid1=$(stat --file-system -c '%i' "${mnt1}" 2>/dev/null)
+  fsid2=$(stat --file-system -c '%i' "${mnt2}" 2>/dev/null)
+  [[ ${fsid1} != ${fsid2} ]]
+  return $?
+}
+
 #------------------------------
 # Initialize volume (sfdisk, mkfs.ext4) IFF NOT already, mount it at
 # /srv/juju/<volume-id>
@@ -39,6 +58,10 @@ volume_init_and_mount() {
 
   [[ -z ${mntpoint} ]] && return 1
   if mount | egrep -qw "${mntpoint}";then
+    _assert_diff_fs "/" "${mntpoint}" || {
+       juju-log "ERROR: returning from ${func} with '${mntpoint}' still at '/' filesystem"
+       return 1
+    }
     juju-log "NOTICE: mntpoint=${mntpoint} already mounted, skipping volume_init_and_mount"
     return 0
   fi
@@ -56,7 +79,7 @@ volume_init_and_mount() {
   esac
 
   # Assume udev will create only existing devices
-  for dev in $(ls -rd1 /dev/* | egrep "${dev_regexp}" 2>/dev/null);do
+  for dev in $(ls -rd1 /dev/* | egrep "${dev_regexp}" | egrep -v "[1-9]$" 2>/dev/null);do
     ## Check it's not already mounted
     mount | egrep -q "${dev}[1-9]?" || { found_dev=${dev}; break;}
   done
@@ -91,6 +114,12 @@ volume_init_and_mount() {
   # use e.g. LABEl=vol-000012345
   if file -s ${partition1_dev} | egrep -q ext4 ; then
     juju-log "INFO: ${func}: ${partition1_dev} already formatted as ext4 - skipping mkfs.ext4."
+    ## Check e2label - log if it has changed (e.g. already used / initialized with a diff label)
+    local curr_label=$(e2label "${partition1_dev}")
+    if [[ ${curr_label} != ${label} ]]; then
+      juju-log "WARNING: ${func}: ${partition1_dev} had label=${curr_label}, overwritting with label=${label}"
+      e2label ${partition1_dev} "${label}"
+    fi
   else
     juju-log "NOTICE: ${func}: running: mkfs.ext4 -L ${label} ${partition1_dev}"
     mkfs.ext4 -L "${label}" ${partition1_dev}
@@ -99,8 +128,15 @@ volume_init_and_mount() {
   # Mount it at e.g. /srv/juju/vol-000012345
   [[ -d "${mntpoint}" ]] || mkdir -p "${mntpoint}"
   mount | fgrep -wq "${partition1_dev}" || {
-    mount -L "${label}" "${mntpoint}"
-    juju-log "INFO: ${func}: mounted as: $(mount | fgrep -w ${partition1_dev})"
+    local files_below_mntpoint="$(ls -d "${mntpoint}"/* 2>/dev/null |wc -l )" 
+    if [[ ${files_below_mntpoint} -ne 0 ]]; then
+      juju-log "ERROR: *not* doing 'mount "${partition1_dev}" "${mntpoint}"' because there are already ${files_below_mntpoint} files/dirs beneath '${mntpoint}'"
+      exit 1
+    fi
+    ## should always fsck before mounting (e.g. fsck after max time (-i) / max mounts (-c) )
+    fsck "${partition1_dev}"
+    mount "${partition1_dev}" "${mntpoint}"
+    juju-log "INFO: ${func}: mounted as: '$(mount | fgrep -w ${partition1_dev})'"
   }
 
   # Add it to fstab is not already there
@@ -109,6 +145,13 @@ volume_init_and_mount() {
     juju-log "INFO: ${func}: LABEL=${label} added to /etc/fstab"
   }
   )
+  # Final assertion: mounted filesystem id is different from '/' (effectively mounted)
+  _assert_diff_fs "/" "${mntpoint}" || {
+     juju-log "ERROR: returning from ${func} with '${mntpoint}' still at '/' filesystem (couldn't mount new volume)"
+     ## try to rmdir mntpoint directory - should not be 'mistakenly' used
+     rmdir ${mntpoint}
+     return 1
+  }
   return $?
 }
 
