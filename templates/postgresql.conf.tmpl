@@ -10,8 +10,8 @@
 data_directory = '/var/lib/postgresql/{{version}}/{{cluster_name}}'
 hba_file = '/etc/postgresql/{{version}}/{{cluster_name}}/pg_hba.conf'
 ident_file = '/etc/postgresql/{{version}}/{{cluster_name}}/pg_ident.conf'
-external_pid_file = '/var/run/postgresql/{{version}}-{{cluster_name}}.pid'
-
+# NOTE: If external_pid_file is not explicitly set, no extra PID file is written.
+#       FYI: not using external_pid_file, as it makes state changes harder
 
 #------------------------------------------------------------------------------
 # CONNECTIONS AND AUTHENTICATION

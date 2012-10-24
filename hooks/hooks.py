@@ -558,13 +558,14 @@ def config_changed_volume_apply():
         # Carefully build this symlink, e.g.:
         #   /var/lib/postgresql/9.1/main -> /srv/juju/vol-000012345/postgresql/9.1/main
         # but keep previous "main/"  directory, by renaming it to main-$TIMESTAMP
+        if not postgresql_stop():
+            juju_log(MSG_ERROR, "postgresql_stop() returned False - can't migrate data.")
+            return False
         if not os.path.exists(os.path.join(new_pg_version_cluster_dir, "PG_VERSION")):
-            if not postgresql_stop():
-                juju_log(MSG_ERROR, "postgresql_stop() returned False - can't migrate data.")
-                return False
             juju_log(MSG_WARNING, "migrating PG data %s/ -> %s/" % (
                      data_directory_path, new_pg_version_cluster_dir))
-            command = "rsync -a %s/ %s/" % (data_directory_path, new_pg_version_cluster_dir)
+            # void copying PID file to perm storage (shouldn't be any...)
+            command = "rsync -a --exclude postmaster.pid %s/ %s/" % (data_directory_path, new_pg_version_cluster_dir)
             juju_log(MSG_INFO, "run: %s" % command)
             output = run(command)
         try:
