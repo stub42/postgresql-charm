@@ -25,13 +25,15 @@ except ImportError:
 # Supporting functions
 ###############################################################################
 MSG_CRITICAL = "CRITICAL"
-MSG_DEBUG    = "DEBUG"
-MSG_INFO     = "INFO"
-MSG_ERROR    = "ERROR"
-MSG_WARNING  = "WARNING"
+MSG_DEBUG = "DEBUG"
+MSG_INFO = "INFO"
+MSG_ERROR = "ERROR"
+MSG_WARNING = "WARNING"
+
 
 def juju_log(level, msg):
     subprocess.call(['/usr/bin/juju-log', '-l', level, msg])
+
 
 ###############################################################################
 
@@ -46,12 +48,13 @@ def juju_log(level, msg):
 def volume_get_volid_from_volume_map():
     volume_map = {}
     try:
-      volume_map = yaml.load(config_data['volume-map'])
-      if volume_map:
-        return volume_map.get(os.environ['JUJU_UNIT_NAME'])    
+        volume_map = yaml.load(config_data['volume-map'])
+        if volume_map:
+            return volume_map.get(os.environ['JUJU_UNIT_NAME'])
     except ConstructorError as e:
-      juju_log(MSG_WARNING, "invalid YAML in 'volume-map': %s", e)
+        juju_log(MSG_WARNING, "invalid YAML in 'volume-map': %s", e)
     return None
+
 
 # Is this volume_id permanent ?
 # @returns  True if volid set and not --ephemeral, else:
@@ -61,6 +64,7 @@ def volume_is_permanent(volid):
         return True
     return False
 
+
 #------------------------------
 # Returns a mount point from passed vol-id, e.g. /srv/juju/vol-000012345
 #
@@ -69,18 +73,18 @@ def volume_is_permanent(volid):
 #------------------------------
 def volume_mount_point_from_volid(volid):
     if volid and volume_is_permanent(volid):
-	    return "/srv/juju/%s" % volid
+        return "/srv/juju/%s" % volid
     return None
 
 
 # Do we have a valid storage state?
-# @returns  volid   
+# @returns  volid
 #           None    config state is invalid - we should not serve
 def volume_get_volume_id():
     ephemeral_storage = config_data['volume-ephemeral-storage']
     volid = volume_get_volid_from_volume_map()
     juju_unit_name = os.environ['JUJU_UNIT_NAME']
-    if ephemeral_storage in [True,'yes','Yes','true','True']:
+    if ephemeral_storage in [True, 'yes', 'Yes', 'true', 'True']:
         if volid:
             juju_log(MSG_ERROR, "volume-ephemeral-storage is True, but " +
                      "volume-map['%s'] -> %s" % (juju_unit_name, volid))
@@ -90,13 +94,13 @@ def volume_get_volume_id():
     else:
         if not volid:
             juju_log(MSG_ERROR, "volume-ephemeral-storage is False, but " +
-                     "no volid found for volume-map['%s']" % (juju_unit_name ))
+                     "no volid found for volume-map['%s']" % (juju_unit_name))
             return None
     return volid
 
 
 # Initialize and/or mount permanent storage, it straightly calls
-# shell helper 
+# shell helper
 def volume_init_and_mount(volid):
     command = ("scripts/volume-common.sh call " +
               "volume_init_and_mount %s" % volid)
@@ -105,12 +109,14 @@ def volume_init_and_mount(volid):
         return False
     return True
 
+
 def volume_get_all_mounted():
     command = ("mount |egrep /srv/juju")
     status, output = commands.getstatusoutput(command)
     if status != 0:
         return None
     return output
+
 
 #------------------------------------------------------------------------------
 # Enable/disable service start by manipulating policy-rc.d
@@ -123,7 +129,8 @@ def enable_service_start(service):
         os.unlink('/usr/sbin/policy-rc.d')
         return True
     return False
-  
+
+
 def disable_service_start(service):
     juju_log(MSG_INFO, "NOTICE: disabling %s start by policy-rc.d" % service)
     policy_rc = '/usr/sbin/policy-rc.d'
@@ -135,6 +142,8 @@ EOF
 """ % service)
     os.chmod(policy_rc_tmp, 0755)
     os.rename(policy_rc_tmp, policy_rc)
+
+
 #------------------------------------------------------------------------------
 # run: Run a command, return the output
 #------------------------------------------------------------------------------
@@ -156,20 +165,24 @@ def run(command, exit_on_error=True):
 def install_file(contents, dest, owner="root", group="root", mode=0600):
         uid = getpwnam(owner)[2]
         gid = getgrnam(group)[2]
-        dest_fd = os.open(dest, os.O_WRONLY|os.O_TRUNC|os.O_CREAT, mode)
-        os.fchown(dest_fd,uid,gid)
-        with os.fdopen(dest_fd,'w') as destfile:
+        dest_fd = os.open(dest, os.O_WRONLY | os.O_TRUNC | os.O_CREAT, mode)
+        os.fchown(dest_fd, uid, gid)
+        with os.fdopen(dest_fd, 'w') as destfile:
             destfile.write(str(contents))
+
 
 #------------------------------------------------------------------------------
 # install_dir: create a directory
 #------------------------------------------------------------------------------
 def install_dir(dirname, owner="root", group="root", mode=0700):
-    command = '/usr/bin/install -o {} -g {} -m {} -d {}'.format(owner,group,oct(mode),dirname)
+    command = \
+    '/usr/bin/install -o {} -g {} -m {} -d {}'.format(owner, group, oct(mode),
+        dirname)
     return run(command)
 
+
 #------------------------------------------------------------------------------
-# postgresql_stop, postgresql_start, postgresql_is_running: 
+# postgresql_stop, postgresql_start, postgresql_is_running:
 # wrappers over invoke-rc.d, with extra check for postgresql_is_running()
 #------------------------------------------------------------------------------
 def postgresql_is_running():
@@ -181,11 +194,13 @@ def postgresql_is_running():
     vc = "%s/%s" % (config_data["version"], config_data["cluster_name"])
     return vc in output.split()
 
+
 def postgresql_stop():
     status, output = commands.getstatusoutput("invoke-rc.d postgresql stop")
     if status != 0:
         return False
     return not postgresql_is_running()
+
 
 def postgresql_start():
     status, output = commands.getstatusoutput("invoke-rc.d postgresql start")
@@ -193,19 +208,23 @@ def postgresql_start():
         return False
     return postgresql_is_running()
 
+
 def postgresql_restart():
     if postgresql_is_running():
-        status, output = commands.getstatusoutput("invoke-rc.d postgresql restart")
+        status, output = \
+            commands.getstatusoutput("invoke-rc.d postgresql restart")
         if status != 0:
             return False
     else:
         postgresql_start()
     return postgresql_is_running()
 
+
 def postgresql_reload():
     # reload returns a reliable exit status
     status, output = commands.getstatusoutput("invoke-rc.d postgresql reload")
     return (status == 0)
+
 
 #------------------------------------------------------------------------------
 # config_get:  Returns a dictionary containing all of the config information
@@ -241,6 +260,7 @@ def get_service_port(postgresql_config):
         return int(port)
     except:
         return None
+
 
 #------------------------------------------------------------------------------
 # relation_json:  Returns json-formatted relation data
@@ -291,6 +311,7 @@ def relation_get(scope=None, unit_name=None):
     finally:
         return(relation_data)
 
+
 #------------------------------------------------------------------------------
 # relation_ids:  Returns a list of relation ids
 #                optional parameters: relation_type
@@ -299,12 +320,12 @@ def relation_get(scope=None, unit_name=None):
 def relation_ids(relation_types=['db']):
     # accept strings or iterators
     if isinstance(relation_types, basestring):
-        reltypes = [relation_types,]
+        reltypes = [relation_types, ]
     else:
         reltypes = relation_types
     relids = []
     for reltype in reltypes:
-        relid_cmd_line = ['relation-ids', '--format=json',reltype]
+        relid_cmd_line = ['relation-ids', '--format=json', reltype]
         relids.extend(json.loads(subprocess.check_output(relid_cmd_line)))
     return relids
 
@@ -315,15 +336,17 @@ def relation_ids(relation_types=['db']):
 #                relation_type: limits the scope of the returned data to the
 #                               desired item.
 #------------------------------------------------------------------------------
-def relation_get_all(*args,**kwargs):
+def relation_get_all(*args, **kwargs):
     relation_data = []
     try:
         relids = relation_ids(*args, **kwargs)
         for relid in relids:
-            units_cmd_line = ['relation-list','--format=json','-r',relid]
+            units_cmd_line = ['relation-list', '--format=json', '-r', relid]
             units = json.loads(subprocess.check_output(units_cmd_line))
             for unit in units:
-                unit_data = json.loads(relation_json(relation_id=relid,unit_name=unit))
+                unit_data = \
+                    json.loads(relation_json(relation_id=relid,
+                        unit_name=unit))
                 for key in unit_data:
                     if key.endswith('-list'):
                         unit_data[key] = unit_data[key].split()
@@ -347,29 +370,41 @@ def apt_get_install(packages=None):
     cmd_line.append(packages)
     return(subprocess.call(cmd_line))
 
+
 #------------------------------------------------------------------------------
 # create_postgresql_config:   Creates the postgresql.conf file
 #------------------------------------------------------------------------------
 def create_postgresql_config(postgresql_config):
     if config_data["performance_tuning"] == "auto":
-        # Taken from http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
-        num_cpus = run("cat /proc/cpuinfo | grep processor | wc -l")
+        # Taken from:
+        # http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
+        # num_cpus is not being used ... commenting it out ... negronjl
+        #num_cpus = run("cat /proc/cpuinfo | grep processor | wc -l")
         total_ram = run("free -m | grep Mem | awk '{print $2}'")
-        config_data["effective_cache_size"] = "%sMB" % (int( int(total_ram) * 0.75 ), )
+        config_data["effective_cache_size"] = \
+            "%sMB" % (int(int(total_ram) * 0.75),)
         if total_ram > 1023:
-            config_data["shared_buffers"] = "%sMB" % (int( int(total_ram) * 0.25 ), )
+            config_data["shared_buffers"] = \
+                "%sMB" % (int(int(total_ram) * 0.25),)
         else:
-            config_data["shared_buffers"] = "%sMB" % (int( int(total_ram) * 0.15 ), )
+            config_data["shared_buffers"] = \
+                "%sMB" % (int(int(total_ram) * 0.15),)
         # XXX: This is very messy - should probably be a subordinate charm
-        file = open("/etc/sysctl.d/50-postgresql.conf", "w")
-        file.write("kernel.sem = 250 32000 100 1024\n")
-        file.write("kernel.shmall = %s\n" % ((int(total_ram) * 1024 * 1024) + 1024),)
-        file.write("kernel.shmmax = %s\n" % ((int(total_ram) * 1024 * 1024) + 1024),)
-        file.close()
+        # file overlaps with __builtin__.file ... renaming to conf_file
+        # negronjl
+        conf_file = open("/etc/sysctl.d/50-postgresql.conf", "w")
+        conf_file.write("kernel.sem = 250 32000 100 1024\n")
+        conf_file.write("kernel.shmall = %s\n" %
+            ((int(total_ram) * 1024 * 1024) + 1024),)
+        conf_file.write("kernel.shmmax = %s\n" %
+            ((int(total_ram) * 1024 * 1024) + 1024),)
+        conf_file.close()
         run("sysctl -p /etc/sysctl.d/50-postgresql.conf")
     # Send config data to the template
     # Return it as pg_config
-    pg_config = Template(open("templates/postgresql.conf.tmpl").read()).render(config_data)
+    pg_config = \
+        Template(
+            open("templates/postgresql.conf.tmpl").read()).render(config_data)
     install_file(pg_config, postgresql_config)
 
 
@@ -378,7 +413,9 @@ def create_postgresql_config(postgresql_config):
 #------------------------------------------------------------------------------
 def create_postgresql_ident(postgresql_ident):
     ident_data = {}
-    pg_ident_template = Template(open("templates/pg_ident.conf.tmpl").read()).render(ident_data)
+    pg_ident_template = \
+        Template(
+            open("templates/pg_ident.conf.tmpl").read()).render(ident_data)
     with open(postgresql_ident, 'w') as ident_file:
         ident_file.write(str(pg_ident_template))
 
@@ -386,22 +423,28 @@ def create_postgresql_ident(postgresql_ident):
 #------------------------------------------------------------------------------
 # generate_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
-def generate_postgresql_hba(postgresql_hba, do_reload = True):
-    relation_data = relation_get_all(relation_types=['db','db-admin'])
+def generate_postgresql_hba(postgresql_hba, do_reload=True):
+    relation_data = relation_get_all(relation_types=['db', 'db-admin'])
     config_change_command = config_data["config_change_command"]
     for relation in relation_data:
         if re.search('db-admin', relation['relation-id']):
             relation['user'] = 'all'
             relation['database'] = 'all'
         else:
-            relation['user'] = user_name(relation['relation-id'], relation['unit'])
+            relation['user'] = \
+                user_name(relation['relation-id'], relation['unit'])
     juju_log(MSG_INFO, str(relation_data))
-    pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read()).render(access_list=relation_data)
+    pg_hba_template = \
+        Template(
+            open("templates/pg_hba.conf.tmpl").read()).render(access_list=
+                relation_data)
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
     if do_reload:
         if config_change_command in ["reload", "restart"]:
-            subprocess.call(['invoke-rc.d', 'postgresql', config_data["config_change_command"]])
+            subprocess.call(['invoke-rc.d', 'postgresql',
+                config_data["config_change_command"]])
+
 
 #------------------------------------------------------------------------------
 # install_postgresql_crontab:  Creates the postgresql crontab file
@@ -412,8 +455,10 @@ def install_postgresql_crontab(postgresql_ident):
         'scripts_dir': postgresql_scripts_dir,
     }
     from jinja2 import Template
-    crontab_template = Template(open("templates/postgres.cron.tmpl").read()).render(crontab_data)
-    install_file(str(crontab_template),"/etc/cron.d/postgres", mode=0644)
+    crontab_template = Template(
+        open("templates/postgres.cron.tmpl").read()).render(crontab_data)
+    install_file(str(crontab_template), "/etc/cron.d/postgres", mode=0644)
+
 
 #------------------------------------------------------------------------------
 # load_postgresql_config:  Convenience function that loads (as a string) the
@@ -435,8 +480,8 @@ def load_postgresql_config(postgresql_config):
 def open_port(port=None, protocol="TCP"):
     if port is None:
         return(None)
-    return(subprocess.call(['/usr/bin/open-port', "%d/%s" % \
-    (int(port), protocol)]))
+    return(subprocess.call(['/usr/bin/open-port', "%d/%s" %
+        (int(port), protocol)]))
 
 
 #------------------------------------------------------------------------------
@@ -446,8 +491,8 @@ def open_port(port=None, protocol="TCP"):
 def close_port(port=None, protocol="TCP"):
     if port is None:
         return(None)
-    return(subprocess.call(['/usr/bin/close-port', "%d/%s" % \
-    (int(port), protocol)]))
+    return(subprocess.call(['/usr/bin/close-port', "%d/%s" %
+        (int(port), protocol)]))
 
 
 #------------------------------------------------------------------------------
@@ -470,21 +515,23 @@ def update_service_port(old_service_port=None, new_service_port=None):
 #------------------------------------------------------------------------------
 def pwgen(pwd_length=None):
     if pwd_length is None:
-        pwd_length = random.choice(range(20,30))
-    alphanumeric_chars = [l for l in (string.letters + string.digits) \
-    if l not in 'Iil0oO1']
-    random_chars = [random.choice(alphanumeric_chars) \
-    for i in range(pwd_length)]
+        pwd_length = random.choice(range(20, 30))
+    alphanumeric_chars = [l for l in (string.letters + string.digits)
+        if l not in 'Iil0oO1']
+    random_chars = [random.choice(alphanumeric_chars)
+        for i in range(pwd_length)]
     return(''.join(random_chars))
+
 
 def db_cursor(autocommit=False):
     conn = psycopg2.connect("dbname=template1 user=postgres")
     conn.autocommit = autocommit
-    try:
-        return conn.cursor()
-    except psycopg2.ProgrammingError:
-        print sql
-        raise
+    return conn.cursor()
+    #try:
+        #return conn.cursor()
+    #except psycopg2.ProgrammingError:
+        #print sql
+        #raise
 
 
 def run_sql_as_postgres(sql, *parameters):
@@ -496,10 +543,12 @@ def run_sql_as_postgres(sql, *parameters):
         print sql
         raise
 
+
 def run_select_as_postgres(sql, *parameters):
     cur = db_cursor()
     cur.execute(sql, parameters)
     return (cur.rowcount, cur.fetchall())
+
 
 #------------------------------------------------------------------------------
 # Core logic for permanent storage changes:
@@ -508,19 +557,19 @@ def run_select_as_postgres(sql, *parameters):
 #   2) new storage properly initialized:
 #     - volume: initialized if not already (fdisk, mkfs),
 #       mounts it to e.g.:  /srv/juju/vol-000012345
-#     - if fresh new storage dir: rsync existing data 
-#     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink 
+#     - if fresh new storage dir: rsync existing data
+#     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
 #------------------------------------------------------------------------------
 def config_changed_volume_apply():
     data_directory_path = postgresql_cluster_dir
     assert(data_directory_path)
     volid = volume_get_volume_id()
     if volid:
-      if volume_is_permanent(volid):
-        if not volume_init_and_mount(volid):
-            juju_log(MSG_ERROR, "volume_init_and_mount failed, " +
+        if volume_is_permanent(volid):
+            if not volume_init_and_mount(volid):
+                juju_log(MSG_ERROR, "volume_init_and_mount failed, " +
                      "not applying changes")
-            return False
+                return False
 
         if not os.path.exists(data_directory_path):
             juju_log(MSG_CRITICAL, ("postgresql data dir = %s not found, " +
@@ -529,17 +578,20 @@ def config_changed_volume_apply():
 
         mount_point = volume_mount_point_from_volid(volid)
         new_pg_dir = os.path.join(mount_point, "postgresql")
-        new_pg_version_cluster_dir = os.path.join(new_pg_dir, config_data["version"],
-                                         config_data["cluster_name"])
+        new_pg_version_cluster_dir = os.path.join(new_pg_dir,
+            config_data["version"], config_data["cluster_name"])
         if not mount_point:
             juju_log(MSG_ERROR, "invalid mount point from volid = \"%s\", " +
                      "not applying changes." % mount_point)
-            return False  
+            return False
 
-        if (os.path.islink(data_directory_path) and 
+        if (os.path.islink(data_directory_path) and
             os.readlink(data_directory_path) == new_pg_version_cluster_dir and
             os.path.isdir(new_pg_version_cluster_dir)):
-            juju_log(MSG_INFO, "NOTICE: postgresql data dir '%s' already points to '%s', skipping storage changes." % ( data_directory_path, new_pg_version_cluster_dir))
+            juju_log(MSG_INFO,
+                "NOTICE: postgresql data dir '%s' already points to '%s', \
+                skipping storage changes." %
+                (data_directory_path, new_pg_version_cluster_dir))
             return True
 
         # Create a directory structure below "new" mount_point, as e.g.:
@@ -556,25 +608,32 @@ def config_changed_volume_apply():
                 os.chmod(new_dir, curr_dir_stat.st_mode)
                 juju_log(MSG_INFO, "mkdir %s" % new_dir)
         # Carefully build this symlink, e.g.:
-        #   /var/lib/postgresql/9.1/main -> /srv/juju/vol-000012345/postgresql/9.1/main
-        # but keep previous "main/"  directory, by renaming it to main-$TIMESTAMP
+        # /var/lib/postgresql/9.1/main ->
+        # /srv/juju/vol-000012345/postgresql/9.1/main
+        # but keep previous "main/"  directory, by renaming it to
+        # main-$TIMESTAMP
         if not postgresql_stop():
-            juju_log(MSG_ERROR, "postgresql_stop() returned False - can't migrate data.")
+            juju_log(MSG_ERROR,
+                "postgresql_stop() returned False - can't migrate data.")
             return False
-        if not os.path.exists(os.path.join(new_pg_version_cluster_dir, "PG_VERSION")):
+        if not os.path.exists(os.path.join(new_pg_version_cluster_dir,
+            "PG_VERSION")):
             juju_log(MSG_WARNING, "migrating PG data %s/ -> %s/" % (
                      data_directory_path, new_pg_version_cluster_dir))
             # void copying PID file to perm storage (shouldn't be any...)
-            command = "rsync -a --exclude postmaster.pid %s/ %s/" % (data_directory_path, new_pg_version_cluster_dir)
+            command = "rsync -a --exclude postmaster.pid %s/ %s/" % \
+                (data_directory_path, new_pg_version_cluster_dir)
             juju_log(MSG_INFO, "run: %s" % command)
-            output = run(command)
+            #output = run(command)
+            run(command)
         try:
             os.rename(data_directory_path, "%s-%d" % (
                           data_directory_path, int(time.time())))
-            juju_log(MSG_INFO, "NOTICE: symlinking %s -> %s" % (new_pg_version_cluster_dir, data_directory_path))
+            juju_log(MSG_INFO, "NOTICE: symlinking %s -> %s" %
+                (new_pg_version_cluster_dir, data_directory_path))
             os.symlink(new_pg_version_cluster_dir, data_directory_path)
             return True
-        except OSError as e:
+        except OSError:
             juju_log(MSG_CRITICAL, "failed to symlink \"%s\" -> \"%s\"" % (
                           data_directory_path, mount_point))
             return False
@@ -582,6 +641,7 @@ def config_changed_volume_apply():
         juju_log(MSG_ERROR, "ERROR: Invalid volume storage configuration, " +
                  "not applying changes")
     return False
+
 
 ### BASENODE BEGIN ####
 def basenode_setup():
@@ -591,6 +651,7 @@ def basenode_setup():
     basenode.basenode_init()
     subprocess.call(['juju-log', 'basenode_setup: end'])
 ### BASENODE END   ####
+
 
 ###############################################################################
 # Hook functions
@@ -606,7 +667,10 @@ def config_changed(postgresql_config):
         mounts = volume_get_all_mounted()
         if mounts:
             juju_log(MSG_INFO, "FYI current mounted volumes: %s" % mounts)
-        juju_log(MSG_ERROR, "Disabled and stopped postgresql service, because of broken volume configuration - check 'volume-ephermeral-storage' and 'volume-map'")
+        juju_log(MSG_ERROR,
+            "Disabled and stopped postgresql service, \
+            because of broken volume configuration - check \
+            'volume-ephermeral-storage' and 'volume-map'")
         sys.exit(1)
 
     if volume_is_permanent(volid):
@@ -621,22 +685,28 @@ def config_changed(postgresql_config):
             mounts = volume_get_all_mounted()
             if mounts:
                 juju_log(MSG_INFO, "FYI current mounted volumes: %s" % mounts)
-            juju_log(MSG_ERROR, "Disabled and stopped postgresql service (config_changed_volume_apply failure)")
+            juju_log(MSG_ERROR,
+                "Disabled and stopped postgresql service \
+                (config_changed_volume_apply failure)")
             sys.exit(1)
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
-    generate_postgresql_hba(postgresql_hba, do_reload = False)
+    generate_postgresql_hba(postgresql_hba, do_reload=False)
     create_postgresql_ident(postgresql_ident)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
     update_nrpe_checks()
-    juju_log(MSG_INFO, "about reconfigure service with config_change_command = '%s'" % config_change_command)
+    juju_log(MSG_INFO,
+        "about reconfigure service with config_change_command = '%s'" %
+        config_change_command)
     if config_change_command == "reload":
         return postgresql_reload()
     elif config_change_command == "restart":
         return postgresql_restart()
-    juju_log(MSG_ERROR, "invalid config_change_command = '%s'" % config_change_command)
+    juju_log(MSG_ERROR, "invalid config_change_command = '%s'" %
+        config_change_command)
     return False
+
 
 def token_sql_safe(value):
     # Only allow alphanumeric + underscore in database identifiers
@@ -644,38 +714,48 @@ def token_sql_safe(value):
         return False
     return True
 
+
 def install(run_basenode=True):
     if run_basenode:
         basenode_setup()
-    for package in ["postgresql", "pwgen", "python-jinja2", "syslinux", "python-psycopg2"]:
+    for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
+        "python-psycopg2"]:
         apt_get_install(package)
     from jinja2 import Template
-    install_dir(postgresql_backups_dir,mode=0755)
-    install_dir(postgresql_scripts_dir,mode=0755)
+    install_dir(postgresql_backups_dir, mode=0755)
+    install_dir(postgresql_scripts_dir, mode=0755)
     paths = {
         'base_dir': postgresql_data_dir,
         'backup_dir': postgresql_backups_dir,
         'scripts_dir': postgresql_scripts_dir,
         'logs_dir': postgresql_logs_dir,
     }
-    dump_script = Template(open("templates/dump-pg-db.tmpl").read()).render(paths)
-    backup_job = Template(open("templates/pg_backup_job.tmpl").read()).render(paths)
-    install_file(dump_script,'{}/dump-pg-db'.format(postgresql_scripts_dir),mode=0755)
-    install_file(backup_job,'{}/pg_backup_job'.format(postgresql_scripts_dir),mode=0755)
+    dump_script = Template(
+        open("templates/dump-pg-db.tmpl").read()).render(paths)
+    backup_job = Template(
+        open("templates/pg_backup_job.tmpl").read()).render(paths)
+    install_file(dump_script, '{}/dump-pg-db'.format(postgresql_scripts_dir),
+        mode=0755)
+    install_file(backup_job, '{}/pg_backup_job'.format(postgresql_scripts_dir),
+        mode=0755)
     install_postgresql_crontab(postgresql_crontab)
     open_port(5432)
 
+
 def user_name(relid, remote_unit, admin=False):
     components = []
-    components.append(relid.replace(":","_").replace("-","_"))
-    components.append(remote_unit.replace("/","_").replace("-","_"))
+    components.append(relid.replace(":", "_").replace("-", "_"))
+    components.append(remote_unit.replace("/", "_").replace("-", "_"))
     if admin:
         components.append("admin")
     return "_".join(components)
 
+
 def database_names(admin=False):
-    omit_tables = ['template0','template1']
-    sql = "SELECT datname FROM pg_database WHERE datname NOT IN (" + ",".join(["%s"] * len(omit_tables)) + ")"
+    omit_tables = ['template0', 'template1']
+    sql = \
+    "SELECT datname FROM pg_database WHERE datname NOT IN (" + \
+    ",".join(["%s"] * len(omit_tables)) + ")"
     return [t for (t,) in run_select_as_postgres(sql, *omit_tables)[1]]
 
 
@@ -694,6 +774,7 @@ def ensure_user(user, admin=False):
     run_sql_as_postgres(sql, password)
     return password
 
+
 def ensure_database(user, schema_user, database):
     sql = "SELECT datname FROM pg_database WHERE datname = %s"
     if run_select_as_postgres(sql, database)[0] != 0:
@@ -702,10 +783,12 @@ def ensure_database(user, schema_user, database):
     else:
         sql = "CREATE DATABASE {}".format(database)
         run_sql_as_postgres(sql)
-    sql = "GRANT ALL PRIVILEGES ON DATABASE {} TO {}".format(database, schema_user)
+    sql = "GRANT ALL PRIVILEGES ON DATABASE {} TO {}".format(database,
+        schema_user)
     run_sql_as_postgres(sql)
     sql = "GRANT CONNECT ON DATABASE {} TO {}".format(database, user)
     run_sql_as_postgres(sql)
+
 
 def get_relation_host():
     remote_host = run("relation-get ip")
@@ -715,9 +798,11 @@ def get_relation_host():
         remote_host = run("relation-get private-address")
     return remote_host
 
+
 def get_unit_host():
     this_host = run("unit-get private-address")
     return this_host
+
 
 def db_relation_joined_changed(user, database):
     password = ensure_user(user)
@@ -725,16 +810,19 @@ def db_relation_joined_changed(user, database):
     schema_password = ensure_user(schema_user)
     ensure_database(user, schema_user, database)
     host = get_unit_host()
-    run("relation-set host='{}' user='{}' password='{}' schema_user='{}' schema_password='{}' database='{}'".format(
-                      host,     user,     password,     schema_user,     schema_password,     database))
+    run("relation-set host='{}' user='{}' password='{}' schema_user='{}' \
+schema_password='{}' database='{}'".format(host, user, password, schema_user,
+    schema_password, database))
     generate_postgresql_hba(postgresql_hba)
 
+
 def db_admin_relation_joined_changed(user, database='all'):
-    password = ensure_user(user,admin=True)
+    password = ensure_user(user, admin=True)
     host = get_unit_host()
     run("relation-set host='{}' user='{}' password='{}'".format(
-                      host,     user,     password))
+                      host, user, password))
     generate_postgresql_hba(postgresql_hba)
+
 
 def db_relation_broken(user, database):
     sql = "REVOKE ALL PRIVILEGES FROM {}_schema".format(user)
@@ -742,10 +830,12 @@ def db_relation_broken(user, database):
     sql = "REVOKE ALL PRIVILEGES FROM {}".format(user)
     run_sql_as_postgres(sql)
 
+
 def db_admin_relation_broken(user):
     sql = "ALTER USER {} NOSUPERUSER".format(user)
     run_sql_as_postgres(sql)
     generate_postgresql_hba(postgresql_hba)
+
 
 def update_nrpe_checks():
     config_data = config_get()
@@ -757,9 +847,13 @@ def update_nrpe_checks():
         return
 
     unit_name = os.environ['JUJU_UNIT_NAME'].replace('/', '-')
-    nagios_hostname =  "%s-%s-%s" % (config_data['nagios_context'], config_data['nagios_service_type'], unit_name)
+    nagios_hostname = "%s-%s-%s" % \
+        (config_data['nagios_context'], config_data['nagios_service_type'],
+            unit_name)
     nagios_logdir = '/var/log/nagios'
-    nrpe_service_file = '/var/lib/nagios/export/service__{}_check_pgsql.cfg'.format(nagios_hostname)
+    nrpe_service_file = \
+        '/var/lib/nagios/export/service__{}_check_pgsql.cfg'.format(
+            nagios_hostname)
     if not os.path.exists(nagios_logdir):
         os.mkdir(nagios_logdir)
         os.chown(nagios_logdir, nagios_uid, nagios_gid)
@@ -769,13 +863,15 @@ def update_nrpe_checks():
 
     # --- exported service configuration file
     from jinja2 import Environment, FileSystemLoader
-    template_env = Environment(\
-    loader=FileSystemLoader(os.path.join(os.environ['CHARM_DIR'], 'templates')))
+    template_env = Environment(
+        loader=FileSystemLoader(os.path.join(os.environ['CHARM_DIR'],
+        'templates')))
     templ_vars = {
         'nagios_hostname': nagios_hostname,
         'nagios_servicegroup': config_data['nagios_context'],
     }
-    template = template_env.get_template('nrpe_service.tmpl').render(templ_vars)
+    template = \
+        template_env.get_template('nrpe_service.tmpl').render(templ_vars)
     with open(nrpe_service_file, 'w') as nrpe_service_config:
         nrpe_service_config.write(str(template))
 
@@ -784,7 +880,9 @@ def update_nrpe_checks():
     nrpe_check_file = '/etc/nagios/nrpe.d/check_pgsql.cfg'
     with open(nrpe_check_file, 'w') as nrpe_check_config:
         nrpe_check_config.write("# check pgsql\n")
-        nrpe_check_config.write("command[check_pgsql]=/usr/lib/nagios/plugins/check_pgsql -p {}".format(config_data['listen_port']))
+        nrpe_check_config.write(
+            "command[check_pgsql]=/usr/lib/nagios/plugins/check_pgsql -p {}"
+            .format(config_data['listen_port']))
     # pgsql backups
     nrpe_check_file = '/etc/nagios/nrpe.d/check_pgsql_backups.cfg'
     backup_log = "%s/backups.log".format(postgresql_logs_dir)
@@ -794,7 +892,9 @@ def update_nrpe_checks():
     crit_age = 194400
     with open(nrpe_check_file, 'w') as nrpe_check_config:
         nrpe_check_config.write("# check pgsql backups\n")
-        nrpe_check_config.write("command[check_pgsql_backups]=/usr/lib/nagios/plugins/check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
+        nrpe_check_config.write(
+            "command[check_pgsql_backups]=/usr/lib/nagios/plugins/\
+check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
 
     if os.path.isfile('/etc/init.d/nagios-nrpe-server'):
         subprocess.call(['service', 'nagios-nrpe-server', 'reload'])
@@ -808,7 +908,8 @@ version = config_data['version']
 config_data['version_float'] = float(version)
 cluster_name = config_data['cluster_name']
 postgresql_data_dir = "/var/lib/postgresql"
-postgresql_cluster_dir = "%s/%s/%s" % (postgresql_data_dir, version, cluster_name)
+postgresql_cluster_dir = \
+"%s/%s/%s" % (postgresql_data_dir, version, cluster_name)
 postgresql_config_dir = "/etc/postgresql/%s/%s" % (version, cluster_name)
 postgresql_config = "%s/postgresql.conf" % (postgresql_config_dir,)
 postgresql_ident = "%s/pg_ident.conf" % (postgresql_config_dir,)
@@ -841,38 +942,46 @@ elif hook_name == "stop":
     if not postgresql_stop():
         sys.exit(1)
 #-------- db-relation-joined, db-relation-changed
-elif hook_name in ["db-relation-joined","db-relation-changed"]:
+elif hook_name in ["db-relation-joined", "db-relation-changed"]:
     database = relation_get('database')
     if database == '':
         # Missing some information. We expect it to appear in a
         # future call to the hook.
         sys.exit(0)
-    user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
+    user = \
+        user_name(os.environ['JUJU_RELATION_ID'],
+            os.environ['JUJU_REMOTE_UNIT'])
     if user != '' and database != '':
         db_relation_joined_changed(user, database)
 #-------- db-relation-broken
 elif hook_name == "db-relation-broken":
     database = relation_get('database')
-    user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
+    user = \
+        user_name(os.environ['JUJU_RELATION_ID'],
+            os.environ['JUJU_REMOTE_UNIT'])
     db_relation_broken(user, database)
 #-------- db-admin-relation-joined, db-admin-relation-changed
-elif hook_name in ["db-admin-relation-joined","db-admin-relation-changed"]:
-    user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'], admin=True)
+elif hook_name in ["db-admin-relation-joined", "db-admin-relation-changed"]:
+    user = user_name(os.environ['JUJU_RELATION_ID'],
+        os.environ['JUJU_REMOTE_UNIT'], admin=True)
     db_admin_relation_joined_changed(user, 'all')
 #-------- db-admin-relation-broken
 elif hook_name == "db-admin-relation-broken":
     # XXX: Fix: relation is not set when it is already broken
     # cannot determine the user name
-    user = user_name(os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'], admin=True)
+    user = user_name(os.environ['JUJU_RELATION_ID'],
+        os.environ['JUJU_REMOTE_UNIT'], admin=True)
     db_admin_relation_broken(user)
 elif hook_name == "nrpe-external-master-relation-changed":
     update_nrpe_checks()
-#-------- persistent-storage-relation-joined, persistent-storage-relation-changed
-elif hook_name in ["persistent-storage-relation-joined","persistent-storage-relation-changed"]:
-    persistent_storage_relation_joined_changed()
+#-------- persistent-storage-relation-joined,
+#         persistent-storage-relation-changed
+#elif hook_name in ["persistent-storage-relation-joined",
+#    "persistent-storage-relation-changed"]:
+#    persistent_storage_relation_joined_changed()
 #-------- persistent-storage-relation-broken
-elif hook_name == "persistent-storage-relation-broken":
-    persistent_storage_relation_broken()
+#elif hook_name == "persistent-storage-relation-broken":
+#    persistent_storage_relation_broken()
 else:
     print "Unknown hook"
     sys.exit(1)
