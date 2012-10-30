@@ -643,16 +643,6 @@ def config_changed_volume_apply():
     return False
 
 
-### BASENODE BEGIN ####
-def basenode_setup():
-    subprocess.call(['juju-log', 'basenode_setup: begin'])
-    subprocess.call(['sh', '-c', 'cd basenode && python setup.py install'])
-    import basenode
-    basenode.basenode_init()
-    subprocess.call(['juju-log', 'basenode_setup: end'])
-### BASENODE END   ####
-
-
 ###############################################################################
 # Hook functions
 ###############################################################################
@@ -715,9 +705,7 @@ def token_sql_safe(value):
     return True
 
 
-def install(run_basenode=True):
-    if run_basenode:
-        basenode_setup()
+def install():
     for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
         "python-psycopg2"]:
         apt_get_install(package)
@@ -931,7 +919,7 @@ elif hook_name == "config-changed":
     config_changed(postgresql_config)
 #-------- upgrade-charm
 elif hook_name == "upgrade-charm":
-    install(run_basenode=False)
+    install()
     config_changed(postgresql_config)
 #-------- start
 elif hook_name == "start":
