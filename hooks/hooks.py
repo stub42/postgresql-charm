@@ -847,9 +847,7 @@ def update_nrpe_checks():
         return
 
     unit_name = os.environ['JUJU_UNIT_NAME'].replace('/', '-')
-    nagios_hostname = "%s-%s-%s" % \
-        (config_data['nagios_context'], config_data['nagios_service_type'],
-            unit_name)
+    nagios_hostname = "%s-%s" % (config_data['nagios_context'], unit_name)
     nagios_logdir = '/var/log/nagios'
     nrpe_service_file = \
         '/var/lib/nagios/export/service__{}_check_pgsql.cfg'.format(
