@@ -1,4 +1,1 @@
-#!/bin/bash
-
-service postgresql stop
-
+hooks.py

@@ -1,16 +1,1 @@
-#!/bin/bash
-
-[[ -f "$(dirname $0)/common.sh" ]] && source "$(dirname $0)/common.sh"
-
-juju-log "Relationship with ${database} broken."
-
-revoke_access() {
-  sudo -su postgres psql -c"revoke all privileges on database ${database} from ${user};"
-  if admin; then
-    sudo -su postgres psql -c"alter user ${user} nocreatedb nocreateuser" 
-  fi
-}
-revoke_access 
-
-#juju-log "revoked privileges for ${user} on database ${database}"
-#juju-log "revoking failed"
+hooks.py

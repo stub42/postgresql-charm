@@ -1,7 +1,1 @@
-#!/bin/bash
-
-sudo apt-get install -qqy --no-install-recommends  postgresql pwgen syslinux
-
-echo "listen_addresses = '*'" >> /etc/postgresql/*/main/postgresql.conf
-
-open-port 5432/TCP
+hooks.py
