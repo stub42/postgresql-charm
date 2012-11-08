@@ -803,13 +803,14 @@ def get_unit_host():
 
 def db_relation_joined_changed(user, database):
     password = ensure_user(user)
-    schema_user = "{}_schema".format(user)
-    schema_password = ensure_user(schema_user)
-    ensure_database(user, schema_user, database)
-    host = get_unit_host()
-    run("relation-set host='{}' user='{}' password='{}' schema_user='{}' \
+    if password:
+        schema_user = "{}_schema".format(user)
+        schema_password = ensure_user(schema_user)
+        ensure_database(user, schema_user, database)
+        host = get_unit_host()
+        run("relation-set host='{}' user='{}' password='{}' schema_user='{}' \
 schema_password='{}' database='{}'".format(host, user, password, schema_user,
-    schema_password, database))
+            schema_password, database))
     generate_postgresql_hba(postgresql_hba)
 
 
