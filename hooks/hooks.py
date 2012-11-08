@@ -762,15 +762,12 @@ def database_names(admin=False):
 def ensure_user(user, admin=False):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
     password = pwgen()
-    action = "CREATE"
-    # XXX: This appears to reset the password every time
-    # this might not end well
     if run_select_as_postgres(sql, user)[0] != 0:
-        action = "ALTER"
+        return None
     if admin:
-        sql = "{} USER {} SUPERUSER PASSWORD %s".format(action, user)
+        sql = "CREATE USER {} SUPERUSER PASSWORD %s".format(user)
     else:
-        sql = "{} USER {} PASSWORD %s".format(action, user)
+        sql = "CREATE USER {} PASSWORD %s".format(user)
     run_sql_as_postgres(sql, password)
     return password
 
@@ -818,9 +815,10 @@ schema_password='{}' database='{}'".format(host, user, password, schema_user,
 
 def db_admin_relation_joined_changed(user, database='all'):
     password = ensure_user(user, admin=True)
-    host = get_unit_host()
-    run("relation-set host='{}' user='{}' password='{}'".format(
-                      host, user, password))
+    if password:
+        host = get_unit_host()
+        run("relation-set host='{}' user='{}' password='{}'".format(
+            host, user, password))
     generate_postgresql_hba(postgresql_hba)
 
 
