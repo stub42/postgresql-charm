@@ -758,19 +758,19 @@ def database_names(admin=False):
     ",".join(["%s"] * len(omit_tables)) + ")"
     return [t for (t,) in run_select_as_postgres(sql, *omit_tables)[1]]
 
-
-def ensure_user(user, admin=False):
+def user_exists(user):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
-    password = pwgen()
-    action = "CREATE"
-    # XXX: This appears to reset the password every time
-    # this might not end well
-    if run_select_as_postgres(sql, user)[0] != 0:
-        action = "ALTER"
-    if admin:
-        sql = "{} USER {} SUPERUSER PASSWORD %s".format(action, user)
+    if run_select_as_postgres(sql, user)[0] > 0:
+        return True
     else:
-        sql = "{} USER {} PASSWORD %s".format(action, user)
+        return False
+
+def create_user(user, admin=False):
+    password = pwgen()
+    if admin:
+        sql = "CREATE USER {} SUPERUSER PASSWORD %s".format(user)
+    else:
+        sql = "CREATE USER {} PASSWORD %s".format(user)
     run_sql_as_postgres(sql, password)
     return password
 
@@ -805,22 +805,25 @@ def get_unit_host():
 
 
 def db_relation_joined_changed(user, database):
-    password = ensure_user(user)
+    if not user_exists(user):
+        password = create_user(user)
+        run("relation-set user='%s' password='%s'" % (user, password))
     schema_user = "{}_schema".format(user)
-    schema_password = ensure_user(schema_user)
+    if not user_exists(schema_user):
+        schema_password = create_user(schema_user)
+        run("relation-set schema_user='%s' schema_password='%s'" % (schema_user, schema_password))
     ensure_database(user, schema_user, database)
     host = get_unit_host()
-    run("relation-set host='{}' user='{}' password='{}' schema_user='{}' \
-schema_password='{}' database='{}'".format(host, user, password, schema_user,
-    schema_password, database))
+    run("relation-set host='%s' database='%s'" % (host, database))
     generate_postgresql_hba(postgresql_hba)
 
 
 def db_admin_relation_joined_changed(user, database='all'):
-    password = ensure_user(user, admin=True)
+    if not user_exists(user):
+        password = create_user(user, admin=True)
+        run("relation-set user='%s' password='%s'" % (user, password))
     host = get_unit_host()
-    run("relation-set host='{}' user='{}' password='{}'".format(
-                      host, user, password))
+    run("relation-set host='%s'" % (host))
     generate_postgresql_hba(postgresql_hba)
 
 
@@ -945,6 +948,7 @@ elif hook_name in ["db-relation-joined", "db-relation-changed"]:
     if database == '':
         # Missing some information. We expect it to appear in a
         # future call to the hook.
+        juju_log(MSG_WARNING, "No database set in relation, exiting")
         sys.exit(0)
     user = \
         user_name(os.environ['JUJU_RELATION_ID'],
