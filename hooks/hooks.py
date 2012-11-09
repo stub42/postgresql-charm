@@ -948,6 +948,7 @@ elif hook_name in ["db-relation-joined", "db-relation-changed"]:
     if database == '':
         # Missing some information. We expect it to appear in a
         # future call to the hook.
+        juju_log(MSG_WARNING, "No database set in relation, exiting")
         sys.exit(0)
     user = \
         user_name(os.environ['JUJU_RELATION_ID'],
