@@ -758,12 +758,15 @@ def database_names(admin=False):
     ",".join(["%s"] * len(omit_tables)) + ")"
     return [t for (t,) in run_select_as_postgres(sql, *omit_tables)[1]]
 
-
-def ensure_user(user, admin=False):
+def user_exists(user):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
+    if run_select_as_postgres(sql, user)[0] > 0:
+        return True
+    else
+        return False
+
+def create_user(user, admin=False):
     password = pwgen()
-    if run_select_as_postgres(sql, user)[0] != 0:
-        return None
     if admin:
         sql = "CREATE USER {} SUPERUSER PASSWORD %s".format(user)
     else:
@@ -802,21 +805,27 @@ def get_unit_host():
 
 
 def db_relation_joined_changed(user, database):
-    password = ensure_user(user)
-    if password:
-        schema_user = "{}_schema".format(user)
-        schema_password = ensure_user(schema_user)
-        ensure_database(user, schema_user, database)
-        host = get_unit_host()
+    password = None
+    schema_password = None
+    if not user_exists(user):
+        password = create_user(user)
+    schema_user = "{}_schema".format(user)
+    if not user_exists(schema_user):
+        schema_password = create_user(schema_user)
+    ensure_database(user, schema_user, database)
+    host = get_unit_host()
+    if password and schema_password:
         run("relation-set host='{}' user='{}' password='{}' schema_user='{}' \
 schema_password='{}' database='{}'".format(host, user, password, schema_user,
             schema_password, database))
+    else:
+        subprocess.call(['juju-log', "Not all the db relation variables were available. Skipping relation-set"])
     generate_postgresql_hba(postgresql_hba)
 
 
 def db_admin_relation_joined_changed(user, database='all'):
-    password = ensure_user(user, admin=True)
-    if password:
+    if not user_exists(user):
+        password = create_user(user, admin=True)
         host = get_unit_host()
         run("relation-set host='{}' user='{}' password='{}'".format(
             host, user, password))
