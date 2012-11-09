@@ -805,8 +805,6 @@ def get_unit_host():
 
 
 def db_relation_joined_changed(user, database):
-    password = None
-    schema_password = None
     if not user_exists(user):
         password = create_user(user)
         run("relation-set user='%s' password='%s'" % (user, password))
