@@ -717,8 +717,8 @@ def token_sql_safe(value):
 def install(run_pre=True):
     if run_pre:
         for f in glob.glob('exec.d/*/charm-pre-install'):
-              if os.path.isfile(f) and os.access(f, os.X_OK):
-                      os.system(f)
+            if os.path.isfile(f) and os.access(f, os.X_OK):
+                subprocess.check_call(['sh', '-c', f])
     for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
         "python-psycopg2"]:
         apt_get_install(package)
@@ -759,12 +759,14 @@ def database_names(admin=False):
     ",".join(["%s"] * len(omit_tables)) + ")"
     return [t for (t,) in run_select_as_postgres(sql, *omit_tables)[1]]
 
+
 def user_exists(user):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
     if run_select_as_postgres(sql, user)[0] > 0:
         return True
     else:
         return False
+
 
 def create_user(user, admin=False):
     password = pwgen()
@@ -812,7 +814,8 @@ def db_relation_joined_changed(user, database):
     schema_user = "{}_schema".format(user)
     if not user_exists(schema_user):
         schema_password = create_user(schema_user)
-        run("relation-set schema_user='%s' schema_password='%s'" % (schema_user, schema_password))
+        run("relation-set schema_user='%s' schema_password='%s'" % (
+            schema_user, schema_password))
     ensure_database(user, schema_user, database)
     host = get_unit_host()
     run("relation-set host='%s' database='%s'" % (host, database))
