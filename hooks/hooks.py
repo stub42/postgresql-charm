@@ -523,6 +523,25 @@ def pwgen(pwd_length=None):
     return(''.join(random_chars))
 
 
+def set_password(user, password):
+    if not os.path.isdir("passwords"):
+        os.makedirs("passwords")
+    old_umask = os.umask(0o077)
+    try:
+        with open("passwords/%s" % user, "w") as pwfile:
+            pwfile.write(password)
+    finally:
+        os.umask(old_umask)
+
+
+def get_password(user):
+    try:
+        with open("passwords/%s" % user) as pwfile:
+            return pwfile.read()
+    except IOError:
+        return None
+
+
 def db_cursor(autocommit=False):
     conn = psycopg2.connect("dbname=template1 user=postgres")
     conn.autocommit = autocommit
@@ -749,10 +768,11 @@ def database_names(admin=False):
 
 def ensure_user(user, admin=False):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
-    password = pwgen()
+    password = get_password(user)
+    if password is None:
+        password = pwgen()
+        set_password(user, password)
     action = "CREATE"
-    # XXX: This appears to reset the password every time
-    # this might not end well
     if run_select_as_postgres(sql, user)[0] != 0:
         action = "ALTER"
     if admin:
