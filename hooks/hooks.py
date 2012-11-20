@@ -4,6 +4,7 @@
 import json
 import yaml
 import os
+import glob
 import random
 import re
 import string
@@ -592,6 +593,10 @@ def config_changed_volume_apply():
                 "NOTICE: postgresql data dir '%s' already points to '%s', \
                 skipping storage changes." %
                 (data_directory_path, new_pg_version_cluster_dir))
+            juju_log(MSG_INFO,
+                "existing-symlink: to fix/avoid UID changes from previous "
+                "units, doing: chown -R postgres:postgres %s" % new_pg_dir)
+            run("chown -R postgres:postgres %s" % new_pg_dir)
             return True
 
         # Create a directory structure below "new" mount_point, as e.g.:
@@ -602,11 +607,11 @@ def config_changed_volume_apply():
                     os.path.join(new_pg_dir, config_data["version"]),
                     new_pg_version_cluster_dir]:
             if not os.path.isdir(new_dir):
+                juju_log(MSG_INFO, "mkdir %s" % new_dir)
                 os.mkdir(new_dir)
                 # copy permissions from current data_directory_path
                 os.chown(new_dir, curr_dir_stat.st_uid, curr_dir_stat.st_gid)
                 os.chmod(new_dir, curr_dir_stat.st_mode)
-                juju_log(MSG_INFO, "mkdir %s" % new_dir)
         # Carefully build this symlink, e.g.:
         # /var/lib/postgresql/9.1/main ->
         # /srv/juju/vol-000012345/postgresql/9.1/main
@@ -632,6 +637,10 @@ def config_changed_volume_apply():
             juju_log(MSG_INFO, "NOTICE: symlinking %s -> %s" %
                 (new_pg_version_cluster_dir, data_directory_path))
             os.symlink(new_pg_version_cluster_dir, data_directory_path)
+            juju_log(MSG_INFO,
+                "after-symlink: to fix/avoid UID changes from previous "
+                "units, doing: chown -R postgres:postgres %s" % new_pg_dir)
+            run("chown -R postgres:postgres %s" % new_pg_dir)
             return True
         except OSError:
             juju_log(MSG_CRITICAL, "failed to symlink \"%s\" -> \"%s\"" % (
@@ -641,16 +650,6 @@ def config_changed_volume_apply():
         juju_log(MSG_ERROR, "ERROR: Invalid volume storage configuration, " +
                  "not applying changes")
     return False
-
-
-### BASENODE BEGIN ####
-def basenode_setup():
-    subprocess.call(['juju-log', 'basenode_setup: begin'])
-    subprocess.call(['sh', '-c', 'cd basenode && python setup.py install'])
-    import basenode
-    basenode.basenode_init()
-    subprocess.call(['juju-log', 'basenode_setup: end'])
-### BASENODE END   ####
 
 
 ###############################################################################
@@ -715,9 +714,11 @@ def token_sql_safe(value):
     return True
 
 
-def install(run_basenode=True):
-    if run_basenode:
-        basenode_setup()
+def install(run_pre=True):
+    if run_pre:
+        for f in glob.glob('exec.d/*/charm-pre-install'):
+            if os.path.isfile(f) and os.access(f, os.X_OK):
+                subprocess.check_call(['sh', '-c', f])
     for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
         "python-psycopg2"]:
         apt_get_install(package)
@@ -758,12 +759,14 @@ def database_names(admin=False):
     ",".join(["%s"] * len(omit_tables)) + ")"
     return [t for (t,) in run_select_as_postgres(sql, *omit_tables)[1]]
 
+
 def user_exists(user):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
     if run_select_as_postgres(sql, user)[0] > 0:
         return True
     else:
         return False
+
 
 def create_user(user, admin=False):
     password = pwgen()
@@ -811,7 +814,8 @@ def db_relation_joined_changed(user, database):
     schema_user = "{}_schema".format(user)
     if not user_exists(schema_user):
         schema_password = create_user(schema_user)
-        run("relation-set schema_user='%s' schema_password='%s'" % (schema_user, schema_password))
+        run("relation-set schema_user='%s' schema_password='%s'" % (
+            schema_user, schema_password))
     ensure_database(user, schema_user, database)
     host = get_unit_host()
     run("relation-set host='%s' database='%s'" % (host, database))
@@ -932,7 +936,7 @@ elif hook_name == "config-changed":
     config_changed(postgresql_config)
 #-------- upgrade-charm
 elif hook_name == "upgrade-charm":
-    install(run_basenode=False)
+    install(run_pre=False)
     config_changed(postgresql_config)
 #-------- start
 elif hook_name == "start":
