@@ -707,7 +707,8 @@ def token_sql_safe(value):
 
 def install():
     for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
-        "python-psycopg2"]:
+        "python-psycopg2",
+        "postgresql-%s-debversion" % config_data["version"]]:
         apt_get_install(package)
     from jinja2 import Template
     install_dir(postgresql_backups_dir, mode=0755)
