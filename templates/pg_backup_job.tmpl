@@ -57,7 +57,9 @@ fi
 TOTAL_SIZE=0
 for DATABASE in ${DATABASES}; do
     DUMP_SIZE=$(ls -lrt ${DUMP_DIR}/${DATABASE}* | tail -1 | awk '{ print $5 }')
-    let TOTAL_SIZE=${TOTAL_SIZE}+${DUMP_SIZE}
+    if [[ -n $DUMP_SIZE ]]; then
+        let TOTAL_SIZE=${TOTAL_SIZE}+${DUMP_SIZE}
+    fi
 done
 
 FREE_SPACE=$(df -k ${DUMP_DIR} | sed -e 1d | awk '{ print $4 }')
