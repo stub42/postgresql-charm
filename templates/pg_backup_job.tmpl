@@ -48,7 +48,9 @@ WALBACKUPS=${ROOT}/walbackups
 
 # Cleanup old archived WAL files and base backups. These should have
 # already been shipped to external disk via rsync.
-find ${WALBACKUPS} -type f -ctime +${DAYS} -exec rm \{\} \;
+if [[ -d ${WALBACKUPS} ]]; then
+    find ${WALBACKUPS} -type f -ctime +${DAYS} -exec rm \{\} \;
+fi
 
 # Check the size of the last backup, and that we have enough space
 # to do a backup
