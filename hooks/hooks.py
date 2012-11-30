@@ -817,8 +817,10 @@ def db_relation_joined_changed(user, database):
         run("relation-set schema_user='%s' schema_password='%s'" % (
             schema_user, schema_password))
     ensure_database(user, schema_user, database)
+    config_data = config_get()
     host = get_unit_host()
-    run("relation-set host='%s' database='%s'" % (host, database))
+    run("relation-set host='%s' database='%s' port='%s'" % (
+        host, database, config_data["listen_port"]))
     generate_postgresql_hba(postgresql_hba)
 
 
@@ -827,14 +829,16 @@ def db_admin_relation_joined_changed(user, database='all'):
         password = create_user(user, admin=True)
         run("relation-set user='%s' password='%s'" % (user, password))
     host = get_unit_host()
-    run("relation-set host='%s'" % (host))
+    config_data = config_get()
+    run("relation-set host='%s' port='%s'" % (
+        host, config_data["listen_port"]))
     generate_postgresql_hba(postgresql_hba)
 
 
 def db_relation_broken(user, database):
-    sql = "REVOKE ALL PRIVILEGES FROM {}_schema".format(user)
+    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}".format(database, user)
     run_sql_as_postgres(sql)
-    sql = "REVOKE ALL PRIVILEGES FROM {}".format(user)
+    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}_schema".format(database, user)
     run_sql_as_postgres(sql)
 
 
