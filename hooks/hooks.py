@@ -724,9 +724,9 @@ def install(run_pre=True):
         "python-psycopg2"]:
         apt_get_install(package)
     from jinja2 import Template
-    install_dir(postgresql_backups_dir, mode=0755)
-    install_dir(postgresql_scripts_dir, mode=0755)
-    install_dir(postgresql_logs_dir, mode=0755)
+    install_dir(postgresql_backups_dir, owner=postgres, mode=0755)
+    install_dir(postgresql_scripts_dir, owner=postgres, mode=0755)
+    install_dir(postgresql_logs_dir, owner=postgres, mode=0755)
     paths = {
         'base_dir': postgresql_data_dir,
         'backup_dir': postgresql_backups_dir,
