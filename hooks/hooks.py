@@ -454,6 +454,7 @@ def install_postgresql_crontab(postgresql_ident):
     crontab_data = {
         'backup_schedule': config_data["backup_schedule"],
         'scripts_dir': postgresql_scripts_dir,
+        'backup_days': config_data["backup_retension_count"],
     }
     from jinja2 import Template
     crontab_template = Template(
