@@ -804,7 +804,7 @@ def get_relation_host():
 
 def get_unit_host():
     this_host = run("unit-get private-address")
-    return this_host
+    return this_host.strip()
 
 
 def db_relation_joined_changed(user, database):
