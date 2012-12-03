@@ -432,13 +432,15 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             relation['user'] = 'all'
             relation['database'] = 'all'
         else:
-            relation['user'] = \
-                user_name(relation['relation-id'], relation['unit'])
+            relation['user'] = user_name(relation['relation-id'],
+                                         relation['unit'])
+            relation['schema_user'] = user_name(relation['relation-id'],
+                                                relation['unit'],
+                                                schema=True)
     juju_log(MSG_INFO, str(relation_data))
-    pg_hba_template = \
-        Template(
-            open("templates/pg_hba.conf.tmpl").read()).render(access_list=
-                relation_data)
+    pg_hba_template = Template(
+        open("templates/pg_hba.conf.tmpl").read()).render(
+        access_list= relation_data)
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
     if do_reload:
@@ -743,12 +745,14 @@ def install(run_pre=True):
     open_port(5432)
 
 
-def user_name(relid, remote_unit, admin=False):
+def user_name(relid, remote_unit, admin=False, schema=False):
     components = []
     components.append(relid.replace(":", "_").replace("-", "_"))
     components.append(remote_unit.replace("/", "_").replace("-", "_"))
     if admin:
         components.append("admin")
+    elif schema:
+        components.append("schema")
     return "_".join(components)
 
 
