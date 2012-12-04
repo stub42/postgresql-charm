@@ -782,6 +782,17 @@ def create_user(user, admin=False):
     return password
 
 
+def grant_roles(user, roles):
+    # Delete previous roles
+    sql = ("DELETE FROM pg_auth_members WHERE member IN ("
+           "SELECT oid FROM pg_roles WHERE rolname = '{}')").format(user)
+    run_sql_as_postgres(sql)
+
+    for role in roles:
+        sql = "GRANT {} to {}".format(role, user)
+        run_sql_as_postgres(sql)
+
+
 def ensure_database(user, schema_user, database):
     sql = "SELECT datname FROM pg_database WHERE datname = %s"
     if run_select_as_postgres(sql, database)[0] != 0:
@@ -811,10 +822,11 @@ def get_unit_host():
     return this_host.strip()
 
 
-def db_relation_joined_changed(user, database):
+def db_relation_joined_changed(user, database, roles):
     if not user_exists(user):
         password = create_user(user)
         run("relation-set user='%s' password='%s'" % (user, password))
+    grant_roles(user, roles)
     schema_user = "{}_schema".format(user)
     if not user_exists(schema_user):
         schema_password = create_user(schema_user)
@@ -956,6 +968,7 @@ elif hook_name == "stop":
         sys.exit(1)
 #-------- db-relation-joined, db-relation-changed
 elif hook_name in ["db-relation-joined", "db-relation-changed"]:
+    roles = relation_get('roles').split(",")
     database = relation_get('database')
     if database == '':
         # Missing some information. We expect it to appear in a
@@ -966,7 +979,7 @@ elif hook_name in ["db-relation-joined", "db-relation-changed"]:
         user_name(os.environ['JUJU_RELATION_ID'],
             os.environ['JUJU_REMOTE_UNIT'])
     if user != '' and database != '':
-        db_relation_joined_changed(user, database)
+        db_relation_joined_changed(user, database, roles)
 #-------- db-relation-broken
 elif hook_name == "db-relation-broken":
     database = relation_get('database')
