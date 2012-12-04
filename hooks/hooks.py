@@ -785,12 +785,25 @@ def create_user(user, admin=False):
 def grant_roles(user, roles):
     # Delete previous roles
     sql = ("DELETE FROM pg_auth_members WHERE member IN ("
-           "SELECT oid FROM pg_roles WHERE rolname = '{}')").format(user)
-    run_sql_as_postgres(sql)
+           "SELECT oid FROM pg_roles WHERE rolname = %s)")
+    run_sql_as_postgres(sql, user)
 
     for role in roles:
+        ensure_role(role)
         sql = "GRANT {} to {}".format(role, user)
         run_sql_as_postgres(sql)
+
+
+def ensure_role(role):
+    sql = "SELECT oid FROM pg_roles WHERE rolname = %s"
+    if run_select_as_postgres(sql, role)[0] != 0:
+        # role already exists
+        pass
+    else:
+        sql = "CREATE ROLE %s INHERIT"
+        run_sql_as_postgres(sql, role)
+        sql = "ALTER ROLE %s NOLOGIN"
+        run_sql_as_postgres(sql, role)
 
 
 def ensure_database(user, schema_user, database):
