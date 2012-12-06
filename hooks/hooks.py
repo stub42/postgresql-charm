@@ -981,7 +981,7 @@ elif hook_name == "stop":
         sys.exit(1)
 #-------- db-relation-joined, db-relation-changed
 elif hook_name in ["db-relation-joined", "db-relation-changed"]:
-    roles = relation_get('roles').split(",")
+    roles = map(None, relation_get('roles').split(","))
     database = relation_get('database')
     if database == '':
         # Missing some information. We expect it to appear in a
