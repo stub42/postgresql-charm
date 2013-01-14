@@ -456,6 +456,7 @@ def install_postgresql_crontab(postgresql_ident):
     crontab_data = {
         'backup_schedule': config_data["backup_schedule"],
         'scripts_dir': postgresql_scripts_dir,
+        'backup_days': config_data["backup_retension_count"],
     }
     from jinja2 import Template
     crontab_template = Template(
@@ -745,8 +746,9 @@ def install(run_pre=True):
         "postgresql-%s-debversion" % config_data["version"]]:
         apt_get_install(package)
     from jinja2 import Template
-    install_dir(postgresql_backups_dir, mode=0755)
-    install_dir(postgresql_scripts_dir, mode=0755)
+    install_dir(postgresql_backups_dir, owner="postgres", mode=0755)
+    install_dir(postgresql_scripts_dir, owner="postgres", mode=0755)
+    install_dir(postgresql_logs_dir, owner="postgres", mode=0755)
     paths = {
         'base_dir': postgresql_data_dir,
         'backup_dir': postgresql_backups_dir,
