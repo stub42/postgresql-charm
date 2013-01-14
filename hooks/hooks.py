@@ -795,7 +795,6 @@ def user_exists(user):
 
 
 def create_user(user, admin=False):
-    password = pwgen()
     password = get_password(user)
     if password is None:
         password = pwgen()
