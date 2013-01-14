@@ -8,16 +8,12 @@ description: |
   triggers, user-defined types and functions, outer joins, multiversion
   concurrency control.  Graphical user interfaces and bindings for many
   programming languages are available as well.
-maintainer: Mark Mims <mark.mims@canonical.com>, 
-    Tom Haddon <tom.haddon@canonical.com>
+maintainer: Tom Haddon <tom.haddon@canonical.com>
 provides:
   db:
     interface: pgsql
   db-admin:
     interface: pgsql
-  nrpe-external-master:
-    interface: nrpe-external-master
-    scope: container
 requires:
   persistent-storage:
     interface: directory-path

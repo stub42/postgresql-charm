@@ -526,6 +526,25 @@ def pwgen(pwd_length=None):
     return(''.join(random_chars))
 
 
+def set_password(user, password):
+    if not os.path.isdir("passwords"):
+        os.makedirs("passwords")
+    old_umask = os.umask(0o077)
+    try:
+        with open("passwords/%s" % user, "w") as pwfile:
+            pwfile.write(password)
+    finally:
+        os.umask(old_umask)
+
+
+def get_password(user):
+    try:
+        with open("passwords/%s" % user) as pwfile:
+            return pwfile.read()
+    except IOError:
+        return None
+
+
 def db_cursor(autocommit=False):
     conn = psycopg2.connect("dbname=template1 user=postgres")
     conn.autocommit = autocommit
@@ -722,7 +741,8 @@ def install(run_pre=True):
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 subprocess.check_call(['sh', '-c', f])
     for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
-        "python-psycopg2"]:
+        "python-psycopg2",
+        "postgresql-%s-debversion" % config_data["version"]]:
         apt_get_install(package)
     from jinja2 import Template
     install_dir(postgresql_backups_dir, mode=0755)
@@ -774,10 +794,17 @@ def user_exists(user):
 
 def create_user(user, admin=False):
     password = pwgen()
+    password = get_password(user)
+    if password is None:
+        password = pwgen()
+        set_password(user, password)
+    action = "CREATE"
+    if user_exists(user):
+        action = "ALTER"
     if admin:
-        sql = "CREATE USER {} SUPERUSER PASSWORD %s".format(user)
+        sql = "{} USER {} SUPERUSER PASSWORD %s".format(action, user)
     else:
-        sql = "CREATE USER {} PASSWORD %s".format(user)
+        sql = "{} USER {} PASSWORD %s".format(action, user)
     run_sql_as_postgres(sql, password)
     return password
 
