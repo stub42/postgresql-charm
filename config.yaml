@@ -137,15 +137,22 @@ options:
   wal_level:
     default: ""
     type: string
-    description: WAL level
+    description: |
+        How much information is written to the WAL. Set to 'minimal' for
+        stand alone databases and 'hot_standby' for replicated setups.
   max_wal_senders:
     default: ""
     type: string
-    description: WAL level senders
+    description: |
+        Maximum number of hot standbys that can connect using
+        streaming replication.
   wal_keep_segments:
     default: ""
     type: string
-    description: WAL keep segments
+    description: |
+        Number of old WAL files to keep, providing a larger buffer for
+        streaming hot standbys to catch up from when lagged. Each WAL file
+        is 16MB in size.
   work_mem:
     default: "1MB"
     type: string
