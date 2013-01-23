@@ -546,11 +546,6 @@ def db_cursor(autocommit=False):
     conn = psycopg2.connect("dbname=template1 user=postgres")
     conn.autocommit = autocommit
     return conn.cursor()
-    #try:
-        #return conn.cursor()
-    #except psycopg2.ProgrammingError:
-        #print sql
-        #raise
 
 
 def run_sql_as_postgres(sql, *parameters):
@@ -670,7 +665,7 @@ def config_changed(postgresql_config):
     # Trigger volume initialization logic for permanent storage
     volid = volume_get_volume_id()
     if not volid:
-        ## Invalid configuration (wether ephemeral, or permanent)
+        ## Invalid configuration (whether ephemeral, or permanent)
         disable_service_start("postgresql")
         postgresql_stop()
         mounts = volume_get_all_mounted()
