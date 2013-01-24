@@ -446,6 +446,7 @@ def create_postgresql_ident(postgresql_ident):
 # generate_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
 def generate_postgresql_hba(postgresql_hba, do_reload=True):
+    TODO('Add permissions for replication connections')
     relation_data = relation_get_all(relation_types=['db', 'db-admin'])
     config_change_command = config_data["config_change_command"]
     for relation in relation_data:
@@ -844,7 +845,7 @@ def get_relation_host():
 
 
 def get_unit_host():
-    this_host = run("unit-get private-address")
+    this_host = run("unit-get private-address").strip()
     return this_host
 
 
@@ -908,20 +909,58 @@ def install_repmgr():
     run('apt-get -y install -qq repmgr')
 
 
+def get_ssh_public_key():
+    ssh_dir = '/var/lib/postgresql/.ssh'
+    secret_path = os.path.join(ssh_dir, 'id_rsa')
+    public_path = os.path.join(ssh_dir, 'id_rsa.pub')
+    if not os.path.isdir(postgres_ssh_dir):
+        install_dir(postgres_ssh_dir, "postgres", "postgres", 0700)
+    if not os.path.exists(postgres_ssh_private_key):
+        run("sudo -u postgres -H ssh-keygen -q -t rsa -C 'repmgr' -N '' "
+            "-f '{}'".format(postgres_ssh_private_key))
+    public_key = open(postgres_ssh_public_key).read()
+    return public_key
+
+
+def generate_repmgr_config(master=False):
+    # Need a unique integer per node.
+    if master:
+        node_id = 0
+    else:
+        node_id = os.environ['JUJU_RELATION_ID'].split(':')[1]
+    params = {
+        'node_id': node_id,
+        'node_name': os.environ['JUJU_UNIT_NAME'],
+        'host': get_unit_host()
+        }
+    config = Template(
+        open("templates/repmgr.conf.tmpl").read()).render(params)
+    install_file(config, repmgr_config, mode=0755)
+
+
 def master_relation_joined(user):
     install_repmgr()
+
     password = ensure_user(user, replication=True)
-    host = get_unit_host()
-    run("relation-set host='{}' user='{}' password='{}'".format(
-        host, user, password))
+    public_key = get_ssh_public_key()
+    run("relation-set user='{}' password='{}' public_key='{}'".format(
+        user, password, public_key))
+
+    # Configure repmgr
+    repmgr_password = ensure_user('repmgr', admin=True)
+    generate_repmgr_config(master=True)
+    ensure_database(user, 'repmgr', 'repmgr')
+
+    # Update config, including access controls and replication settings.
     config_changed(postgresql_config)
+
     TODO('Register the master with repmgr')
 
 
 def slave_relation_joined():
     install_repmgr()
-    host = get_unit_host()
-    run("relation-set host='{}'".format(host))
+    public_key = get_ssh_public_key()
+    run("relation-set public_key='{}'".format(public_key))
     config_changed(postgresql_config)
 
 
@@ -1022,6 +1061,10 @@ postgresql_service_config_dir = "/var/run/postgresql"
 postgresql_scripts_dir = '{}/scripts'.format(postgresql_data_dir)
 postgresql_backups_dir = '{}/backups'.format(postgresql_data_dir)
 postgresql_logs_dir = '{}/logs'.format(postgresql_data_dir)
+postgres_ssh_dir = os.path.expanduser('~postgres/.ssh')
+postgres_ssh_public_key = os.path.join(postgres_ssh_dir, 'id_rsa.pub')
+postgres_ssh_private_key = os.path.join(postgres_ssh_dir, 'id_rsa')
+repmgr_config = os.path.expanduser('~postgres/repmgr.conf')
 hook_name = os.path.basename(sys.argv[0])
 
 ###############################################################################
