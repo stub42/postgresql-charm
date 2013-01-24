@@ -420,7 +420,6 @@ def create_postgresql_config(postgresql_config):
             "Ensure archive_command modified by repmgr doesn't get blatted "
             "by juju")
         modified_config_data['archive_command'] = "cd ."
-        juju_log('INFO', repr(modified_config_data))
 
     # Send config data to the template
     # Return it as pg_config
@@ -428,7 +427,6 @@ def create_postgresql_config(postgresql_config):
         Template(
             open("templates/postgresql.conf.tmpl").read()).render(
                 modified_config_data)
-    juju_log('INFO', pg_config)
     install_file(pg_config, postgresql_config)
 
 
