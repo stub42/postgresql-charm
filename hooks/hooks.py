@@ -20,7 +20,6 @@ try:
 except ImportError:
     pass
 
-
 ###############################################################################
 # Supporting functions
 ###############################################################################
@@ -400,11 +399,36 @@ def create_postgresql_config(postgresql_config):
             ((int(total_ram) * 1024 * 1024) + 1024),)
         conf_file.close()
         run("sysctl -p /etc/sysctl.d/50-postgresql.conf")
+    # If we are replicating, some settings may need to be overridden to
+    # certain minimum levels.
+
+    num_slaves = len(relation_ids(relation_types=['slave', 'master']))
+    modified_config_data = dict(config_data)
+    if num_slaves > 0:
+        juju_log('DEBUG', 'Replicated. Enforcing minimal replication settings')
+        modified_config_data['hot_standby'] = 'on'
+        modified_config_data['wal_level'] = 'hot_standby'
+        if config_data['max_wal_senders']:
+            modified_config_data['max_wal_senders'] = max(
+                config_data['max_wal_senders'], num_slaves)
+        else:
+            modified_config_data['max_wal_senders'] = num_slaves
+        TODO("Don't force hardcoded wal_keep_segments==5000 when replicated")
+        modified_config_data['wal_keep_segments'] = '5000'
+        modified_config_data['archive_mode'] = 'on'
+        TODO(
+            "Ensure archive_command modified by repmgr doesn't get blatted "
+            "by juju")
+        modified_config_data['archive_command'] = "cd ."
+        juju_log('INFO', repr(modified_config_data))
+
     # Send config data to the template
     # Return it as pg_config
     pg_config = \
         Template(
-            open("templates/postgresql.conf.tmpl").read()).render(config_data)
+            open("templates/postgresql.conf.tmpl").read()).render(
+                modified_config_data)
+    juju_log('INFO', pg_config)
     install_file(pg_config, postgresql_config)
 
 
@@ -746,9 +770,14 @@ def install():
 
 
 def user_name(relid, remote_unit, admin=False):
-    components = []
-    components.append(relid.replace(":", "_").replace("-", "_"))
-    components.append(remote_unit.replace("/", "_").replace("-", "_"))
+    def sanitize(s):
+        s = s.replace(':', '_')
+        s = s.replace('-', '_')
+        s = s.replace('/', '_')
+        s = s.replace('"', '_')
+        s = s.replace("'", '_')
+        return s
+    components = [sanitize(relid), sanitize(remote_unit)]
     if admin:
         components.append("admin")
     return "_".join(components)
@@ -762,19 +791,32 @@ def database_names(admin=False):
     return [t for (t,) in run_select_as_postgres(sql, *omit_tables)[1]]
 
 
-def ensure_user(user, admin=False):
+def ensure_user(user, admin=False, replication=False):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
     password = get_password(user)
     if password is None:
         password = pwgen()
         set_password(user, password)
-    action = "CREATE"
+    ## if replication:
+    ##     # A replication user used by the master/slave relation also
+    ##     # needs to be a superuser, because the slave needs to connect to
+    ##     # the master to create users and databases on demand.
+    ##     admin=True
     if run_select_as_postgres(sql, user)[0] != 0:
-        action = "ALTER"
-    if admin:
-        sql = "{} USER {} SUPERUSER PASSWORD %s".format(action, user)
+        action = ["ALTER ROLE", user]
     else:
-        sql = "{} USER {} PASSWORD %s".format(action, user)
+        action = ["CREATE ROLE", user]
+    action.append('LOGIN')
+    if admin:
+        action.append('SUPERUSER')
+    else:
+        action.append('NOSUPERUSER')
+    if replication:
+        action.append('REPLICATION')
+    else:
+        action.append('NOREPLICATION')
+    action.append('PASSWORD %s')
+    sql = ' '.join(action)
     run_sql_as_postgres(sql, password)
     return password
 
@@ -839,6 +881,67 @@ def db_admin_relation_broken(user):
     sql = "ALTER USER {} NOSUPERUSER".format(user)
     run_sql_as_postgres(sql)
     generate_postgresql_hba(postgresql_hba)
+
+
+def DUMP():
+    juju_log('DEBUG', 'JUJU_UNIT_NAME == %s' % os.environ['JUJU_UNIT_NAME'])
+    juju_log('DEBUG', 'JUJU_RELATION == %s' % os.environ['JUJU_RELATION'])
+    juju_log('DEBUG', 'JUJU_REMOTE_UNIT == %s' % os.environ['JUJU_REMOTE_UNIT'])
+    juju_log('DEBUG', 'config_get() == %s' % repr(config_get()))
+    juju_log('DEBUG', 'relation_ids(master) == %s'
+        % repr(relation_ids('master')))
+    juju_log('DEBUG', 'relation_ids(slave) == %s'
+        % repr(relation_ids('slave')))
+    juju_log('DEBUG', 'relation_get_all(master) == %s'
+        % repr(relation_get_all()))
+    juju_log('DEBUG', 'relation_get_all(slave) == %s'
+        % repr(relation_get_all('slave')))
+
+
+def TODO(msg):
+    juju_log('WARNING', 'TODO: %s' % msg)
+
+
+def install_repmgr():
+    '''Install the repmgr package if it isn't already.'''
+    TODO('Get repmgr packages in official repository')
+    run('add-apt-repository --yes ppa:stub/repmgr')
+    run('apt-get update')
+    run('apt-get -y install -qq repmgr')
+
+
+def master_relation_joined(user):
+    install_repmgr()
+    password = ensure_user(user, replication=True)
+    host = get_unit_host()
+    run("relation-set host='{}' user='{}' password='{}'".format(
+        host, user, password))
+    config_changed(postgresql_config)
+    TODO('Register the master with repmgr')
+
+
+def slave_relation_joined():
+    install_repmgr()
+    host = get_unit_host()
+    run("relation-set host='{}'".format(host))
+    config_changed(postgresql_config)
+
+
+def master_relation_changed():
+    generate_postgresql_hba(postgresql_hba)
+
+
+def slave_relation_changed():
+    TODO('Clone the master')
+
+
+def master_relation_broken():
+    config_changed(postgresql_config)
+
+
+def slave_relation_broken():
+    config_changed(postgresql_config)
+    TODO('Switch slave to standalone mode')
 
 
 def update_nrpe_checks():
@@ -908,8 +1011,6 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
 ###############################################################################
 config_data = config_get()
 version = config_data['version']
-# We need this to evaluate if we're on a version greater than a given number
-config_data['version_float'] = float(version)
 cluster_name = config_data['cluster_name']
 postgresql_data_dir = "/var/lib/postgresql"
 postgresql_cluster_dir = \
@@ -978,6 +1079,21 @@ elif hook_name == "db-admin-relation-broken":
     db_admin_relation_broken(user)
 elif hook_name == "nrpe-external-master-relation-changed":
     update_nrpe_checks()
+elif hook_name == 'master-relation-joined':
+    user = user_name(os.environ['JUJU_RELATION_ID'],
+        os.environ['JUJU_REMOTE_UNIT'])
+    master_relation_joined(user)
+elif hook_name == 'slave-relation-joined':
+    slave_relation_joined()
+elif hook_name == 'master-relation-changed':
+    master_relation_changed()
+elif hook_name == 'slave-relation-changed':
+    slave_relation_changed()
+elif hook_name == 'master-relation-broken':
+    master_relation_broken()
+elif hook_name == 'slave-relation-broken':
+    slave_relation_broken()
+##
 #-------- persistent-storage-relation-joined,
 #         persistent-storage-relation-changed
 #elif hook_name in ["persistent-storage-relation-joined",
@@ -987,5 +1103,5 @@ elif hook_name == "nrpe-external-master-relation-changed":
 #elif hook_name == "persistent-storage-relation-broken":
 #    persistent_storage_relation_broken()
 else:
-    print "Unknown hook"
+    print "Unknown hook {}".format(hook_name)
     sys.exit(1)

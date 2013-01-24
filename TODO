@@ -1,2 +1,7 @@
-- Fix "run" function in hooks.py to log error rather than exiting silently
 - Pick a better way to get machine specs than hacky bash functions - facter?
+
+- Specify usernames when adding a relation, rather than generating them
+  automagically. This will interact better with connection poolers.
+
+- Make config_changed issue a 'reload' instead of a 'restart' when
+  possible, improving availability.
