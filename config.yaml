@@ -93,7 +93,7 @@ options:
   autovacuum:
     default: "on"
     type: string
-    description: Autovacuum
+    description: Autovacuum should almost always be running.
   log_autovacuum_min_duration:
     default: -1
     type: int
@@ -141,14 +141,14 @@ options:
         How much information is written to the WAL. Set to 'minimal' for
         stand alone databases and 'hot_standby' for replicated setups.
   max_wal_senders:
-    default: ""
-    type: string
+    default: 0
+    type: int
     description: |
         Maximum number of hot standbys that can connect using
         streaming replication.
   wal_keep_segments:
-    default: ""
-    type: string
+    default: 0
+    type: int
     description: |
         Number of old WAL files to keep, providing a larger buffer for
         streaming hot standbys to catch up from when lagged. Each WAL file
