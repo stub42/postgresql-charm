@@ -48,16 +48,16 @@ options:
         statements running at least this number
         of milliseconds
   log_checkpoints:
-    default: "off"
-    type: string
+    default: False
+    type: boolean
     description: Log checkpoints
   log_connections:
-    default: "off"
-    type: string
+    default: False
+    type: boolean
     description: Log connections
   log_disconnections:
-    default: "off"
-    type: string
+    default: False
+    type: boolean
     description: Log disconnections
   log_line_prefix:
     default: "%t "
@@ -83,16 +83,16 @@ options:
           %% = '%'
         e.g. '<%u%%%d> '
   log_lock_waits:
-    default: "off"
-    type: string
+    default: False
+    type: boolean
     description: log lock waits >= deadlock_timeout
   log_timezone:
     default: "UTC"
     type: string
     description: Log timezone
   autovacuum:
-    default: "on"
-    type: string
+    default: True
+    type: boolean
     description: Autovacuum should almost always be running.
   log_autovacuum_min_duration:
     default: -1
@@ -123,36 +123,60 @@ options:
     type: string
     descripton: Schema names
   standard_conforming_strings:
-    default: "on"
-    type: string
+    default: True
+    type: boolean
     description: Standard conforming strings
   hot_standby:
-    default: ""
-    type: string
-    description: Hot standby
+    default: False
+    type: boolean
+    description: |
+        Hot standby or warm standby. When True, queries can be run against
+        the database is in recovery or standby mode (ie. replicated).
+        Overridden by juju when master/slave relations are used.
   hot_standby_feedback:
-    default: ""
-    type: string
-    description: Hot standby feedback
+    default: False
+    type: boolean
+    description: |
+        Hot standby feedback, informing a master about in progress
+        transactions on a streaming hot standby and allowing the master to
+        defer cleanup and avoid query cancelations on the hot standby.
   wal_level:
-    default: ""
+    default: minimal
     type: string
     description: |
-        How much information is written to the WAL. Set to 'minimal' for
-        stand alone databases and 'hot_standby' for replicated setups.
+        'minimal', 'archive' or 'hot_standby'. Defines how much information
+        is written to the WAL. Set to 'minimal' for stand alone databases
+        and 'hot_standby' for replicated setups. Overridden by juju when
+        master/slave relations are used.
   max_wal_senders:
     default: 0
     type: int
     description: |
         Maximum number of hot standbys that can connect using
-        streaming replication.
+        streaming replication. Overridden by juju when master/slave relations
+        are used.
   wal_keep_segments:
     default: 0
     type: int
     description: |
         Number of old WAL files to keep, providing a larger buffer for
         streaming hot standbys to catch up from when lagged. Each WAL file
-        is 16MB in size.
+        is 16MB in size. Overridden by juju when master/slave relations
+        are used.
+  archive_mode:
+    default: False
+    type: boolean
+    description: |
+        Enable archiving of WAL files using the command specified by
+        archive_command. Overridden by juju when master/slave relations
+        are used.
+  archive_command:
+    default: ""
+    type: string
+    description: |
+        Command used to archive WAL files when archive_mode is set and
+        wal_level > minimal. Overridden by juju when master/slave relations
+        are used.
   work_mem:
     default: "1MB"
     type: string
