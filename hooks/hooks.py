@@ -191,7 +191,7 @@ def postgresql_is_running():
         return False
     # e.g. output: "Running clusters: 9.1/main"
     vc = "%s/%s" % (config_data["version"], config_data["cluster_name"])
-    return vc in output.split()
+    return vc in output.decode('utf8').split()
 
 
 def postgresql_stop():
@@ -204,6 +204,7 @@ def postgresql_stop():
 def postgresql_start():
     status, output = commands.getstatusoutput("invoke-rc.d postgresql start")
     if status != 0:
+        juju_log('FATAL', output)
         return False
     return postgresql_is_running()
 
@@ -301,7 +302,7 @@ def relation_get(scope=None, unit_name=None):
         if scope is not None:
             relation_cmd_line.append(scope)
         else:
-            relation_cmd_line.append('')
+            relation_cmd_line.append('-')
         if unit_name is not None:
             relation_cmd_line.append(unit_name)
         relation_data = json.loads(subprocess.check_output(relation_cmd_line))
@@ -882,21 +883,6 @@ def db_admin_relation_broken(user):
     generate_postgresql_hba(postgresql_hba)
 
 
-def DUMP():
-    juju_log('DEBUG', 'JUJU_UNIT_NAME == %s' % os.environ['JUJU_UNIT_NAME'])
-    juju_log('DEBUG', 'JUJU_RELATION == %s' % os.environ['JUJU_RELATION'])
-    juju_log('DEBUG', 'JUJU_REMOTE_UNIT == %s' % os.environ['JUJU_REMOTE_UNIT'])
-    juju_log('DEBUG', 'config_get() == %s' % repr(config_get()))
-    juju_log('DEBUG', 'relation_ids(master) == %s'
-        % repr(relation_ids('master')))
-    juju_log('DEBUG', 'relation_ids(slave) == %s'
-        % repr(relation_ids('slave')))
-    juju_log('DEBUG', 'relation_get_all(master) == %s'
-        % repr(relation_get_all()))
-    juju_log('DEBUG', 'relation_get_all(slave) == %s'
-        % repr(relation_get_all('slave')))
-
-
 def TODO(msg):
     juju_log('WARNING', 'TODO: %s' % msg)
 
@@ -909,17 +895,81 @@ def install_repmgr():
     run('apt-get -y install -qq repmgr')
 
 
-def get_ssh_public_key():
-    ssh_dir = '/var/lib/postgresql/.ssh'
-    secret_path = os.path.join(ssh_dir, 'id_rsa')
-    public_path = os.path.join(ssh_dir, 'id_rsa.pub')
+def ensure_local_ssh():
+    """Generate SSH keys for postgres user.
+
+    The public key is stored in public_ssh_key on the relation.
+
+    Bidirectional SSH access is required by repmgr.
+    """
+    comment = 'repmgr key for {}'.format(os.environ['JUJU_RELATION_ID'])
     if not os.path.isdir(postgres_ssh_dir):
         install_dir(postgres_ssh_dir, "postgres", "postgres", 0700)
     if not os.path.exists(postgres_ssh_private_key):
-        run("sudo -u postgres -H ssh-keygen -q -t rsa -C 'repmgr' -N '' "
-            "-f '{}'".format(postgres_ssh_private_key))
-    public_key = open(postgres_ssh_public_key).read()
-    return public_key
+        run("sudo -u postgres -H ssh-keygen -q -t rsa -C '{}' -N '' "
+            "-f '{}'".format(comment, postgres_ssh_private_key))
+    public_key = open(postgres_ssh_public_key, 'r').read().strip()
+    run("relation-set public_ssh_key='{}'".format(public_key))
+
+
+def authorize_remote_ssh():
+    """Add the remote's public SSH key to authorized_keys."""
+    public_key = relation_get('public_ssh_key', os.environ['JUJU_REMOTE_UNIT'])
+    if not public_key:
+        # No public key. The -changed hook was invoked before the remote
+        # -joined hook completed. We are fine though, as this -changed
+        # hook will be reinvoked.
+        juju_log(
+            'DEBUG', 'Public SSH key for {} not found'.format(
+                os.environ['JUJU_REMOTE_UNIT']))
+        raise SystemExit(0)
+    juju_log(
+        'INFO', 'Authorizing SSH access from {} to {}'.format(
+            os.environ['JUJU_REMOTE_UNIT'], os.environ['JUJU_UNIT_NAME']))
+    if not os.path.exists(postgres_ssh_authorized_keys):
+        if not os.path.isdir(postgres_ssh_dir):
+            install_dir(postgres_ssh_dir, "postgres", "postgres", 0700)
+        install_file(
+            public_key, postgres_ssh_authorized_keys,
+            owner="postgres", group="postgres")
+    else:
+        open(postgres_ssh_authorized_keys, "a").write('\n' + public_key)
+
+    # Store a copy of the remote SSH public key, so
+    # deauthorize_remote_ssh() can find it when run from a -broken hook.
+    install_file(
+        public_key,
+        os.path.join(postgres_ssh_dir, os.environ['JUJU_RELATION_ID']))
+
+    TODO("Deal with host keys. Host key checking currently disabled.")
+    ssh_config = os.path.expanduser('~postgres/.ssh/config')
+    if not os.path.exists(ssh_config):
+        install_file(
+            'StrictHostKeyChecking no', ssh_config,
+            owner="postgres", group="postgres")
+
+
+def deauthorize_remote_ssh():
+    """Remove the remote's publish SSH key from authorized_keys."""
+    stored_key = os.path.join(postgres_ssh_dir, os.environ['JUJU_RELATION_ID'])
+
+    if (os.path.exists(postgres_ssh_authorized_keys)
+        and os.path.exists(stored_key)):
+        public_key = open(stored_key, 'r').read()
+
+        # Trash only one copy of the public key in the authorized_keys
+        # file. If we have had units sharing a server, we will end up with
+        # multiple copies of the key in authorized_keys, and by only
+        # removing one the remaining units will still be authorized.
+        authorized_keys = []
+        for key in open(postgres_ssh_authorized_keys, 'r').readlines():
+            if key == public_key:
+                public_key = ''
+            else:
+                authorized_keys.append(key)
+        install_file(
+            '\n'.join(authorized_keys), postgres_ssh_authorized_keys,
+            owner="postgres", group="postgres")
 
 
 def generate_repmgr_config(master=False):
@@ -939,14 +989,13 @@ def generate_repmgr_config(master=False):
 
 
 def master_relation_joined(user):
-    install_repmgr()
+    ensure_local_ssh()
 
     password = ensure_user(user, replication=True)
-    public_key = get_ssh_public_key()
-    run("relation-set user='{}' password='{}' public_key='{}'".format(
-        user, password, public_key))
+    run("relation-set user='{}' password='{}'".format(user, password))
 
     # Configure repmgr
+    install_repmgr()
     repmgr_password = ensure_user('repmgr', admin=True)
     generate_repmgr_config(master=True)
     ensure_database(user, 'repmgr', 'repmgr')
@@ -958,26 +1007,29 @@ def master_relation_joined(user):
 
 
 def slave_relation_joined():
+    ensure_local_ssh()
     install_repmgr()
-    public_key = get_ssh_public_key()
-    run("relation-set public_key='{}'".format(public_key))
     config_changed(postgresql_config)
 
 
 def master_relation_changed():
+    authorize_remote_ssh()
     generate_postgresql_hba(postgresql_hba)
 
 
 def slave_relation_changed():
+    authorize_remote_ssh()
     TODO('Clone the master')
 
 
 def master_relation_broken():
     config_changed(postgresql_config)
+    deauthorize_remote_ssh()
 
 
 def slave_relation_broken():
     config_changed(postgresql_config)
+    deauthorize_remote_ssh()
     TODO('Switch slave to standalone mode')
 
 
@@ -1064,6 +1116,7 @@ postgresql_logs_dir = '{}/logs'.format(postgresql_data_dir)
 postgres_ssh_dir = os.path.expanduser('~postgres/.ssh')
 postgres_ssh_public_key = os.path.join(postgres_ssh_dir, 'id_rsa.pub')
 postgres_ssh_private_key = os.path.join(postgres_ssh_dir, 'id_rsa')
+postgres_ssh_authorized_keys = os.path.join(postgres_ssh_dir, 'authorized_keys')
 repmgr_config = os.path.expanduser('~postgres/repmgr.conf')
 hook_name = os.path.basename(sys.argv[0])
 
