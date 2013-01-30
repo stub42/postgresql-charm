@@ -1068,17 +1068,41 @@ def run_repmgr(cmd, exit_on_error=True):
 def master_relation_joined():
     ensure_local_ssh()
 
-    # Configure repmgr
-    install_repmgr()
-
     # The user repmgr will connect as.
     TODO("Don't use a single repmgr admin user for all units")
     repmgr_password = ensure_user('repmgr', admin=True, replication=True)
-    run("relation-set repmgr_user='{}' repmgr_password='{}'".format(
-        'repmgr', repmgr_password))
-    TODO("Pull node ids from a sequence in the master cluster")
-    generate_repmgr_config(999, get_unit_host(), 'repmgr', repmgr_password)
+
+    # Configure repmgr
+    install_repmgr()
+
+    # We use node_id == 1 for the master.
+    generate_repmgr_config(1, get_unit_host(), 'repmgr', repmgr_password)
+
+    # Dedicated database for repmgr.
     ensure_database('repmgr', 'repmgr', 'repmgr')
+
+    # We use a sequence for generating a unique id per node, as required
+    # by repmgr.
+    con = psycopg2.connect('dbname=repmgr user=postgres')
+    cur = con.cursor()
+    cur.execute('''
+        SELECT TRUE FROM information_schema.sequences
+        WHERE sequence_catalog = 'repmgr' AND sequence_schema='public'
+            AND sequence_name = 'juju_node_id'
+        ''')
+    if cur.fetchone() is None:
+        cur.execute('CREATE SEQUENCE juju_node_id START WITH 2')
+        con.commit()
+
+    # Grab a new unique node_id for the slave in this relation.
+    cur.execute("SELECT nextval('juju_node_id')")
+    slave_node_id = cur.fetchone()[0]
+    del con
+
+    # Inform the slave necessary repmgr config.
+    relation_set(dict(
+        repmgr_user='repmgr', repmgr_password=repmgr_password,
+        repmgr_node_id=slave_node_id))
 
     # Update config, including access controls and replication settings.
     config_changed(postgresql_config)
@@ -1087,7 +1111,7 @@ def master_relation_joined():
 
     if run_repmgr('cluster show', exit_on_error=False)[0] != 0:
         run_repmgr('master register')
-    run("relation-set master_state=registered") # registered with repmgr
+    relation_set(dict(master_state='registered'))  # registered with repmgr
 
 
 def slave_relation_joined():
@@ -1110,16 +1134,13 @@ def slave_relation_changed():
     slave_state = relation_get('slave_state', os.environ['JUJU_UNIT_NAME'])
 
     if master_state == 'slave_authorized' and slave_state == 'standalone':
-        TODO("Confirm $JUJU_RELATION_ID is good enough as a unique id")
-        node_id = int(os.environ['JUJU_RELATION_ID'].split(':')[1])
         generate_repmgr_config(
-            node_id, get_unit_host(),
+            relation_get('repmgr_node_id'), get_unit_host(),
             relation_get('repmgr_user'), relation_get('repmgr_password'))
         config_changed(postgresql_config)
 
         # Clone the master.
         postgresql_stop()
-        TODO('Cloning the master will fail if master already in backup mode')
         run("rm -rf '{}'/*".format(postgresql_cluster_dir))
         run_repmgr(
             '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
