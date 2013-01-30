@@ -168,15 +168,15 @@ options:
     type: boolean
     description: |
         Enable archiving of WAL files using the command specified by
-        archive_command. Overridden by juju when master/slave relations
-        are used.
+        archive_command. If archive_mode is enabled and archive_command not
+        set, then archiving is deferred until archive_command is set and the
+        WAL files will accumulate.
   archive_command:
     default: ""
     type: string
     description: |
         Command used to archive WAL files when archive_mode is set and
-        wal_level > minimal. Overridden by juju when master/slave relations
-        are used.
+        wal_level > minimal.
   work_mem:
     default: "1MB"
     type: string

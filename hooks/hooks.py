@@ -14,6 +14,9 @@ from yaml.constructor import ConstructorError
 import commands
 from pwd import getpwnam
 from grp import getgrnam
+
+# These modules may not be importable until after the install hook has
+# run.
 try:
     import psycopg2
     from jinja2 import Template
@@ -31,7 +34,8 @@ MSG_WARNING = "WARNING"
 
 
 def juju_log(level, msg):
-    subprocess.call(['/usr/bin/juju-log', '-l', level, msg])
+    for line in msg.splitlines():
+        subprocess.call(['/usr/bin/juju-log', '-l', level, msg])
 
 
 ###############################################################################
@@ -149,7 +153,8 @@ EOF
 def run(command, exit_on_error=True):
     try:
         juju_log(MSG_INFO, command)
-        return subprocess.check_output(command, shell=True)
+        return subprocess.check_output(
+            command, stderr=subprocess.STDOUT, shell=True)
     except subprocess.CalledProcessError, e:
         juju_log(MSG_ERROR, "status=%d, output=%s" % (e.returncode, e.output))
         if exit_on_error:
@@ -204,7 +209,7 @@ def postgresql_stop():
 def postgresql_start():
     status, output = commands.getstatusoutput("invoke-rc.d postgresql start")
     if status != 0:
-        juju_log('FATAL', output)
+        juju_log(MSG_CRITICAL, output)
         return False
     return postgresql_is_running()
 
@@ -312,6 +317,14 @@ def relation_get(scope=None, unit_name=None):
         return(relation_data)
 
 
+def relation_set(keyvalues, relation_id=None):
+    args = []
+    if relation_id:
+        args.extend(['-r', relation_id])
+    args.extend(["{}='{}'".format(k, v) for k,v in keyvalues.items()])
+    run("relation-set {}".format(' '.join(args)))
+
+
 #------------------------------------------------------------------------------
 # relation_ids:  Returns a list of relation ids
 #                optional parameters: relation_type
@@ -406,9 +419,19 @@ def create_postgresql_config(postgresql_config):
     num_slaves = len(relation_ids(relation_types=['slave', 'master']))
     modified_config_data = dict(config_data)
     if num_slaves > 0:
-        juju_log('DEBUG', 'Replicated. Enforcing minimal replication settings')
+        juju_log(
+            MSG_DEBUG, 'Replicated. Enforcing minimal replication settings')
         modified_config_data['hot_standby'] = 'on'
         modified_config_data['wal_level'] = 'hot_standby'
+        if modified_config_data['archive_mode'] is False:
+            # If archive_mode was not configured, we need to override it
+            # to keep repmgr happy despite the fact it doesn't really
+            # need it. We also need set a noop archive_command. If
+            # archive_mode was already set, we don't mess with the
+            # archive_command setting.
+            modified_config_data['archive_mode'] = 'True'
+            if not config_data['archive_command']:
+                modified_config_data['archive_command'] = 'cd .'
         if config_data['max_wal_senders']:
             modified_config_data['max_wal_senders'] = max(
                 config_data['max_wal_senders'], num_slaves)
@@ -416,11 +439,6 @@ def create_postgresql_config(postgresql_config):
             modified_config_data['max_wal_senders'] = num_slaves
         TODO("Don't force hardcoded wal_keep_segments==5000 when replicated")
         modified_config_data['wal_keep_segments'] = '5000'
-        modified_config_data['archive_mode'] = 'on'
-        TODO(
-            "Ensure archive_command modified by repmgr doesn't get blatted "
-            "by juju")
-        modified_config_data['archive_command'] = "cd ."
 
     # Send config data to the template
     # Return it as pg_config
@@ -447,24 +465,58 @@ def create_postgresql_ident(postgresql_ident):
 # generate_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
 def generate_postgresql_hba(postgresql_hba, do_reload=True):
-    TODO('Add permissions for replication connections')
     relation_data = relation_get_all(relation_types=['db', 'db-admin'])
     config_change_command = config_data["config_change_command"]
     for relation in relation_data:
-        if re.search('db-admin', relation['relation-id']):
+        relation_id = relation['relation-id']
+        if relation_id.startswith('db-admin:'):
             relation['user'] = 'all'
             relation['database'] = 'all'
+        elif relation_id.startswith('db:'):
+            relation['user'] = user_name(
+                relation['relation-id'], relation['unit'])
         else:
-            relation['user'] = \
-                user_name(relation['relation-id'], relation['unit'])
+            raise RuntimeError(
+                'Unknown relation type {}'.format(repr(relation_id)))
+
+    # Replication connections on the master.
+    for relation in relation_get_all(relation_types=['master']):
+        remote_replication = {
+            'database': 'replication', 'user': 'repmgr',
+            'private-address': relation['private-address'],
+            'relation-id': relation['relation-id'],
+            'unit': relation['private-address'],
+            }
+        remote_repmgr = {
+            'database': 'repmgr', 'user': 'repmgr',
+            'private-address': relation['private-address'],
+            'relation-id': relation['relation-id'],
+            'unit': relation['private-address'],
+            }
+        relation_data.extend([remote_replication, remote_repmgr])
+
+    # Local repmgr connections.
+    for relation in relation_get_all(relation_types=['master', 'slave']):
+        local_repmgr = {
+            'database': 'repmgr', 'user': 'repmgr',
+            'private-address': get_unit_host(),
+            'relation-id': relation['relation-id'],
+            'unit': 'this unit',
+            }
+        relation_data.append(local_repmgr)
+
     juju_log(MSG_INFO, str(relation_data))
     pg_hba_template = \
         Template(
-            open("templates/pg_hba.conf.tmpl").read()).render(access_list=
-                relation_data)
+            open("templates/pg_hba.conf.tmpl").read()).render(
+                access_list=relation_data)
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
     if do_reload:
+        if config_change_command == 'reload':
+            TODO(
+                "Regenerating pg_hba.conf does unnecessary restarts. "
+                "Reload is fine.")
         if config_change_command in ["reload", "restart"]:
             subprocess.call(['invoke-rc.d', 'postgresql',
                 config_data["config_change_command"]])
@@ -797,11 +849,6 @@ def ensure_user(user, admin=False, replication=False):
     if password is None:
         password = pwgen()
         set_password(user, password)
-    ## if replication:
-    ##     # A replication user used by the master/slave relation also
-    ##     # needs to be a superuser, because the slave needs to connect to
-    ##     # the master to create users and databases on demand.
-    ##     admin=True
     if run_select_as_postgres(sql, user)[0] != 0:
         action = ["ALTER ROLE", user]
     else:
@@ -884,7 +931,7 @@ def db_admin_relation_broken(user):
 
 
 def TODO(msg):
-    juju_log('WARNING', 'TODO: %s' % msg)
+    juju_log(MSG_WARNING, 'TODO> %s' % msg)
 
 
 def install_repmgr():
@@ -892,7 +939,8 @@ def install_repmgr():
     TODO('Get repmgr packages in official repository')
     run('add-apt-repository --yes ppa:stub/repmgr')
     run('apt-get update')
-    run('apt-get -y install -qq repmgr')
+    apt_get_install('repmgr')
+    apt_get_install('postgresql-9.1-repmgr')
 
 
 def ensure_local_ssh():
@@ -920,11 +968,11 @@ def authorize_remote_ssh():
         # -joined hook completed. We are fine though, as this -changed
         # hook will be reinvoked.
         juju_log(
-            'DEBUG', 'Public SSH key for {} not found'.format(
+            MSG_DEBUG,'Public SSH key for {} not found'.format(
                 os.environ['JUJU_REMOTE_UNIT']))
         raise SystemExit(0)
     juju_log(
-        'INFO', 'Authorizing SSH access from {} to {}'.format(
+        MSG_INFO, 'Authorizing SSH access from {} to {}'.format(
             os.environ['JUJU_REMOTE_UNIT'], os.environ['JUJU_UNIT_NAME']))
     if not os.path.exists(postgres_ssh_authorized_keys):
         if not os.path.isdir(postgres_ssh_dir):
@@ -972,57 +1020,119 @@ def deauthorize_remote_ssh():
             owner="postgres", group="postgres")
 
 
-def generate_repmgr_config(master=False):
-    # Need a unique integer per node.
-    if master:
-        node_id = 0
-    else:
-        node_id = os.environ['JUJU_RELATION_ID'].split(':')[1]
+def generate_repmgr_config(node_id, host, user, password):
+    """Regenerate the repmgr config file.
+
+    node_id is an integer, and must be a unique in the cluster.
+    """
     params = {
         'node_id': node_id,
         'node_name': os.environ['JUJU_UNIT_NAME'],
-        'host': get_unit_host()
+        'host': host,
+        'user': user,
         }
     config = Template(
         open("templates/repmgr.conf.tmpl").read()).render(params)
-    install_file(config, repmgr_config, mode=0755)
+    install_file(
+        config, repmgr_config, owner="postgres", group="postgres", mode=0o400)
+
+    TODO("Don't mindlessly blat .pgpass - juju can't monopolize it")
+    pgpass = "*:*:*:{}:{}".format(user, password)
+    install_file(
+        pgpass, os.path.expanduser('~postgres/.pgpass'),
+        owner="postgres", group="postgres", mode=0o400)
 
 
-def master_relation_joined(user):
+def run_repmgr(cmd, exit_on_error=True):
+    # 'standby clone' issues spurious warnings if we include an
+    # unnecessary config file. This hack is good enough to silence the
+    # warnings.
+    if cmd.startswith('standby clone'):
+        config_flag = ''
+    else:
+        config_flag = "-f '{}'".format(repmgr_config)
+    full_command = "sudo -u postgres repmgr {} {}".format(config_flag, cmd)
+    juju_log(MSG_DEBUG, full_command)
+    try:
+        output = subprocess.check_output(
+            full_command, stderr=subprocess.STDOUT, shell=True)
+        returncode = 0
+    except subprocess.CalledProcessError, x:
+        if exit_on_error:
+            juju_log(MSG_ERROR, x.output)
+            raise SystemExit(x.returncode)
+        returncode = x.returncode
+
+    juju_log(MSG_DEBUG, output)
+    return returncode, output
+
+
+def master_relation_joined():
     ensure_local_ssh()
-
-    password = ensure_user(user, replication=True)
-    run("relation-set user='{}' password='{}'".format(user, password))
 
     # Configure repmgr
     install_repmgr()
-    repmgr_password = ensure_user('repmgr', admin=True)
-    generate_repmgr_config(master=True)
-    ensure_database(user, 'repmgr', 'repmgr')
+
+    # The user repmgr will connect as.
+    TODO("Don't use a single repmgr admin user for all units")
+    repmgr_password = ensure_user('repmgr', admin=True, replication=True)
+    run("relation-set repmgr_user='{}' repmgr_password='{}'".format(
+        'repmgr', repmgr_password))
+    TODO("Pull node ids from a sequence in the master cluster")
+    generate_repmgr_config(999, get_unit_host(), 'repmgr', repmgr_password)
+    ensure_database('repmgr', 'repmgr', 'repmgr')
 
     # Update config, including access controls and replication settings.
     config_changed(postgresql_config)
+    TODO("Should not need to force restart after config change")
+    postgresql_restart()
 
-    TODO('Register the master with repmgr')
+    if run_repmgr('cluster show')[0] != 0:
+        run_repmgr('master register')
+    run("relation-set master_state=registered") # registered with repmgr
 
 
 def slave_relation_joined():
     ensure_local_ssh()
     install_repmgr()
-    config_changed(postgresql_config)
+    relation_set(dict(slave_state='standalone'))
 
 
 def master_relation_changed():
     authorize_remote_ssh()
     generate_postgresql_hba(postgresql_hba)
+    relation_set(dict(master_state='slave_authorized'))
 
 
 def slave_relation_changed():
     authorize_remote_ssh()
-    TODO('Clone the master')
+
+    master_state = relation_get('master_state')
+    slave_state = relation_get('slave_state', os.environ['JUJU_UNIT_NAME'])
+
+    if master_state == 'slave_authorized' and slave_state == 'standalone':
+        TODO("Confirm $JUJU_RELATION_ID is good enough as a unique id")
+        node_id = int(os.environ['JUJU_RELATION_ID'].split(':')[1])
+        generate_repmgr_config(
+            node_id, get_unit_host(),
+            relation_get('repmgr_user'), relation_get('repmgr_password'))
+        config_changed(postgresql_config)
+
+        # Clone the master.
+        postgresql_stop()
+        TODO('Cloning the master will fail if master already in backup mode')
+        run("rm -rf '{}'/*".format(postgresql_cluster_dir))
+        run_repmgr(
+            '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
+            'standby clone {}'.format(
+                postgresql_cluster_dir, relation_get('private-address')))
+        postgresql_start()
+        run_repmgr('standby register')
+        relation_set(dict(slave_state='registered'))
 
 
 def master_relation_broken():
+    TODO("Deregister removed slave from repmgr")
     config_changed(postgresql_config)
     deauthorize_remote_ssh()
 
@@ -1174,9 +1284,7 @@ elif hook_name == "db-admin-relation-broken":
 elif hook_name == "nrpe-external-master-relation-changed":
     update_nrpe_checks()
 elif hook_name == 'master-relation-joined':
-    user = user_name(os.environ['JUJU_RELATION_ID'],
-        os.environ['JUJU_REMOTE_UNIT'])
-    master_relation_joined(user)
+    master_relation_joined()
 elif hook_name == 'slave-relation-joined':
     slave_relation_joined()
 elif hook_name == 'master-relation-changed':
