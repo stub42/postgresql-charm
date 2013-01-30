@@ -479,7 +479,7 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             raise RuntimeError(
                 'Unknown relation type {}'.format(repr(relation_id)))
 
-    # Replication connections on the master.
+    # Replication connections.
     for relation in relation_get_all(relation_types=['master']):
         remote_replication = {
             'database': 'replication', 'user': 'repmgr',
@@ -487,13 +487,15 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             'relation-id': relation['relation-id'],
             'unit': relation['private-address'],
             }
+        relation_data.append(remote_replication)
+    for relation in relation_get_all(relation_types=['master', 'slave']):
         remote_repmgr = {
             'database': 'repmgr', 'user': 'repmgr',
             'private-address': relation['private-address'],
             'relation-id': relation['relation-id'],
             'unit': relation['private-address'],
             }
-        relation_data.extend([remote_replication, remote_repmgr])
+        relation_data.append(remote_repmgr)
 
     # Local repmgr connections.
     for relation in relation_get_all(relation_types=['master', 'slave']):
@@ -1102,6 +1104,7 @@ def master_relation_changed():
 
 def slave_relation_changed():
     authorize_remote_ssh()
+    generate_postgresql_hba(postgresql_hba)
 
     master_state = relation_get('master_state')
     slave_state = relation_get('slave_state', os.environ['JUJU_UNIT_NAME'])
