@@ -35,7 +35,7 @@ MSG_WARNING = "WARNING"
 
 def juju_log(level, msg):
     for line in msg.splitlines():
-        subprocess.call(['/usr/bin/juju-log', '-l', level, msg])
+        subprocess.call(['/usr/bin/juju-log', '-l', level, line])
 
 
 ###############################################################################
@@ -1044,14 +1044,8 @@ def generate_repmgr_config(node_id, host, user, password):
 
 
 def run_repmgr(cmd, exit_on_error=True):
-    # 'standby clone' issues spurious warnings if we include an
-    # unnecessary config file. This hack is good enough to silence the
-    # warnings.
-    if cmd.startswith('standby clone'):
-        config_flag = ''
-    else:
-        config_flag = "-f '{}'".format(repmgr_config)
-    full_command = "sudo -u postgres repmgr {} {}".format(config_flag, cmd)
+    full_command = "sudo -u postgres repmgr -f '{}' {}".format(
+        repmgr_config, cmd)
     juju_log(MSG_DEBUG, full_command)
     try:
         output = subprocess.check_output(
@@ -1062,8 +1056,10 @@ def run_repmgr(cmd, exit_on_error=True):
             juju_log(MSG_ERROR, x.output)
             raise SystemExit(x.returncode)
         returncode = x.returncode
+        output = x.output
 
-    juju_log(MSG_DEBUG, output)
+    ## Too noisy for slow logging. Enable if clone becomes less noisy.
+    ## juju_log(MSG_DEBUG, output)
     return returncode, output
 
 
@@ -1087,7 +1083,7 @@ def master_relation_joined():
     TODO("Should not need to force restart after config change")
     postgresql_restart()
 
-    if run_repmgr('cluster show')[0] != 0:
+    if run_repmgr('cluster show', exit_on_error=False)[0] != 0:
         run_repmgr('master register')
     run("relation-set master_state=registered") # registered with repmgr
 
@@ -1131,8 +1127,16 @@ def slave_relation_changed():
         relation_set(dict(slave_state='registered'))
 
 
+def master_relation_departed():
+    juju_log(MSG_WARNING, "Bug #1110317 master-relation-departed")
+
+
+def slave_relation_departed():
+    juju_log(MSG_WARNING, "Bug #1110317 slave-relation-departed")
+
+
 def master_relation_broken():
-    TODO("Deregister removed slave from repmgr")
+    TODO("Deregister removed slave from repmgr, blocked by Bug #1110317")
     config_changed(postgresql_config)
     deauthorize_remote_ssh()
 
@@ -1291,6 +1295,10 @@ elif hook_name == 'master-relation-changed':
     master_relation_changed()
 elif hook_name == 'slave-relation-changed':
     slave_relation_changed()
+elif hook_name == 'master-relation-departed':
+    master_relation_departed()
+elif hook_name == 'slave-relation-departed':
+    slave_relation_departed()
 elif hook_name == 'master-relation-broken':
     master_relation_broken()
 elif hook_name == 'slave-relation-broken':
