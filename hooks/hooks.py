@@ -958,13 +958,15 @@ def ensure_local_ssh():
         run("sudo -u postgres -H ssh-keygen -q -t rsa -C '{}' -N '' "
             "-f '{}'".format(comment, postgres_ssh_private_key))
     public_key = open(postgres_ssh_public_key, 'r').read().strip()
-    run("relation-set public_ssh_key='{}'".format(public_key))
+    host_key = open('/etc/ssh/ssh_host_ecdsa_key.pub').read().strip()
+    run("relation-set public_ssh_key='{}' ssh_host_key='{}'".format(
+        public_key, host_key))
 
 
 def authorize_remote_ssh():
     """Add the remote's public SSH key to authorized_keys."""
-    public_key = relation_get('public_ssh_key', os.environ['JUJU_REMOTE_UNIT'])
-    if not public_key:
+    relation = relation_get()
+    if not relation.has_key('public_ssh_key'):
         # No public key. The -changed hook was invoked before the remote
         # -joined hook completed. We are fine though, as this -changed
         # hook will be reinvoked.
@@ -982,18 +984,28 @@ def authorize_remote_ssh():
     if not os.path.isdir("ssh_keys"):
         install_dir("ssh_keys", 0o700)
     install_file(
-        public_key,
+        relation['public_ssh_key'],
         os.path.join("ssh_keys", os.environ['JUJU_RELATION_ID']))
 
     # Regenerate the authorized_keys file.
     generate_ssh_authorized_keys()
 
-    TODO("Deal with host keys. Host key checking currently disabled.")
-    ssh_config = os.path.expanduser('~postgres/.ssh/config')
-    if not os.path.exists(ssh_config):
-        install_file(
-            'StrictHostKeyChecking no', ssh_config,
-            owner="postgres", group="postgres", mode=0o600)
+    host_key = '{} {}'.format(
+        relation['private-address'], relation['ssh_host_key'],
+        os.environ['JUJU_REMOTE_UNIT'])
+    if os.path.exists(postgres_ssh_known_hosts):
+        # Suck in all lines, except those that will conflict with the
+        # newly distributed host key. Perhaps an IP address has been
+        # reused?
+        known_hosts = [
+            host for host in open(postgres_ssh_known_hosts).readlines()
+            if not host.startswith(relation['private-address'] + ' ')]
+    else:
+        known_hosts = []
+    known_hosts.append(host_key)
+    install_file(
+        '\n'.join(known_hosts), postgres_ssh_known_hosts,
+        owner="postgres", group="postgres", mode=0o644)
 
 
 def generate_ssh_authorized_keys():
@@ -1298,6 +1310,7 @@ postgres_ssh_dir = os.path.expanduser('~postgres/.ssh')
 postgres_ssh_public_key = os.path.join(postgres_ssh_dir, 'id_rsa.pub')
 postgres_ssh_private_key = os.path.join(postgres_ssh_dir, 'id_rsa')
 postgres_ssh_authorized_keys = os.path.join(postgres_ssh_dir, 'authorized_keys')
+postgres_ssh_known_hosts = os.path.join(postgres_ssh_dir, 'known_hosts')
 postgres_pgpass = os.path.expanduser('~postgres/.pgpass')
 repmgr_config = os.path.expanduser('~postgres/repmgr.conf')
 hook_name = os.path.basename(sys.argv[0])
