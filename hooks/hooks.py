@@ -24,6 +24,7 @@ try:
 except ImportError:
     pass
 
+
 ###############################################################################
 # Supporting functions
 ###############################################################################
@@ -474,8 +475,6 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             relation['user'] = 'all'
             relation['database'] = 'all'
         elif relation_id.startswith('db:'):
-            relation['user'] = user_name(
-                relation['relation-id'], relation['unit'])
             relation['user'] = user_name(relation['relation-id'],
                                          relation['unit'])
             relation['schema_user'] = user_name(relation['relation-id'],
