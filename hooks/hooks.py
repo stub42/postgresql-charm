@@ -34,8 +34,7 @@ MSG_WARNING = "WARNING"
 
 
 def juju_log(level, msg):
-    for line in msg.splitlines():
-        subprocess.call(['/usr/bin/juju-log', '-l', level, line])
+    subprocess.call(['/usr/bin/juju-log', '-l', level, msg])
 
 
 ###############################################################################
