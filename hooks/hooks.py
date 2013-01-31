@@ -1037,7 +1037,6 @@ def generate_repmgr_config(node_id, host, user, password):
     install_file(
         config, repmgr_config, owner="postgres", group="postgres", mode=0o400)
 
-    TODO("Don't mindlessly blat .pgpass - juju can't monopolize it")
     pgpass = "*:*:*:{}:{}".format(user, password)
     install_file(
         pgpass, os.path.expanduser('~postgres/.pgpass'),
@@ -1068,7 +1067,6 @@ def master_relation_joined():
     ensure_local_ssh()
 
     # The user repmgr will connect as.
-    TODO("Don't use a single repmgr admin user for all units")
     repmgr_password = ensure_user('repmgr', admin=True, replication=True)
 
     # Configure repmgr
