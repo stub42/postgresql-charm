@@ -161,8 +161,14 @@ options:
     description: |
         Number of old WAL files to keep, providing a larger buffer for
         streaming hot standbys to catch up from when lagged. Each WAL file
-        is 16MB in size. Overridden by juju when master/slave relations
-        are used.
+        is 16MB in size. When this service is in master/slave relationships,
+        the larger value of wal_keep_segments and
+        replicated_wal_keep_segments is used.
+  replicated_wal_keep_segments:
+    default: 5000
+    type: int
+    description: |
+        Value of wal_keep_segments used when this server replicated.
   archive_mode:
     default: False
     type: boolean

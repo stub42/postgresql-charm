@@ -436,8 +436,9 @@ def create_postgresql_config(postgresql_config):
                 config_data['max_wal_senders'], num_slaves)
         else:
             modified_config_data['max_wal_senders'] = num_slaves
-        TODO("Don't force hardcoded wal_keep_segments==5000 when replicated")
-        modified_config_data['wal_keep_segments'] = '5000'
+        modified_config_data['wal_keep_segments'] = max(
+            modified_config_data['wal_keep_segments'],
+            modified_config_data['replicated_wal_keep_segments'])
 
     # Send config data to the template
     # Return it as pg_config
