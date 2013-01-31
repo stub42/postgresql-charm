@@ -515,10 +515,6 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
     if do_reload:
-        if config_change_command == 'reload':
-            TODO(
-                "Regenerating pg_hba.conf does unnecessary restarts. "
-                "Reload is fine.")
         if config_change_command in ["reload", "restart"]:
             subprocess.call(['invoke-rc.d', 'postgresql',
                 config_data["config_change_command"]])
