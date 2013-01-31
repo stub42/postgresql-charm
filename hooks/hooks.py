@@ -1074,6 +1074,25 @@ def run_repmgr(cmd, exit_on_error=True):
     return returncode, output
 
 
+def drop_database(dbname, warn=True):
+    timeout = 120
+    now = time.time()
+    while True:
+        try:
+            db_cursor(autocommit=True).execute(
+                'DROP DATABASE IF EXISTS "{}"'.format(dbname))
+        except psycopg2.OperationalError:
+            if time.time() > now + timeout:
+                if warn:
+                    juju_log(
+                        MSG_WARN, "Unable to drop database {}".format(dbname))
+                else:
+                    raise
+            time.sleep(0.5)
+        else:
+            break
+
+
 def repmgr_master_gc():
     """Remove old nodes from the repmgr database, tear down if no slaves"""
     wanted_node_ids = ['1']  # Master hardcoded to node_id == 1
@@ -1086,12 +1105,12 @@ def repmgr_master_gc():
             wanted_node_ids.append(str(int(node_id)))
     if len(wanted_node_ids) == 1:
         # No more slaves. Trash repmgr.
-        cur = db_cursor(autocommit=True)
-        cur.execute('DROP DATABASE IF EXISTS repmgr')
+        juju_log(MSG_INFO, "No longer replicated. Dropping repmgr.")
         if os.path.exists(repmgr_config):
             os.unlink(repmgr_config)
         if os.path.exists(postgres_pgpass):
             os.unlink(postgres_pgpass)
+        drop_database('repmgr')
     else:
         # At least one other slave.
         cur = db_cursor(autocommit=True, db='repmgr')
@@ -1223,7 +1242,7 @@ def slave_relation_broken():
             sys.exit(1)
         time.sleep(0.5)
     juju_log(MSG_INFO, "Slave promoted to standalone. Dropping repmgr db.")
-    db_cursor(autocommit=True).execute("DROP DATABASE IF EXISTS repmgr")
+    drop_database('repmgr')
 
 
 def update_nrpe_checks():
