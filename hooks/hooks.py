@@ -619,8 +619,8 @@ def get_password(user):
         return None
 
 
-def db_cursor(autocommit=False):
-    conn = psycopg2.connect("dbname=template1 user=postgres")
+def db_cursor(autocommit=False, db='template1'):
+    conn = psycopg2.connect("dbname={} user=postgres".format(db))
     conn.autocommit = autocommit
     return conn.cursor()
 
@@ -1063,6 +1063,32 @@ def run_repmgr(cmd, exit_on_error=True):
     return returncode, output
 
 
+def repmgr_master_gc():
+    """Remove old nodes from the repmgr database, tear down if no slaves"""
+    wanted_node_ids = ['1']  # Master hardcoded to node_id == 1
+    for relid in relation_ids(['master']):
+        cmd = ['relation-get', '--format=json',
+            '-r', relid, 'repmgr_node_id', os.environ['JUJU_UNIT_NAME']]
+        node_id = json.loads(subprocess.check_output(cmd))
+        if node_id:
+            # We want a string, but confirm it is an integer first.
+            wanted_node_ids.append(str(int(node_id)))
+    if len(wanted_node_ids) == 1:
+        # No more slaves. Trash repmgr.
+        cur = db_cursor(autocommit=True)
+        cur.execute('DROP DATABASE IF EXISTS repmgr')
+        if os.path.exists(repmgr_config):
+            os.unlink(repmgr_config)
+        if os.path.exists(postgres_pgpass):
+            os.unlink(postgres_pgpass)
+    else:
+        # At least one other slave.
+        cur = db_cursor(autocommit=True, db='repmgr')
+        sql = "DELETE FROM repmgr_juju.repl_nodes WHERE id NOT IN ({})".format(
+                ', '.join(wanted_node_ids))
+        cur.execute(sql)
+
+
 def master_relation_joined():
     ensure_local_ssh()
 
@@ -1080,8 +1106,7 @@ def master_relation_joined():
 
     # We use a sequence for generating a unique id per node, as required
     # by repmgr.
-    con = psycopg2.connect('dbname=repmgr user=postgres')
-    cur = con.cursor()
+    cur = db_cursor(autocommit=True, db='repmgr')
     cur.execute('''
         SELECT TRUE FROM information_schema.sequences
         WHERE sequence_catalog = 'repmgr' AND sequence_schema='public'
@@ -1089,12 +1114,10 @@ def master_relation_joined():
         ''')
     if cur.fetchone() is None:
         cur.execute('CREATE SEQUENCE juju_node_id START WITH 2')
-        con.commit()
 
     # Grab a new unique node_id for the slave in this relation.
     cur.execute("SELECT nextval('juju_node_id')")
     slave_node_id = cur.fetchone()[0]
-    del con
 
     # Inform the slave necessary repmgr config.
     relation_set(dict(
@@ -1109,6 +1132,7 @@ def master_relation_joined():
     if run_repmgr('cluster show', exit_on_error=False)[0] != 0:
         run_repmgr('master register')
     relation_set(dict(master_state='registered'))  # registered with repmgr
+
 
 
 def slave_relation_joined():
@@ -1137,6 +1161,7 @@ def slave_relation_changed():
         config_changed(postgresql_config)
 
         # Clone the master.
+        juju_log(MSG_INFO, "Destroying existing cluster on slave")
         postgresql_stop()
         run("rm -rf '{}'/*".format(postgresql_cluster_dir))
         run_repmgr(
@@ -1144,21 +1169,22 @@ def slave_relation_changed():
             'standby clone {}'.format(
                 postgresql_cluster_dir, relation_get('private-address')))
         postgresql_start()
+        juju_log(MSG_INFO, "Cloned cluster")
         run_repmgr('standby register')
         relation_set(dict(slave_state='registered'))
-
-
-def master_relation_departed():
-    TODO("Deregister removed slave from repmgr, blocked by Bug #1110317")
-
-
-def slave_relation_departed():
-    TODO("Deregister removed slave from repmgr, blocked by Bug #1110317")
+        juju_log(MSG_INFO, "Registered cluster with repmgr")
 
 
 def master_relation_broken():
     config_changed(postgresql_config)
     deauthorize_remote_ssh()
+    repmgr_master_gc()
+
+
+def cluster_is_in_recovery():
+    cur = db_cursor(autocommit=True)
+    cur.execute("SELECT pg_is_in_recovery()")
+    return cur.fetchone()[0]
 
 
 def slave_relation_broken():
@@ -1169,26 +1195,24 @@ def slave_relation_broken():
     # already torn down permissions. Do this in the _departed hook.
     # For now, invoke pg_ctl directly to do the promotion.
     # run_repmgr("standby promote")
-    pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
-    run("sudo -u postgres {} promote -D '{}'".format(
-        pg_ctl, postgresql_cluster_dir))
+    if cluster_is_in_recovery():
+        pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
+        run("sudo -u postgres {} promote -D '{}'".format(
+            pg_ctl, postgresql_cluster_dir))
     os.unlink(repmgr_config)
     os.unlink(postgres_pgpass)
 
     # Once promotion has completed and the cluster is writable, drop the
     # repmgr database.
-    cur = db_cursor(autocommit=True)
     timeout = 120
     start = time.time()
-    while True:
-        cur.execute("SELECT pg_is_in_recovery()")
-        if not cur.fetchone()[0]:
-            break
+    while cluster_is_in_recovery():
         if time.time() > start + timeout:
             juju_log(MSG_ERROR, "Failed to promote slave to standalone")
             sys.exit(1)
+        time.sleep(0.5)
     juju_log(MSG_INFO, "Slave promoted to standalone. Dropping repmgr db.")
-    cur.execute("DROP DATABASE IF EXISTS repmgr")
+    db_cursor(autocommit=True).execute("DROP DATABASE IF EXISTS repmgr")
 
 
 def update_nrpe_checks():
@@ -1341,10 +1365,6 @@ elif hook_name == 'master-relation-changed':
     master_relation_changed()
 elif hook_name == 'slave-relation-changed':
     slave_relation_changed()
-elif hook_name == 'master-relation-departed':
-    master_relation_departed()
-elif hook_name == 'slave-relation-departed':
-    slave_relation_departed()
 elif hook_name == 'master-relation-broken':
     master_relation_broken()
 elif hook_name == 'slave-relation-broken':
