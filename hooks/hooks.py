@@ -975,50 +975,48 @@ def authorize_remote_ssh():
     juju_log(
         MSG_INFO, 'Authorizing SSH access from {} to {}'.format(
             os.environ['JUJU_REMOTE_UNIT'], os.environ['JUJU_UNIT_NAME']))
-    if not os.path.exists(postgres_ssh_authorized_keys):
-        if not os.path.isdir(postgres_ssh_dir):
-            install_dir(postgres_ssh_dir, "postgres", "postgres", 0700)
-        install_file(
-            public_key, postgres_ssh_authorized_keys,
-            owner="postgres", group="postgres")
-    else:
-        open(postgres_ssh_authorized_keys, "a").write('\n' + public_key)
 
     # Store a copy of the remote SSH public key, so
-    # deauthorize_remote_ssh() can find it when run from a -broken hook.
+    # generate_ssh_authorized_keys() will find it, even
+    # when run from a -broken hook.
+    if not os.path.isdir("ssh_keys"):
+        install_dir("ssh_keys", 0o700)
     install_file(
         public_key,
-        os.path.join(postgres_ssh_dir, os.environ['JUJU_RELATION_ID']))
+        os.path.join("ssh_keys", os.environ['JUJU_RELATION_ID']))
+
+    # Regenerate the authorized_keys file.
+    generate_ssh_authorized_keys()
 
     TODO("Deal with host keys. Host key checking currently disabled.")
     ssh_config = os.path.expanduser('~postgres/.ssh/config')
     if not os.path.exists(ssh_config):
         install_file(
             'StrictHostKeyChecking no', ssh_config,
-            owner="postgres", group="postgres")
+            owner="postgres", group="postgres", mode=0o600)
 
 
-def deauthorize_remote_ssh():
-    """Remove the remote's publish SSH key from authorized_keys."""
-    stored_key = os.path.join(postgres_ssh_dir, os.environ['JUJU_RELATION_ID'])
+def generate_ssh_authorized_keys():
+    """Generate the SSH authorized_keys file.
 
-    if (os.path.exists(postgres_ssh_authorized_keys)
-        and os.path.exists(stored_key)):
-        public_key = open(stored_key, 'r').read()
+    This will overwrite the existing authorized_keys file, so you can't
+    run multiple copies of this charm on the same server.
+    """
+    # Generate a list of keys that are no longer authorized.
+    all_relation_ids = os.listdir('ssh_keys')
+    valid_relation_ids = relation_ids(['master', 'slave'])
 
-        # Trash only one copy of the public key in the authorized_keys
-        # file. If we have had units sharing a server, we will end up with
-        # multiple copies of the key in authorized_keys, and by only
-        # removing one the remaining units will still be authorized.
-        authorized_keys = []
-        for key in open(postgres_ssh_authorized_keys, 'r').readlines():
-            if key == public_key:
-                public_key = ''
-            else:
-                authorized_keys.append(key)
-        install_file(
-            '\n'.join(authorized_keys), postgres_ssh_authorized_keys,
-            owner="postgres", group="postgres")
+    wanted_keys = [open(os.path.join('ssh_keys', relid)).read()
+            for relid in valid_relation_ids]
+
+    install_file(
+        '\n'.join(wanted_keys), postgres_ssh_authorized_keys,
+        owner="postgres", group="postgres", mode=0o400)
+
+    # Cleanup
+    for relid in all_relation_ids:
+        if relid not in valid_relation_ids:
+            os.unlink(os.path.join('ssh_keys', relid))
 
 
 def generate_repmgr_config(node_id, host, user, password):
@@ -1177,8 +1175,8 @@ def slave_relation_changed():
 
 def master_relation_broken():
     config_changed(postgresql_config)
-    deauthorize_remote_ssh()
     repmgr_master_gc()
+    generate_ssh_authorized_keys()
 
 
 def cluster_is_in_recovery():
@@ -1189,7 +1187,7 @@ def cluster_is_in_recovery():
 
 def slave_relation_broken():
     config_changed(postgresql_config)
-    deauthorize_remote_ssh()
+    generate_ssh_authorized_keys()
 
     # Can't use repmgr in the -broken hook, as the master end may have
     # already torn down permissions. Do this in the _departed hook.
