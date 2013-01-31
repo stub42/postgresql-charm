@@ -631,7 +631,7 @@ def run_sql_as_postgres(sql, *parameters):
         cur.execute(sql, parameters)
         return cur.statusmessage
     except psycopg2.ProgrammingError:
-        print sql
+        juju_log(MSG_CRITICAL, sql)
         raise
 
 
@@ -1039,7 +1039,7 @@ def generate_repmgr_config(node_id, host, user, password):
 
     pgpass = "*:*:*:{}:{}".format(user, password)
     install_file(
-        pgpass, os.path.expanduser('~postgres/.pgpass'),
+        pgpass, postgres_pgpass,
         owner="postgres", group="postgres", mode=0o400)
 
 
@@ -1149,15 +1149,14 @@ def slave_relation_changed():
 
 
 def master_relation_departed():
-    juju_log(MSG_WARNING, "Bug #1110317 master-relation-departed")
+    TODO("Deregister removed slave from repmgr, blocked by Bug #1110317")
 
 
 def slave_relation_departed():
-    juju_log(MSG_WARNING, "Bug #1110317 slave-relation-departed")
+    TODO("Deregister removed slave from repmgr, blocked by Bug #1110317")
 
 
 def master_relation_broken():
-    TODO("Deregister removed slave from repmgr, blocked by Bug #1110317")
     config_changed(postgresql_config)
     deauthorize_remote_ssh()
 
@@ -1165,7 +1164,31 @@ def master_relation_broken():
 def slave_relation_broken():
     config_changed(postgresql_config)
     deauthorize_remote_ssh()
-    TODO('Switch slave to standalone mode')
+
+    # Can't use repmgr in the -broken hook, as the master end may have
+    # already torn down permissions. Do this in the _departed hook.
+    # For now, invoke pg_ctl directly to do the promotion.
+    # run_repmgr("standby promote")
+    pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
+    run("sudo -u postgres {} promote -D '{}'".format(
+        pg_ctl, postgresql_cluster_dir))
+    os.unlink(repmgr_config)
+    os.unlink(postgres_pgpass)
+
+    # Once promotion has completed and the cluster is writable, drop the
+    # repmgr database.
+    cur = db_cursor(autocommit=True)
+    timeout = 120
+    start = time.time()
+    while True:
+        cur.execute("SELECT pg_is_in_recovery()")
+        if not cur.fetchone()[0]:
+            break
+        if time.time() > start + timeout:
+            juju_log(MSG_ERROR, "Failed to promote slave to standalone")
+            sys.exit(1)
+    juju_log(MSG_INFO, "Slave promoted to standalone. Dropping repmgr db.")
+    cur.execute("DROP DATABASE IF EXISTS repmgr")
 
 
 def update_nrpe_checks():
@@ -1237,21 +1260,23 @@ config_data = config_get()
 version = config_data['version']
 cluster_name = config_data['cluster_name']
 postgresql_data_dir = "/var/lib/postgresql"
-postgresql_cluster_dir = \
-"%s/%s/%s" % (postgresql_data_dir, version, cluster_name)
-postgresql_config_dir = "/etc/postgresql/%s/%s" % (version, cluster_name)
-postgresql_config = "%s/postgresql.conf" % (postgresql_config_dir,)
-postgresql_ident = "%s/pg_ident.conf" % (postgresql_config_dir,)
-postgresql_hba = "%s/pg_hba.conf" % (postgresql_config_dir,)
+postgresql_cluster_dir = os.path.join(
+    postgresql_data_dir, version, cluster_name)
+postgresql_bin_dir = os.path.join('/usr/lib/postgresql', version, 'bin')
+postgresql_config_dir = os.path.join("/etc/postgresql", version, cluster_name)
+postgresql_config = os.path.join(postgresql_config_dir, "postgresql.conf")
+postgresql_ident = os.path.join(postgresql_config_dir, "pg_ident.conf")
+postgresql_hba = os.path.join(postgresql_config_dir, "pg_hba.conf")
 postgresql_crontab = "/etc/cron.d/postgresql"
 postgresql_service_config_dir = "/var/run/postgresql"
-postgresql_scripts_dir = '{}/scripts'.format(postgresql_data_dir)
-postgresql_backups_dir = '{}/backups'.format(postgresql_data_dir)
-postgresql_logs_dir = '{}/logs'.format(postgresql_data_dir)
+postgresql_scripts_dir = os.path.join(postgresql_data_dir, 'scripts')
+postgresql_backups_dir = os.path.join(postgresql_data_dir, 'backups')
+postgresql_logs_dir = os.path.join(postgresql_data_dir, 'logs')
 postgres_ssh_dir = os.path.expanduser('~postgres/.ssh')
 postgres_ssh_public_key = os.path.join(postgres_ssh_dir, 'id_rsa.pub')
 postgres_ssh_private_key = os.path.join(postgres_ssh_dir, 'id_rsa')
 postgres_ssh_authorized_keys = os.path.join(postgres_ssh_dir, 'authorized_keys')
+postgres_pgpass = os.path.expanduser('~postgres/.pgpass')
 repmgr_config = os.path.expanduser('~postgres/repmgr.conf')
 hook_name = os.path.basename(sys.argv[0])
 
