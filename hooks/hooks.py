@@ -412,9 +412,9 @@ def create_postgresql_config(postgresql_config):
             ((int(total_ram) * 1024 * 1024) + 1024),)
         conf_file.close()
         run("sysctl -p /etc/sysctl.d/50-postgresql.conf")
+
     # If we are replicating, some settings may need to be overridden to
     # certain minimum levels.
-
     num_slaves = len(relation_ids(relation_types=['slave', 'master']))
     modified_config_data = dict(config_data)
     if num_slaves > 0:
