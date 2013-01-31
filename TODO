@@ -1,3 +1,4 @@
+- Fix "run" function in hooks.py to log error rather than exiting silently (exceptions emitted at INFO level)
 - Pick a better way to get machine specs than hacky bash functions - facter?
 
 - Specify usernames when adding a relation, rather than generating them
