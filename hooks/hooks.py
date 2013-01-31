@@ -4,6 +4,7 @@
 import json
 import yaml
 import os
+import glob
 import random
 import re
 import string
@@ -475,6 +476,11 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
         elif relation_id.startswith('db:'):
             relation['user'] = user_name(
                 relation['relation-id'], relation['unit'])
+            relation['user'] = user_name(relation['relation-id'],
+                                         relation['unit'])
+            relation['schema_user'] = user_name(relation['relation-id'],
+                                                relation['unit'],
+                                                schema=True)
         else:
             raise RuntimeError(
                 'Unknown relation type {}'.format(repr(relation_id)))
@@ -508,10 +514,9 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
         relation_data.append(local_repmgr)
 
     juju_log(MSG_INFO, str(relation_data))
-    pg_hba_template = \
-        Template(
-            open("templates/pg_hba.conf.tmpl").read()).render(
-                access_list=relation_data)
+    pg_hba_template = Template(
+        open("templates/pg_hba.conf.tmpl").read()).render(
+            access_list=relation_data)
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
     if do_reload:
@@ -527,6 +532,7 @@ def install_postgresql_crontab(postgresql_ident):
     crontab_data = {
         'backup_schedule': config_data["backup_schedule"],
         'scripts_dir': postgresql_scripts_dir,
+        'backup_days': config_data["backup_retention_count"],
     }
     from jinja2 import Template
     crontab_template = Template(
@@ -680,6 +686,10 @@ def config_changed_volume_apply():
                 "NOTICE: postgresql data dir '%s' already points to '%s', \
                 skipping storage changes." %
                 (data_directory_path, new_pg_version_cluster_dir))
+            juju_log(MSG_INFO,
+                "existing-symlink: to fix/avoid UID changes from previous "
+                "units, doing: chown -R postgres:postgres %s" % new_pg_dir)
+            run("chown -R postgres:postgres %s" % new_pg_dir)
             return True
 
         # Create a directory structure below "new" mount_point, as e.g.:
@@ -690,11 +700,11 @@ def config_changed_volume_apply():
                     os.path.join(new_pg_dir, config_data["version"]),
                     new_pg_version_cluster_dir]:
             if not os.path.isdir(new_dir):
+                juju_log(MSG_INFO, "mkdir %s" % new_dir)
                 os.mkdir(new_dir)
                 # copy permissions from current data_directory_path
                 os.chown(new_dir, curr_dir_stat.st_uid, curr_dir_stat.st_gid)
                 os.chmod(new_dir, curr_dir_stat.st_mode)
-                juju_log(MSG_INFO, "mkdir %s" % new_dir)
         # Carefully build this symlink, e.g.:
         # /var/lib/postgresql/9.1/main ->
         # /srv/juju/vol-000012345/postgresql/9.1/main
@@ -720,6 +730,10 @@ def config_changed_volume_apply():
             juju_log(MSG_INFO, "NOTICE: symlinking %s -> %s" %
                 (new_pg_version_cluster_dir, data_directory_path))
             os.symlink(new_pg_version_cluster_dir, data_directory_path)
+            juju_log(MSG_INFO,
+                "after-symlink: to fix/avoid UID changes from previous "
+                "units, doing: chown -R postgres:postgres %s" % new_pg_dir)
+            run("chown -R postgres:postgres %s" % new_pg_dir)
             return True
         except OSError:
             juju_log(MSG_CRITICAL, "failed to symlink \"%s\" -> \"%s\"" % (
@@ -793,14 +807,19 @@ def token_sql_safe(value):
     return True
 
 
-def install():
+def install(run_pre=True):
+    if run_pre:
+        for f in glob.glob('exec.d/*/charm-pre-install'):
+            if os.path.isfile(f) and os.access(f, os.X_OK):
+                subprocess.check_call(['sh', '-c', f])
     for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
         "python-psycopg2",
         "postgresql-%s-debversion" % config_data["version"]]:
         apt_get_install(package)
     from jinja2 import Template
-    install_dir(postgresql_backups_dir, mode=0755)
-    install_dir(postgresql_scripts_dir, mode=0755)
+    install_dir(postgresql_backups_dir, owner="postgres", mode=0755)
+    install_dir(postgresql_scripts_dir, owner="postgres", mode=0755)
+    install_dir(postgresql_logs_dir, owner="postgres", mode=0755)
     paths = {
         'base_dir': postgresql_data_dir,
         'backup_dir': postgresql_backups_dir,
@@ -819,7 +838,7 @@ def install():
     open_port(5432)
 
 
-def user_name(relid, remote_unit, admin=False):
+def user_name(relid, remote_unit, admin=False, schema=False):
     def sanitize(s):
         s = s.replace(':', '_')
         s = s.replace('-', '_')
@@ -830,6 +849,8 @@ def user_name(relid, remote_unit, admin=False):
     components = [sanitize(relid), sanitize(remote_unit)]
     if admin:
         components.append("admin")
+    elif schema:
+        components.append("schema")
     return "_".join(components)
 
 
@@ -841,17 +862,25 @@ def database_names(admin=False):
     return [t for (t,) in run_select_as_postgres(sql, *omit_tables)[1]]
 
 
-def ensure_user(user, admin=False, replication=False):
+def user_exists(user):
     sql = "SELECT rolname FROM pg_roles WHERE rolname = %s"
+    if run_select_as_postgres(sql, user)[0] > 0:
+        return True
+    else:
+        return False
+
+
+def create_user(user, admin=False, replication=False):
     password = get_password(user)
     if password is None:
         password = pwgen()
         set_password(user, password)
-    if run_select_as_postgres(sql, user)[0] != 0:
-        action = ["ALTER ROLE", user]
+    if user_exists(user):
+        action = ["ALTER ROLE"]
     else:
-        action = ["CREATE ROLE", user]
-    action.append('LOGIN')
+        action = ["CREATE ROLE"]
+    action.append('"{}"'.format(user))
+    action.append('WITH LOGIN')
     if admin:
         action.append('SUPERUSER')
     else:
@@ -864,6 +893,30 @@ def ensure_user(user, admin=False, replication=False):
     sql = ' '.join(action)
     run_sql_as_postgres(sql, password)
     return password
+
+
+def grant_roles(user, roles):
+    # Delete previous roles
+    sql = ("DELETE FROM pg_auth_members WHERE member IN ("
+           "SELECT oid FROM pg_roles WHERE rolname = %s)")
+    run_sql_as_postgres(sql, user)
+
+    for role in roles:
+        ensure_role(role)
+        sql = "GRANT {} to {}".format(role, user)
+        run_sql_as_postgres(sql)
+
+
+def ensure_role(role):
+    sql = "SELECT oid FROM pg_roles WHERE rolname = %s"
+    if run_select_as_postgres(sql, role)[0] != 0:
+        # role already exists
+        pass
+    else:
+        sql = "CREATE ROLE %s INHERIT"
+        run_sql_as_postgres(sql, role)
+        sql = "ALTER ROLE %s NOLOGIN"
+        run_sql_as_postgres(sql, role)
 
 
 def ensure_database(user, schema_user, database):
@@ -891,34 +944,43 @@ def get_relation_host():
 
 
 def get_unit_host():
-    this_host = run("unit-get private-address").strip()
-    return this_host
+    this_host = run("unit-get private-address")
+    return this_host.strip()
 
 
-def db_relation_joined_changed(user, database):
-    password = ensure_user(user)
+def db_relation_joined_changed(user, database, roles):
+    if not user_exists(user):
+        password = create_user(user)
+        run("relation-set user='%s' password='%s'" % (user, password))
+    grant_roles(user, roles)
     schema_user = "{}_schema".format(user)
-    schema_password = ensure_user(schema_user)
+    if not user_exists(schema_user):
+        schema_password = create_user(schema_user)
+        run("relation-set schema_user='%s' schema_password='%s'" % (
+            schema_user, schema_password))
     ensure_database(user, schema_user, database)
+    config_data = config_get()
     host = get_unit_host()
-    run("relation-set host='{}' user='{}' password='{}' schema_user='{}' \
-schema_password='{}' database='{}'".format(host, user, password, schema_user,
-    schema_password, database))
+    run("relation-set host='%s' database='%s' port='%s'" % (
+        host, database, config_data["listen_port"]))
     generate_postgresql_hba(postgresql_hba)
 
 
 def db_admin_relation_joined_changed(user, database='all'):
-    password = ensure_user(user, admin=True)
+    if not user_exists(user):
+        password = create_user(user, admin=True)
+        run("relation-set user='%s' password='%s'" % (user, password))
     host = get_unit_host()
-    run("relation-set host='{}' user='{}' password='{}'".format(
-                      host, user, password))
+    config_data = config_get()
+    run("relation-set host='%s' port='%s'" % (
+        host, config_data["listen_port"]))
     generate_postgresql_hba(postgresql_hba)
 
 
 def db_relation_broken(user, database):
-    sql = "REVOKE ALL PRIVILEGES FROM {}_schema".format(user)
+    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}".format(database, user)
     run_sql_as_postgres(sql)
-    sql = "REVOKE ALL PRIVILEGES FROM {}".format(user)
+    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}_schema".format(database, user)
     run_sql_as_postgres(sql)
 
 
@@ -1119,7 +1181,7 @@ def master_relation_joined():
     ensure_local_ssh()
 
     # The user repmgr will connect as.
-    repmgr_password = ensure_user('repmgr', admin=True, replication=True)
+    repmgr_password = create_user('repmgr', admin=True, replication=True)
 
     # Configure repmgr
     install_repmgr()
@@ -1225,8 +1287,10 @@ def slave_relation_broken():
         pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
         run("sudo -u postgres {} promote -D '{}'".format(
             pg_ctl, postgresql_cluster_dir))
-    os.unlink(repmgr_config)
-    os.unlink(postgres_pgpass)
+    if os.path.exists(repmgr_config):
+        os.unlink(repmgr_config)
+    if os.path.exists(postgres_pgpass):
+        os.unlink(postgres_pgpass)
 
     # Once promotion has completed and the cluster is writable, drop the
     # repmgr database.
@@ -1251,9 +1315,7 @@ def update_nrpe_checks():
         return
 
     unit_name = os.environ['JUJU_UNIT_NAME'].replace('/', '-')
-    nagios_hostname = "%s-%s-%s" % \
-        (config_data['nagios_context'], config_data['nagios_service_type'],
-            unit_name)
+    nagios_hostname = "%s-%s" % (config_data['nagios_context'], unit_name)
     nagios_logdir = '/var/log/nagios'
     nrpe_service_file = \
         '/var/lib/nagios/export/service__{}_check_pgsql.cfg'.format(
@@ -1341,7 +1403,7 @@ elif hook_name == "config-changed":
     config_changed(postgresql_config)
 #-------- upgrade-charm
 elif hook_name == "upgrade-charm":
-    install()
+    install(run_pre=False)
     config_changed(postgresql_config)
 #-------- start
 elif hook_name == "start":
@@ -1353,16 +1415,18 @@ elif hook_name == "stop":
         sys.exit(1)
 #-------- db-relation-joined, db-relation-changed
 elif hook_name in ["db-relation-joined", "db-relation-changed"]:
+    roles = filter(None, relation_get('roles').split(","))
     database = relation_get('database')
     if database == '':
         # Missing some information. We expect it to appear in a
         # future call to the hook.
+        juju_log(MSG_WARNING, "No database set in relation, exiting")
         sys.exit(0)
     user = \
         user_name(os.environ['JUJU_RELATION_ID'],
             os.environ['JUJU_REMOTE_UNIT'])
     if user != '' and database != '':
-        db_relation_joined_changed(user, database)
+        db_relation_joined_changed(user, database, roles)
 #-------- db-relation-broken
 elif hook_name == "db-relation-broken":
     database = relation_get('database')

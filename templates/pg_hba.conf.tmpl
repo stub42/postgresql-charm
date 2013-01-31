@@ -9,5 +9,8 @@ local   all        postgres                          ident map=superusers
 {% for unit in access_list -%}
 # Connection for {{unit['relation-id']}} from {{unit['unit']}}
 host {{unit['database']}} {{unit['user']}} {{unit['private-address']}}/32 md5
+{% if 'schema_user' in unit -%} 
+host {{unit['database']}} {{unit['schema_user']}} {{unit['private-address']}}/32 md5
+{% endif -%}
 {% endfor -%}
 {% endif -%}
