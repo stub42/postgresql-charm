@@ -1396,7 +1396,6 @@ elif hook_name == 'master-relation-broken':
     master_relation_broken()
 elif hook_name == 'slave-relation-broken':
     slave_relation_broken()
-##
 #-------- persistent-storage-relation-joined,
 #         persistent-storage-relation-changed
 #elif hook_name in ["persistent-storage-relation-joined",
