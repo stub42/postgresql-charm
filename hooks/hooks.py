@@ -7,6 +7,7 @@ import os
 import glob
 import random
 import re
+import shutil
 import string
 import subprocess
 import sys
@@ -1076,8 +1077,13 @@ def generate_ssh_authorized_keys():
     all_relation_ids = os.listdir('ssh_keys')
     valid_relation_ids = relation_ids(['master', 'slave'])
 
-    wanted_keys = [open(os.path.join('ssh_keys', relid)).read()
-            for relid in valid_relation_ids]
+    wanted_keys = []
+    for relid in valid_relation_ids:
+        key_path = os.path.join('ssh_keys', relid)
+        # Look before you leap, as we might be in the process of adding
+        # multiple relationships at the same time.
+        if os.path.exists(key_path):
+            wanted_keys.append(open(key_path).read())
 
     install_file(
         '\n'.join(wanted_keys), postgres_ssh_authorized_keys,
@@ -1221,7 +1227,6 @@ def master_relation_joined():
     relation_set(dict(master_state='registered'))  # registered with repmgr
 
 
-
 def slave_relation_joined():
     ensure_local_ssh()
     install_repmgr()
@@ -1250,12 +1255,22 @@ def slave_relation_changed():
         # Clone the master.
         juju_log(MSG_INFO, "Destroying existing cluster on slave")
         postgresql_stop()
-        run("rm -rf '{}'/*".format(postgresql_cluster_dir))
-        run_repmgr(
-            '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
-            'standby clone {}'.format(
-                postgresql_cluster_dir, relation_get('private-address')))
-        postgresql_start()
+        shutil.rmtree(postgresql_cluster_dir)
+        try:
+            run_repmgr(
+                '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
+                'standby clone {}'.format(
+                    postgresql_cluster_dir, relation_get('private-address')))
+        except subprocess.CalledProcessError:
+            # We failed, and this cluster is broken. Rebuild a working
+            # cluster so start/stop etc. works and we can retry hooks
+            # again. Even assuming the charm is functioning correctly,
+            # the clone may still fail due to eg. lack of disk space.
+            shutil.rmtree(postgresql_cluster_dir)
+            run('pg_createcluster 9.1 main')
+            raise
+        finally:
+            postgresql_start()
         juju_log(MSG_INFO, "Cloned cluster")
         run_repmgr('standby register')
         relation_set(dict(slave_state='registered'))
