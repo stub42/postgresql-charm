@@ -6,3 +6,13 @@
 
 - Make config_changed issue a 'reload' instead of a 'restart' when
   possible, improving availability.
+
+- If we have three services deployed, related via master/slave, then the
+  repmgr command line tools only work on the service containing the master
+  unit, as the slave-only services have neither ssh nor postgresql access
+  to each other. This may only be a problem with master/slave relationships
+  between services and failover, and it is unclear how that would work
+  anyway (get failover working fist for units within a service).
+
+- Should the cluster_name really be configurable? Just name the cluster
+  after the unit to avoid conflicts.
