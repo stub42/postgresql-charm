@@ -892,7 +892,7 @@ def update_nrpe_checks():
             .format(config_data['listen_port']))
     # pgsql backups
     nrpe_check_file = '/etc/nagios/nrpe.d/check_pgsql_backups.cfg'
-    backup_log = "%s/backups.log".format(postgresql_logs_dir)
+    backup_log = "{}/backups.log".format(postgresql_logs_dir)
     # XXX: these values _should_ be calculated from the backup schedule
     #      perhaps warn = backup_frequency * 1.5, crit = backup_frequency * 2
     warn_age = 172800
