@@ -924,7 +924,7 @@ postgresql_hba = "%s/pg_hba.conf" % (postgresql_config_dir,)
 postgresql_crontab = "/etc/cron.d/postgresql"
 postgresql_service_config_dir = "/var/run/postgresql"
 postgresql_scripts_dir = '{}/scripts'.format(postgresql_data_dir)
-postgresql_backups_dir = config_data['backups_dir']
+postgresql_backups_dir = config_data['backup_dir']
 postgresql_logs_dir = '{}/logs'.format(postgresql_data_dir)
 hook_name = os.path.basename(sys.argv[0])
 
