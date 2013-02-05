@@ -997,8 +997,11 @@ def TODO(msg):
 def install_repmgr():
     '''Install the repmgr package if it isn't already.'''
     TODO('Get repmgr packages in official repository')
-    run('add-apt-repository --yes ppa:stub/repmgr')
-    run('apt-get update')
+    extra_repos = config_get('extra_archives')
+    if extra_repos:
+        for repo in extra_repos.split():
+            run("add-apt-repository --yes '{}'".format(repo))
+        run('apt-get update')
     apt_get_install('repmgr')
     apt_get_install('postgresql-9.1-repmgr')
 
