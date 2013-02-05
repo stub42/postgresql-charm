@@ -888,11 +888,11 @@ def update_nrpe_checks():
     with open(nrpe_check_file, 'w') as nrpe_check_config:
         nrpe_check_config.write("# check pgsql\n")
         nrpe_check_config.write(
-            "command[check_pgsql]=/usr/lib/nagios/plugins/check_pgsql -p {}"
+            "command[check_pgsql]=/usr/lib/nagios/plugins/check_pgsql -P {}"
             .format(config_data['listen_port']))
     # pgsql backups
     nrpe_check_file = '/etc/nagios/nrpe.d/check_pgsql_backups.cfg'
-    backup_log = "%s/backups.log".format(postgresql_logs_dir)
+    backup_log = "{}/backups.log".format(postgresql_logs_dir)
     # XXX: these values _should_ be calculated from the backup schedule
     #      perhaps warn = backup_frequency * 1.5, crit = backup_frequency * 2
     warn_age = 172800
@@ -924,7 +924,7 @@ postgresql_hba = "%s/pg_hba.conf" % (postgresql_config_dir,)
 postgresql_crontab = "/etc/cron.d/postgresql"
 postgresql_service_config_dir = "/var/run/postgresql"
 postgresql_scripts_dir = '{}/scripts'.format(postgresql_data_dir)
-postgresql_backups_dir = '{}/backups'.format(postgresql_data_dir)
+postgresql_backups_dir = config_data['backup_dir']
 postgresql_logs_dir = '{}/logs'.format(postgresql_data_dir)
 hook_name = os.path.basename(sys.argv[0])
 
