@@ -1369,9 +1369,9 @@ def replication_relation_changed():
             raise RuntimeError("Unknown state {}".format(local_state))
 
 
-def wait_for_db():
+def wait_for_db(timeout=120):
+    '''Wait until the db is fully up.'''
     start = time.time()
-    timeout = 120
     while True:
         try:
             cur = db_cursor(autocommit=True)
