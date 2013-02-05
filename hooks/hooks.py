@@ -888,7 +888,7 @@ def update_nrpe_checks():
     with open(nrpe_check_file, 'w') as nrpe_check_config:
         nrpe_check_config.write("# check pgsql\n")
         nrpe_check_config.write(
-            "command[check_pgsql]=/usr/lib/nagios/plugins/check_pgsql -p {}"
+            "command[check_pgsql]=/usr/lib/nagios/plugins/check_pgsql -P {}"
             .format(config_data['listen_port']))
     # pgsql backups
     nrpe_check_file = '/etc/nagios/nrpe.d/check_pgsql_backups.cfg'
