@@ -326,6 +326,29 @@ def relation_set(keyvalues, relation_id=None):
     args.extend(["{}='{}'".format(k, v) for k, v in keyvalues.items()])
     run("relation-set {}".format(' '.join(args)))
 
+    ## Posting json to relation-set doesn't seem to work as documented?
+    ## Bug #1116179
+    ##
+    ## cmd = ['relation-set']
+    ## if relation_id:
+    ##     cmd.extend(['-r', relation_id])
+    ## p = Popen(
+    ##     cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    ##     stderr=subprocess.PIPE)
+    ## (out, err) = p.communicate(json.dumps(keyvalues))
+    ## if p.returncode:
+    ##     juju_log(MSG_ERROR, err)
+    ##     sys.exit(1)
+    ## juju_log(MSG_DEBUG, "relation-set {}".format(repr(keyvalues)))
+
+
+def relation_list(relation_id=None):
+    """Return the list of units participating in the relation."""
+    if relation_id is None:
+        relation_id = os.environ['JUJU_RELATION_ID']
+    cmd = ['relation-list', '--format=json', '-r', relation_id]
+    return json.loads(subprocess.check_output(cmd))
+
 
 #------------------------------------------------------------------------------
 # relation_ids:  Returns a list of relation ids
@@ -618,8 +641,12 @@ def get_password(user):
         return None
 
 
-def db_cursor(autocommit=False, db='template1'):
-    conn = psycopg2.connect("dbname={} user=postgres".format(db))
+def db_cursor(autocommit=False, db='template1', host=None):
+    if host:
+        conn_str = "dbname={} host={} user=postgres".format(db, host)
+    else:
+        conn_str = "dbname={} user=postgres".format(db)
+    conn = psycopg2.connect(conn_str)
     conn.autocommit = autocommit
     return conn.cursor()
 
@@ -1009,7 +1036,7 @@ def ensure_local_ssh():
 
     Bidirectional SSH access is required by repmgr.
     """
-    comment = 'repmgr key for {}'.format(os.environ['JUJU_RELATION_ID'])
+    comment = 'repmgr key for {}'.format(os.environ['JUJU_UNIT_NAME'])
     if not os.path.isdir(postgres_ssh_dir):
         install_dir(postgres_ssh_dir, "postgres", "postgres", 0700)
     if not os.path.exists(postgres_ssh_private_key):
@@ -1017,84 +1044,37 @@ def ensure_local_ssh():
             "-f '{}'".format(comment, postgres_ssh_private_key))
     public_key = open(postgres_ssh_public_key, 'r').read().strip()
     host_key = open('/etc/ssh/ssh_host_ecdsa_key.pub').read().strip()
-    run("relation-set public_ssh_key='{}' ssh_host_key='{}'".format(
-        public_key, host_key))
+    juju_log(MSG_INFO, "Publishing SSH credentials")
+    relation_set(dict(public_ssh_key=public_key, ssh_host_key=host_key))
 
 
 def authorize_remote_ssh():
-    """Add the remote's public SSH key to authorized_keys."""
-    relation = relation_get()
-    if not relation.has_key('public_ssh_key'):
-        # No public key. The -changed hook was invoked before the remote
-        # -joined hook completed. We are fine though, as this -changed
-        # hook will be reinvoked.
-        juju_log(
-            MSG_DEBUG,'Public SSH key for {} not found'.format(
-                os.environ['JUJU_REMOTE_UNIT']))
-            relation_set(dict(ping='{} {}'.format(
-                os.environ['JUJU_REMOTE_UNIT'], time.time())))
-        return False
-    juju_log(
-        MSG_INFO, 'Authorizing SSH access from {} to {}'.format(
-            os.environ['JUJU_REMOTE_UNIT'], os.environ['JUJU_UNIT_NAME']))
+    """Generate the SSH authorized_keys file."""
+    authorized_units = []
+    authorized_keys = []
+    known_hosts = []
+    for relid in relation_ids(relation_types=replication_relation_types):
+        for unit in relation_list(relid):
+            relation = relation_get(unit_name=unit)
+            public_key = relation.get('public_ssh_key', None)
+            if public_key:
+                authorized_units.append(unit)
+                authorized_keys.append(public_key)
+                known_hosts.append('{} {}'.format(
+                    relation['private-address'], relation['ssh_host_key']))
 
-    # Store a copy of the remote SSH public key, so
-    # generate_ssh_authorized_keys() will find it, even
-    # when run from a -broken hook.
-    if not os.path.isdir("ssh_keys"):
-        install_dir("ssh_keys", 0o700)
-    install_file(
-        relation['public_ssh_key'],
-        os.path.join("ssh_keys", os.environ['JUJU_RELATION_ID']))
-
-    # Regenerate the authorized_keys file.
-    generate_ssh_authorized_keys()
-
-    host_key = '{} {}'.format(
-        relation['private-address'], relation['ssh_host_key'],
-        os.environ['JUJU_REMOTE_UNIT'])
-    if os.path.exists(postgres_ssh_known_hosts):
-        # Suck in all lines, except those that will conflict with the
-        # newly distributed host key. Perhaps an IP address has been
-        # reused?
-        known_hosts = [
-            host for host in open(postgres_ssh_known_hosts).readlines()
-            if not host.startswith(relation['private-address'] + ' ')]
-    else:
-        known_hosts = []
-    known_hosts.append(host_key)
+    # Generate known_hosts
     install_file(
         '\n'.join(known_hosts), postgres_ssh_known_hosts,
         owner="postgres", group="postgres", mode=0o644)
-    return True
 
-
-def generate_ssh_authorized_keys():
-    """Generate the SSH authorized_keys file.
-
-    This will overwrite the existing authorized_keys file, so you can't
-    run multiple copies of this charm on the same server.
-    """
-    # Generate a list of keys that are no longer authorized.
-    all_relation_ids = os.listdir('ssh_keys')
-    valid_relation_ids = relation_ids(replication_relation_types)
-
-    wanted_keys = []
-    for relid in valid_relation_ids:
-        key_path = os.path.join('ssh_keys', relid)
-        # Look before you leap, as we might be in the process of adding
-        # multiple relationships at the same time.
-        if os.path.exists(key_path):
-            wanted_keys.append(open(key_path).read())
-
+    # Generate authorized_keys
     install_file(
-        '\n'.join(wanted_keys), postgres_ssh_authorized_keys,
+        '\n'.join(authorized_keys), postgres_ssh_authorized_keys,
         owner="postgres", group="postgres", mode=0o400)
 
-    # Cleanup
-    for relid in all_relation_ids:
-        if relid not in valid_relation_ids:
-            os.unlink(os.path.join('ssh_keys', relid))
+    # Publish details, so relation knows they have been granted access.
+    relation_set(dict(authorized=' '.join(authorized_units)))
 
 
 def generate_repmgr_config(node_id, password):
@@ -1181,20 +1161,32 @@ def get_repmgr_node_id():
 
 
 def get_next_repmgr_node_id():
-    cur = db_cursor(autocommit=True, db='repmgr')
-    # We use a sequence for generating a unique id per node, as required
-    # by repmgr. Create it if necessary.
-    # TODO: Using a sequence creates a race condition where a new id is
-    # allocated on the master and we failover before that information
-    # is replicated. This is nearly impossible to hit. We could simply
-    # bump the sequence by 100 after every failover.
-    cur.execute('''
-        SELECT TRUE FROM information_schema.sequences
-        WHERE sequence_catalog = 'repmgr' AND sequence_schema='public'
-            AND sequence_name = 'juju_node_id'
-        ''')
-    if cur.fetchone() is None:
-        cur.execute('CREATE SEQUENCE juju_node_id')
+    if is_master():
+        cur = db_cursor(autocommit=True, db='repmgr')
+        # We use a sequence for generating a unique id per node, as
+        # required by repmgr. Create it if necessary.
+        # TODO: Bug #806098 - there is no sane shared storage for
+        # relation state, so we use a PostgreSQL sequence in our
+        # replicated database. Using a sequence creates a race
+        # condition where a new id is allocated on the master and we
+        # failover before that information is replicated. This is
+        # nearly impossible to hit. We could simply bump the sequence
+        # by 100 after every failover.
+        cur.execute('''
+            SELECT TRUE FROM information_schema.sequences
+            WHERE sequence_catalog = 'repmgr' AND sequence_schema='public'
+                AND sequence_name = 'juju_node_id'
+            ''')
+        if cur.fetchone() is None:
+            cur.execute('CREATE SEQUENCE juju_node_id')
+
+    else:
+        # A hot standby only calls this when setting up a relationship
+        # with a master, so we assume the other end is the master if we
+        # are not.
+        cur = db_cursor(
+            autocommit=True, db='repmgr', host=relation_get('private-address'))
+
     cur.execute("SELECT nextval('juju_node_id')")
     return cur.fetchone()[0]
 
@@ -1215,6 +1207,7 @@ def repmgr_gc():
         if os.path.exists(postgres_pgpass):
             os.unlink(postgres_pgpass)
         drop_database('repmgr')
+        relation_set(dict(role=''))
 
     elif is_master():
         # At least one other slave.
@@ -1268,6 +1261,11 @@ def is_master():
             relation_set(dict(role="hot standby"))
             return False
 
+    # Are there other units? Maybe we are the only one left in the peer
+    # relationship.
+    if len(units) == 0:
+        return False
+
     # It must be election time. The unit with the lowest numeric
     # component in its unit name gets to be the master.
     remote_nums = sorted(int(unit.split('/', 1)[1]) for unit in units)
@@ -1284,6 +1282,8 @@ def replication_relation_joined():
     juju_log(MSG_INFO, "Hook replication_relation_joined()")
     ensure_local_ssh()
     authorize_remote_ssh()
+    config_changed(postgresql_config)
+
     relation_set(dict(state='standalone'))
     install_repmgr()
 
@@ -1306,88 +1306,77 @@ def replication_relation_joined():
             generate_repmgr_config(master_node_id, repmgr_password)
             run_repmgr('master register')
 
-        # Publish required repmgr information to the slave, and save
-        # our state.
-        remote_node_id = get_next_repmgr_node_id()
-        relation_set(dict(
-            repmgr_node_id=remote_node_id, repmgr_password=repmgr_password))
+        # Publish the repmgr password.
+        relation_set(dict(repmgr_password=repmgr_password))
 
 
 def replication_relation_changed():
     juju_log(MSG_INFO, "Hook replication_relation_changed()")
-    if authorize_remote_ssh():
-        relation_set(dict(
-            state='authorized'))
-    else:
-        juju_log(
-            MSG_DEBUG,'Public SSH key for {} not yet available'.format(
-                os.environ['JUJU_REMOTE_UNIT']))
-        # Nothing else to do until we have authorization from the other end.
-        return
+    ensure_local_ssh()
+    authorize_remote_ssh()
+    config_changed(postgresql_config)
 
-    generate_postgresql_hba(postgresql_hba)
+    install_repmgr()
 
     relation = relation_get()
+    if not relation.get('state', None):
+        relation_set('state', 'standalone')
 
-    remote_is_master = (relation_get('role') == 'master')
-    remote_has_authorized = (relation['state'] == 'authorized')
-    local_state = relation_get('state', os.environ['JUJU_UNIT_NAME'])
+    remote_is_master = (relation.get('role', '') == 'master')
+    juju_log(MSG_INFO, "Remote role is {}".format(relation.get('role','???')))
 
-    TODO("state==authorized doesn't work for 2nd peer")
-    if remote_is_master and remote_has_authorized:
-        if local_state == 'authorized':
-            # We are just joining replication, and have found a master.
-            # Clone and follow it.
-            generate_repmgr_config(
-                relation['repmgr_node_id'], relation['repmgr_password'])
-            juju_log(MSG_INFO, "Destroying existing cluster on slave")
-            postgresql_stop()
-            shutil.rmtree(postgresql_cluster_dir)
-            try:
-                run_repmgr(
-                    '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
-                    'standby clone {}'.format(
-                        postgresql_cluster_dir,
-                        relation_get('private-address')))
-            except subprocess.CalledProcessError:
-                # We failed, and this cluster is broken. Rebuild a working
-                # cluster so start/stop etc. works and we can retry hooks
-                # again. Even assuming the charm is functioning correctly,
-                # the clone may still fail due to eg. lack of disk space.
-                shutil.rmtree(postgresql_cluster_dir)
-                run('pg_createcluster 9.1 main')
-                raise
-            finally:
-                postgresql_start()
-            juju_log(MSG_INFO, "Cloned cluster")
-            wait_for_db()
-            run_repmgr('standby register')
-            relation_set(dict(state='cloned'))
-            juju_log(MSG_INFO, "Registered cluster with repmgr")
+    remote_has_authorized = False
+    for unit in relation.get('authorized', '').split():
+        if unit == os.environ['JUJU_UNIT_NAME']:
+            remote_has_authorized = True
+    juju_log(MSG_INFO, "Remote authorized is {}".format(remote_has_authorized))
 
-        elif local_state == 'cloned':
-            TODO("Handle failover automatically")
+    local_is_standalone = (
+        relation_get('state', os.environ['JUJU_UNIT_NAME']) == 'standalone')
+    juju_log(MSG_INFO, "Am standalone is {}".format(local_is_standalone))
 
-        else:
-            raise RuntimeError("Unknown state {}".format(local_state))
+    TODO("Handle failover")
+    if remote_is_master and remote_has_authorized and local_is_standalone:
+        # We are just joining replication, and have found a master.
+        # Clone and follow it.
+        generate_repmgr_config(
+            get_next_repmgr_node_id(),
+            relation['repmgr_password'])
 
+        # Republish the repmgr password in case we failover to being the
+        # master in the future. Bug #806098.
+        relation_set(dict(repmgr_password=relation['repmgr_password']))
 
-def wait_for_db(timeout=120):
-    '''Wait until the db is fully up.'''
-    start = time.time()
-    while True:
+        juju_log(MSG_INFO, "Destroying existing cluster on slave")
+        postgresql_stop()
+        shutil.rmtree(postgresql_cluster_dir)
         try:
-            cur = db_cursor(autocommit=True)
-        except psycopg2.DatabaseError:
-            if time.time() > start + timeout:
-                raise
-        time.sleep(0.3)
+            run_repmgr(
+                '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
+                'standby clone {}'.format(
+                    postgresql_cluster_dir,
+                    relation_get('private-address')))
+        except subprocess.CalledProcessError:
+            # We failed, and this cluster is broken. Rebuild a working
+            # cluster so start/stop etc. works and we can retry hooks
+            # again. Even assuming the charm is functioning correctly,
+            # the clone may still fail due to eg. lack of disk space.
+            shutil.rmtree(postgresql_cluster_dir)
+            run('pg_createcluster 9.1 main')
+            raise
+        finally:
+            postgresql_start()
+        juju_log(MSG_INFO, "Cloned cluster")
+        wait_for_db()
+        run_repmgr('standby register')
+        relation_set(dict(state='hot standby'))
+        juju_log(MSG_INFO, "Registered cluster with repmgr")
 
 
 def replication_relation_broken():
     repmgr_gc()
     config_changed(postgresql_config)
-    generate_ssh_authorized_keys()
+    authorize_remote_ssh()
 
     if is_master():
         TODO("Failover if master unit is removed")
@@ -1420,6 +1409,18 @@ def cluster_is_in_recovery():
     cur = db_cursor(autocommit=True)
     cur.execute("SELECT pg_is_in_recovery()")
     return cur.fetchone()[0]
+
+
+def wait_for_db(timeout=120):
+    '''Wait until the db is fully up.'''
+    start = time.time()
+    while True:
+        try:
+            cur = db_cursor(autocommit=True)
+        except psycopg2.DatabaseError:
+            if time.time() > start + timeout:
+                raise
+        time.sleep(0.3)
 
 
 def update_nrpe_checks():
