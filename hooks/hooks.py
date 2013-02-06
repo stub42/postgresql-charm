@@ -169,12 +169,12 @@ def run(command, exit_on_error=True):
 # install_file: install a file resource. overwites existing files.
 #------------------------------------------------------------------------------
 def install_file(contents, dest, owner="root", group="root", mode=0600):
-        uid = getpwnam(owner)[2]
-        gid = getgrnam(group)[2]
-        dest_fd = os.open(dest, os.O_WRONLY | os.O_TRUNC | os.O_CREAT, mode)
-        os.fchown(dest_fd, uid, gid)
-        with os.fdopen(dest_fd, 'w') as destfile:
-            destfile.write(str(contents))
+    uid = getpwnam(owner)[2]
+    gid = getgrnam(group)[2]
+    dest_fd = os.open(dest, os.O_WRONLY | os.O_TRUNC | os.O_CREAT, mode)
+    os.fchown(dest_fd, uid, gid)
+    with os.fdopen(dest_fd, 'w') as destfile:
+        destfile.write(str(contents))
 
 
 #------------------------------------------------------------------------------
@@ -279,20 +279,17 @@ def get_service_port(postgresql_config):
 #                relation_id:  specify relation id for out of context usage.
 #------------------------------------------------------------------------------
 def relation_json(scope=None, unit_name=None, relation_id=None):
-    try:
-        relation_cmd_line = ['relation-get', '--format=json']
-        if relation_id is not None:
-            relation_cmd_line.extend(('-r', relation_id))
-        if scope is not None:
-            relation_cmd_line.append(scope)
-        else:
-            relation_cmd_line.append('-')
+    relation_cmd_line = ['relation-get', '--format=json']
+    if relation_id is not None:
+        relation_cmd_line.extend(('-r', relation_id))
+    if scope is not None:
+        relation_cmd_line.append(scope)
+    else:
+        relation_cmd_line.append('-')
+    if unit_name is not None:
         relation_cmd_line.append(unit_name)
-        relation_data = run(" ".join(relation_cmd_line), exit_on_error=False)
-    except:
-        relation_data = None
-    finally:
-        return(relation_data)
+    relation_data = run(" ".join(relation_cmd_line), exit_on_error=False)
+    return relation_data
 
 
 #------------------------------------------------------------------------------
@@ -303,20 +300,12 @@ def relation_json(scope=None, unit_name=None, relation_id=None):
 #                unit_name:    limits the data ( and optionally the scope )
 #                              to the specified unit
 #------------------------------------------------------------------------------
-def relation_get(scope=None, unit_name=None):
-    try:
-        relation_cmd_line = ['relation-get', '--format=json']
-        if scope is not None:
-            relation_cmd_line.append(scope)
-        else:
-            relation_cmd_line.append('-')
-        if unit_name is not None:
-            relation_cmd_line.append(unit_name)
-        relation_data = json.loads(subprocess.check_output(relation_cmd_line))
-    except:
-        relation_data = None
-    finally:
-        return(relation_data)
+def relation_get(scope=None, unit_name=None, relation_id=None):
+    j = relation_json(scope, unit_name, relation_id)
+    if j:
+        return json.loads(j)
+    else:
+        return None
 
 
 def relation_set(keyvalues, relation_id=None):
@@ -347,7 +336,10 @@ def relation_list(relation_id=None):
     if relation_id is None:
         relation_id = os.environ['JUJU_RELATION_ID']
     cmd = ['relation-list', '--format=json', '-r', relation_id]
-    return json.loads(subprocess.check_output(cmd))
+    json_units = subprocess.check_output(cmd).strip()
+    if json_units:
+        return json.loads(subprocess.check_output(cmd))
+    return None
 
 
 #------------------------------------------------------------------------------
@@ -364,7 +356,9 @@ def relation_ids(relation_types=('db',)):
     relids = []
     for reltype in reltypes:
         relid_cmd_line = ['relation-ids', '--format=json', reltype]
-        relids.extend(json.loads(subprocess.check_output(relid_cmd_line)))
+        json_relids = subprocess.check_output(relid_cmd_line).strip()
+        if json_relids:
+            relids.extend(json.loads(json_relids))
     return relids
 
 
@@ -376,12 +370,12 @@ def relation_ids(relation_types=('db',)):
 #------------------------------------------------------------------------------
 def relation_get_all(*args, **kwargs):
     relation_data = []
-    try:
-        relids = relation_ids(*args, **kwargs)
-        for relid in relids:
-            units_cmd_line = ['relation-list', '--format=json', '-r', relid]
-            units = json.loads(subprocess.check_output(units_cmd_line))
-            for unit in units:
+    relids = relation_ids(*args, **kwargs)
+    for relid in relids:
+        units_cmd_line = ['relation-list', '--format=json', '-r', relid]
+        json_units = subprocess.check_output(units_cmd_line).strip()
+        if json_units:
+            for unit in json.loads(json_units):
                 unit_data = \
                     json.loads(relation_json(relation_id=relid,
                         unit_name=unit))
@@ -390,12 +384,8 @@ def relation_get_all(*args, **kwargs):
                         unit_data[key] = unit_data[key].split()
                 unit_data['relation-id'] = relid
                 unit_data['unit'] = unit
-            relation_data.append(unit_data)
-    except Exception, e:
-        subprocess.call(['juju-log', str(e)])
-        relation_data = []
-    finally:
-        return(relation_data)
+                relation_data.append(unit_data)
+    return relation_data
 
 
 #------------------------------------------------------------------------------
@@ -441,8 +431,9 @@ def create_postgresql_config(postgresql_config):
 
     # If we are replicating, some settings may need to be overridden to
     # certain minimum levels.
-    TODO("Relation check always returns True - fix")
-    num_slaves = len(relation_ids(relation_types=replication_relation_types))
+    TODO("Relation check always returns True - fix. Need to count units.")
+    num_slaves = len(
+        relation_ids(relation_types=replication_relation_types)) - 1
     modified_config_data = dict(config_data)
     if num_slaves > 0:
         juju_log(
@@ -641,11 +632,11 @@ def get_password(user):
         return None
 
 
-def db_cursor(autocommit=False, db='template1', host=None):
+def db_cursor(autocommit=False, db='template1', user='postgres', host=None):
     if host:
-        conn_str = "dbname={} host={} user=postgres".format(db, host)
+        conn_str = "dbname={} host={} user={}".format(db, host, user)
     else:
-        conn_str = "dbname={} user=postgres".format(db)
+        conn_str = "dbname={} user={}".format(db, user)
     conn = psycopg2.connect(conn_str)
     conn.autocommit = autocommit
     return conn.cursor()
@@ -1077,7 +1068,16 @@ def authorize_remote_ssh():
     relation_set(dict(authorized=' '.join(authorized_units)))
 
 
-def generate_repmgr_config(node_id, password):
+def generate_pgpass(passwords):
+    pgpass = '\n'.join(
+        "*:*:*:{}:{}".format(username, password)
+            for username, password in passwords.items())
+    install_file(
+        pgpass, postgres_pgpass,
+        owner="postgres", group="postgres", mode=0o400)
+
+
+def generate_repmgr_config(node_id):
     """Regenerate the repmgr config file.
 
     node_id is an integer, and must be a unique in the cluster.
@@ -1092,11 +1092,6 @@ def generate_repmgr_config(node_id, password):
         open("templates/repmgr.conf.tmpl").read()).render(params)
     install_file(
         config, repmgr_config, owner="postgres", group="postgres", mode=0o400)
-
-    pgpass = "*:*:*:repmgr:{}".format(password)
-    install_file(
-        pgpass, postgres_pgpass,
-        owner="postgres", group="postgres", mode=0o400)
 
 
 def run_repmgr(cmd, exit_on_error=True):
@@ -1185,7 +1180,8 @@ def get_next_repmgr_node_id():
         # with a master, so we assume the other end is the master if we
         # are not.
         cur = db_cursor(
-            autocommit=True, db='repmgr', host=relation_get('private-address'))
+            autocommit=True, db='repmgr', user='repmgr',
+            host=relation_get('private-address'))
 
     cur.execute("SELECT nextval('juju_node_id')")
     return cur.fetchone()[0]
@@ -1195,9 +1191,12 @@ def repmgr_gc():
     """Remove old nodes from the repmgr database, tear down if no slaves"""
     wanted_units = []
     for relid in relation_ids(replication_relation_types):
-        units = json.loads(subprocess.check_output([
-            'relation-list', '--format=json', '-r', relid]))
-        wanted_units.extend(units)
+        json_units = subprocess.check_output([
+            'relation-list', '--format=json', '-r', relid]).strip()
+        if json_units:
+            units = json.loads(subprocess.check_output([
+                'relation-list', '--format=json', '-r', relid]))
+            wanted_units.extend(units)
 
     if len(wanted_units) == 0:
         # No relationships. Trash repmgr database.
@@ -1221,156 +1220,153 @@ def repmgr_gc():
 def is_master():
     '''True if we are, or should be, the master.
 
-    Return True if we are the active master, or if neither myself nor
+    Return True if I am the active master, or if neither myself nor
     the remote unit is and I win an election.
     '''
-    # Do I know what I am?
-    local_role = relation_get('role', os.environ['JUJU_UNIT_NAME'])
-    if local_role == 'master':
+    # Do I think I am the master?
+    if relation_get('state', os.environ['JUJU_UNIT_NAME']) == 'master':
+        TODO("Handle failover - multiple units may think they are master")
         return True
-    elif local_role == 'hot standby':
-        return False
-    elif local_role:
-        raise AssertionError("Unknown replication role {}".format(local_role))
 
-    # I don't know what I am. Work it out.
     TODO(
         "Detect incompatible relationships, such as cascading or mixed "
         "peer & master/slave relationships")
-    relation_type = os.environ['JUJU_RELATION']
-    if relation_type == 'master':
-        # I'm explicitly the master in a master/slave relationship.
-        relation_set(dict(role='master'))
-        return True
 
-    elif relation_type == 'slave':
+    if relation_ids(relation_types=['slave']):
         # I'm explicitly the slave in a master/slave relationship.
-        relation_set(dict(role='hot standby'))
+        # No units in my service can be a master.
         return False
-
-    elif relation_type and relation_type != 'replication':
-        raise AssertionError('Unknown relation type {}'.format(relation_type))
 
     # If there are any other peers claiming to be the master, then I am
     # not the master.
-    units = json.loads(
-        subprocess.check_output(['relation-list', '--format=json']))
-    for unit in units:
-        remote_role = relation_get('role', unit)
-        if remote_role == 'master':
-            relation_set(dict(role="hot standby"))
-            return False
+    peer_units = set()
+    for relid in relation_ids(relation_types=['replication']):
+        for unit in relation_list(relid):
+            peer_units.add(unit)
+            if relation_get('state', unit, relid) == 'master':
+                return False
 
-    # Are there other units? Maybe we are the only one left in the peer
-    # relationship.
-    if len(units) == 0:
+    # Are there other units? Maybe we are the only one left in the
+    # various master/slave/replication relationships.
+    alone = True
+    for relid in relation_ids(relation_types=replication_relation_types):
+        if relation_list(relid):
+            alone = False
+            break
+    if alone:
+        juju_log(MSG_INFO, "I am alone, no point being a master")
         return False
 
-    # It must be election time. The unit with the lowest numeric
-    # component in its unit name gets to be the master.
-    remote_nums = sorted(int(unit.split('/', 1)[1]) for unit in units)
+    # There are no masters, so we need an election within this peer
+    # relation. Lowest unit number wins and gets to be the master.
+    remote_nums = sorted(int(unit.split('/', 1)[1]) for unit in peer_units)
     my_num = int(os.environ['JUJU_UNIT_NAME'].split('/', 1)[1])
-    if my_num < remote_nums[0]:
-        relation_set(dict(role="master"))
+    if remote_nums and my_num < remote_nums[0]:
         return True
     else:
-        relation_set(dict(role="hot standby"))
         return False
-
-
-def replication_relation_joined():
-    juju_log(MSG_INFO, "Hook replication_relation_joined()")
-    ensure_local_ssh()
-    authorize_remote_ssh()
-    config_changed(postgresql_config)
-
-    relation_set(dict(state='standalone'))
-    install_repmgr()
-
-    # Adding nodes requires changing configuration values like
-    # max_wal_senders.
-    config_changed(postgresql_config)
-    TODO("Should not need to force restart after config change")
-    postgresql_restart()
-
-    if is_master():
-        # The user repmgr connects as for both replication and
-        # administration.
-        repmgr_password = create_user('repmgr', admin=True, replication=True)
-        ensure_database('repmgr', 'repmgr', 'repmgr')
-
-        master_node_id = get_repmgr_node_id()
-        if master_node_id is None:
-            # Initial setup of the master. Register it with repmgr.
-            master_node_id = get_next_repmgr_node_id()
-            generate_repmgr_config(master_node_id, repmgr_password)
-            run_repmgr('master register')
-
-        # Publish the repmgr password.
-        relation_set(dict(repmgr_password=repmgr_password))
 
 
 def replication_relation_changed():
     juju_log(MSG_INFO, "Hook replication_relation_changed()")
-    ensure_local_ssh()
-    authorize_remote_ssh()
-    config_changed(postgresql_config)
+    ensure_local_ssh()  # Generate SSH key and publish details
+    authorize_remote_ssh()  # Authorize relationship SSH keys.
+    config_changed(postgresql_config)  # Ensure minimal replication settings.
 
     install_repmgr()
 
+    local_state = relation_get('state', os.environ['JUJU_UNIT_NAME'])
+    if not local_state:
+        local_state = 'standalone'
+        relation_set(dict(state=local_state))
+
     relation = relation_get()
-    if not relation.get('state', None):
-        relation_set('state', 'standalone')
 
-    remote_is_master = (relation.get('role', '') == 'master')
-    juju_log(MSG_INFO, "Remote role is {}".format(relation.get('role','???')))
+    if is_master():
+        if local_state == 'standalone':  # Initial setup of a master.
+            # The user repmgr connects as for both replication and
+            # administration.
+            repmgr_password = create_user(
+                'repmgr', admin=True, replication=True)
+            generate_pgpass(dict(repmgr=repmgr_password))
+            ensure_database('repmgr', 'repmgr', 'repmgr')
+            master_node_id = get_next_repmgr_node_id()
+            generate_repmgr_config(master_node_id)
+            run_repmgr('master register')
+            relation_set(dict(
+                state='master', repmgr_password=repmgr_password))
 
-    remote_has_authorized = False
-    for unit in relation.get('authorized', '').split():
-        if unit == os.environ['JUJU_UNIT_NAME']:
-            remote_has_authorized = True
-    juju_log(MSG_INFO, "Remote authorized is {}".format(remote_has_authorized))
+        elif local_state == 'master':  # Already the master.
+            pass  # Already the master.
 
-    local_is_standalone = (
-        relation_get('state', os.environ['JUJU_UNIT_NAME']) == 'standalone')
-    juju_log(MSG_INFO, "Am standalone is {}".format(local_is_standalone))
+        elif local_state == 'hot standby':  # I've been promoted
+            TODO("This won't play well with repmgrd, but not using that yet")
+            run_repmgr('standby promote')
+            relation_set('state', 'master')
 
-    TODO("Handle failover")
-    if remote_is_master and remote_has_authorized and local_is_standalone:
-        # We are just joining replication, and have found a master.
-        # Clone and follow it.
-        generate_repmgr_config(
-            get_next_repmgr_node_id(),
-            relation['repmgr_password'])
+        else:
+            raise AssertionError("Unknown state {}".format(relation['state']))
 
-        # Republish the repmgr password in case we failover to being the
-        # master in the future. Bug #806098.
-        relation_set(dict(repmgr_password=relation['repmgr_password']))
+    else:  # A hot standby, now or soon.
+        remote_is_master = (relation.get('state', '') == 'master')
+        juju_log(
+            MSG_INFO, "Remote state is {}".format(relation.get('role','???')))
 
-        juju_log(MSG_INFO, "Destroying existing cluster on slave")
-        postgresql_stop()
-        shutil.rmtree(postgresql_cluster_dir)
-        try:
-            run_repmgr(
-                '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
-                'standby clone {}'.format(
-                    postgresql_cluster_dir,
-                    relation_get('private-address')))
-        except subprocess.CalledProcessError:
-            # We failed, and this cluster is broken. Rebuild a working
-            # cluster so start/stop etc. works and we can retry hooks
-            # again. Even assuming the charm is functioning correctly,
-            # the clone may still fail due to eg. lack of disk space.
-            shutil.rmtree(postgresql_cluster_dir)
-            run('pg_createcluster 9.1 main')
-            raise
-        finally:
-            postgresql_start()
-        juju_log(MSG_INFO, "Cloned cluster")
-        wait_for_db()
-        run_repmgr('standby register')
-        relation_set(dict(state='hot standby'))
-        juju_log(MSG_INFO, "Registered cluster with repmgr")
+        remote_has_authorized = False
+        for unit in relation.get('authorized', '').split():
+            if unit == os.environ['JUJU_UNIT_NAME']:
+                remote_has_authorized = True
+        juju_log(
+            MSG_INFO, "Remote authorized is {}".format(remote_has_authorized))
+
+        if remote_is_master and remote_has_authorized:
+            if local_state == 'standalone':
+                # Republish the repmgr password in case we failover to
+                # being the master in the future. Bug #806098.
+                relation_set(dict(
+                    repmgr_password=relation['repmgr_password']))
+
+                # We are just joining replication, and have found a
+                # master. Clone and follow it.
+                generate_pgpass(dict(repmgr=relation['repmgr_password']))
+                generate_repmgr_config(get_next_repmgr_node_id())
+
+                juju_log(MSG_INFO, "Destroying existing cluster on slave")
+                postgresql_stop()
+                shutil.rmtree(postgresql_cluster_dir)
+                try:
+                    run_repmgr(
+                        '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
+                        'standby clone {}'.format(
+                            postgresql_cluster_dir,
+                            relation_get('private-address')))
+                except subprocess.CalledProcessError:
+                    # We failed, and this cluster is broken. Rebuild a
+                    # working cluster so start/stop etc. works and we
+                    # can retry hooks again. Even assuming the charm is
+                    # functioning correctly, the clone may still fail
+                    # due to eg. lack of disk space.
+                    shutil.rmtree(postgresql_cluster_dir)
+                    run('pg_createcluster 9.1 main')
+                    raise
+                finally:
+                    postgresql_start()
+                juju_log(MSG_INFO, "Cloned cluster")
+                wait_for_db()
+                run_repmgr('standby register')
+                relation_set(dict(state='hot standby'))
+                juju_log(MSG_INFO, "Registered cluster with repmgr")
+
+            elif local_state == 'hot standby':
+                TODO("If master has changed, follow the new master")
+                # rc, out = run_repmgr('standby follow', exit_on_error=False)
+                # if rc != 0:
+                #     juju_log(MSG_CRITICAL, "Failed to follow new master.")
+                #     juju_log(MSG_ERROR, out)
+                #     raise SystemExit(1)
+
+            else:
+                raise AssertionError("Unknown state {}".format(local_state))
 
 
 def replication_relation_broken():
@@ -1568,12 +1564,9 @@ elif hook_name == "db-admin-relation-broken":
 elif hook_name == "nrpe-external-master-relation-changed":
     update_nrpe_checks()
 elif hook_name in (
-    'master-relation-joined', 'slave-relation-joined',
-    'replication-relation-joined'):
-    replication_relation_joined()
-elif hook_name in (
-    'master-relation-changed', 'slave-relation-changed',
-    'replication-relation-changed'):
+    'master-relation-joined', 'master-relation-changed',
+    'slave-relation-joined', 'slave-relation-changed',
+    'replication-relation-joined', 'replication-relation-changed'):
     replication_relation_changed()
 elif hook_name in (
     'master-relation-broken', 'slave-relation-broken',
