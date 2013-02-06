@@ -431,13 +431,13 @@ def create_postgresql_config(postgresql_config):
 
     # If we are replicating, some settings may need to be overridden to
     # certain minimum levels.
-    TODO("Relation check always returns True - fix. Need to count units.")
-    num_slaves = len(
-        relation_ids(relation_types=replication_relation_types)) - 1
+    num_slaves = slave_count()
     modified_config_data = dict(config_data)
     if num_slaves > 0:
         juju_log(
-            MSG_DEBUG, 'Replicated. Enforcing minimal replication settings')
+            MSG_INFO,
+            'Master replicated to {} slaves. '
+            'Enforcing minimal replication settings'.format(num_slaves))
         modified_config_data['hot_standby'] = 'on'
         modified_config_data['wal_level'] = 'hot_standby'
         if modified_config_data['archive_mode'] is False:
@@ -508,12 +508,19 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
         relation_types=replication_relation_types)
     for relation in replication_relations:
         remote_replication = {
-            'database': 'replication,repmgr', 'user': 'repmgr',
+            'database': 'replication', 'user': 'repmgr',
             'private-address': relation['private-address'],
             'relation-id': relation['relation-id'],
             'unit': relation['private-address'],
             }
         relation_data.append(remote_replication)
+        remote_repmgr = {
+            'database': 'repmgr', 'user': 'repmgr',
+            'private-address': relation['private-address'],
+            'relation-id': relation['relation-id'],
+            'unit': relation['private-address'],
+            }
+        relation_data.append(remote_repmgr)
     if replication_relations:
         local_repmgr = {
             'database': 'repmgr', 'user': 'repmgr',
@@ -1099,19 +1106,13 @@ def run_repmgr(cmd, exit_on_error=True):
         repmgr_config, cmd)
     juju_log(MSG_DEBUG, full_command)
     try:
-        output = subprocess.check_output(
+        return subprocess.check_output(
             full_command, stderr=subprocess.STDOUT, shell=True)
-        returncode = 0
     except subprocess.CalledProcessError, x:
+        juju_log(MSG_ERROR, x.output)
         if exit_on_error:
-            juju_log(MSG_ERROR, x.output)
             raise SystemExit(x.returncode)
-        returncode = x.returncode
-        output = x.output
-
-    ## Too noisy for slow logging. Enable if clone becomes less noisy.
-    ## juju_log(MSG_DEBUG, output)
-    return returncode, output
+        raise
 
 
 def drop_database(dbname, warn=True):
@@ -1156,32 +1157,36 @@ def get_repmgr_node_id():
 
 
 def get_next_repmgr_node_id():
+    # This hook does not run as ~postgres, so inform libpq where the
+    # password file is.
+    os.environ['PGPASSFILE'] = postgres_pgpass
     if is_master():
-        cur = db_cursor(autocommit=True, db='repmgr')
-        # We use a sequence for generating a unique id per node, as
-        # required by repmgr. Create it if necessary.
-        # TODO: Bug #806098 - there is no sane shared storage for
-        # relation state, so we use a PostgreSQL sequence in our
-        # replicated database. Using a sequence creates a race
-        # condition where a new id is allocated on the master and we
-        # failover before that information is replicated. This is
-        # nearly impossible to hit. We could simply bump the sequence
-        # by 100 after every failover.
-        cur.execute('''
-            SELECT TRUE FROM information_schema.sequences
-            WHERE sequence_catalog = 'repmgr' AND sequence_schema='public'
-                AND sequence_name = 'juju_node_id'
-            ''')
-        if cur.fetchone() is None:
-            cur.execute('CREATE SEQUENCE juju_node_id')
-
+        host = get_unit_host()
     else:
         # A hot standby only calls this when setting up a relationship
         # with a master, so we assume the other end is the master if we
         # are not.
-        cur = db_cursor(
-            autocommit=True, db='repmgr', user='repmgr',
-            host=relation_get('private-address'))
+        host=relation_get('private-address')
+
+    cur = db_cursor(autocommit=True, db='repmgr', user='repmgr', host=host)
+
+    # We use a sequence for generating a unique id per node, as
+    # required by repmgr. Create it if necessary.
+    #
+    # TODO: Bug #806098 - there is no sane shared storage for
+    # relation state, so we use a PostgreSQL sequence in our
+    # replicated database. Using a sequence creates a race
+    # condition where a new id is allocated on the master and we
+    # failover before that information is replicated. This is
+    # nearly impossible to hit. We could simply bump the sequence
+    # by 100 after every failover.
+    cur.execute('''
+        SELECT TRUE FROM information_schema.sequences
+        WHERE sequence_catalog = 'repmgr' AND sequence_schema='public'
+            AND sequence_name = 'juju_node_id'
+        ''')
+    if cur.fetchone() is None:
+        cur.execute('CREATE SEQUENCE juju_node_id')
 
     cur.execute("SELECT nextval('juju_node_id')")
     return cur.fetchone()[0]
@@ -1206,15 +1211,15 @@ def repmgr_gc():
         if os.path.exists(postgres_pgpass):
             os.unlink(postgres_pgpass)
         drop_database('repmgr')
-        relation_set(dict(role=''))
+        relation_set(dict(state='standalone'))
 
     elif is_master():
         # At least one other slave.
-        wanted_node_ids.append(str(get_repmgr_node_id()))
+        wanted_units.append(os.environ['JUJU_UNIT_NAME'])
         cur = db_cursor(autocommit=True, db='repmgr')
         cur.execute(
-            "DELETE FROM repmgr_juju.repl_nodes WHERE name NOT IN %s",
-            wanted_node_ids)
+            "DELETE FROM repmgr_juju.repl_nodes WHERE NOT ARRAY[name] <@ %s",
+            (wanted_units,))
 
 
 def is_master():
@@ -1272,6 +1277,8 @@ def replication_relation_changed():
     ensure_local_ssh()  # Generate SSH key and publish details
     authorize_remote_ssh()  # Authorize relationship SSH keys.
     config_changed(postgresql_config)  # Ensure minimal replication settings.
+    TODO("config_changed() should restart PostgreSQL, if necessary")
+    postgresql_restart()
 
     install_repmgr()
 
@@ -1339,7 +1346,8 @@ def replication_relation_changed():
                         '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
                         'standby clone {}'.format(
                             postgresql_cluster_dir,
-                            relation_get('private-address')))
+                            relation_get('private-address')),
+                        exit_on_error=False)
                 except subprocess.CalledProcessError:
                     # We failed, and this cluster is broken. Rebuild a
                     # working cluster so start/stop etc. works and we
@@ -1347,7 +1355,9 @@ def replication_relation_changed():
                     # functioning correctly, the clone may still fail
                     # due to eg. lack of disk space.
                     shutil.rmtree(postgresql_cluster_dir)
+                    shutil.rmtree(postgresql_config_dir)
                     run('pg_createcluster 9.1 main')
+                    relation_set(dict(state='standalone'))
                     raise
                 finally:
                     postgresql_start()
@@ -1401,6 +1411,13 @@ def replication_relation_broken():
         drop_database('repmgr')
 
 
+def slave_count():
+    num_slaves = 0
+    for relid in relation_ids(relation_types=replication_relation_types):
+        num_slaves += len(relation_list(relid))
+    return num_slaves
+
+
 def cluster_is_in_recovery():
     cur = db_cursor(autocommit=True)
     cur.execute("SELECT pg_is_in_recovery()")
@@ -1412,7 +1429,8 @@ def wait_for_db(timeout=120):
     start = time.time()
     while True:
         try:
-            cur = db_cursor(autocommit=True)
+            db_cursor(autocommit=True)
+            break
         except psycopg2.DatabaseError:
             if time.time() > start + timeout:
                 raise
