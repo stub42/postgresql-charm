@@ -742,7 +742,7 @@ def install(run_pre=True):
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 subprocess.check_call(['sh', '-c', f])
     for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
-        "python-psycopg2", "postgres-contrib", 
+        "python-psycopg2", "postgresql-contrib", 
         "postgresql-%s-debversion" % config_data["version"]]:
         apt_get_install(package)
     from jinja2 import Template
