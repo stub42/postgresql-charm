@@ -639,12 +639,27 @@ def get_password(user):
         return None
 
 
-def db_cursor(autocommit=False, db='template1', user='postgres', host=None):
+def db_cursor(
+    autocommit=False, db='template1', user='postgres', host=None, timeout=120):
     if host:
         conn_str = "dbname={} host={} user={}".format(db, host, user)
     else:
         conn_str = "dbname={} user={}".format(db, user)
-    conn = psycopg2.connect(conn_str)
+    # There are often race conditions in opening database connections,
+    # such as a reload having just happened to change pg_hba.conf
+    # settings or a hot standby being restarted and needing to catch up
+    # with its master. To protect our automation against these sorts of
+    # race conditions, by default we always retry failed connections
+    # until a timeout is reached.
+    start = time.time()
+    while True:
+        try:
+            conn = psycopg2.connect(conn_str)
+            break
+        except psycopg2.DatabaseError:
+            if time.time() > start + timeout:
+                raise
+        time.sleep(0.3)
     conn.autocommit = autocommit
     return conn.cursor()
 
@@ -1134,28 +1149,6 @@ def drop_database(dbname, warn=True):
             break
 
 
-def get_repmgr_node_id():
-    '''Return the repmgr node id, or None if it is not known.'''
-    # If the repmgr schema has not yet been setup, then nobody has a
-    # node id.
-    cur = db_cursor(autocommit=True, db='repmgr')
-    cur.execute("""
-        SELECT TRUE FROM information_schema.tables
-        WHERE table_schema='repmgr_juju' AND table_name='repl_nodes'
-        """)
-    if cur.fetchone() is None:
-        return None
-
-    cur.execute("""
-        SELECT id from repmgr_juju.repl_nodes
-        WHERE name=%s
-        """, (os.environ['JUJU_UNIT_NAME'],))
-    result = cur.fetchone()
-    if result is not None:
-        return result[0]
-    return None
-
-
 def get_next_repmgr_node_id():
     # This hook does not run as ~postgres, so inform libpq where the
     # password file is.
@@ -1196,25 +1189,30 @@ def repmgr_gc():
     """Remove old nodes from the repmgr database, tear down if no slaves"""
     wanted_units = []
     for relid in relation_ids(replication_relation_types):
-        json_units = subprocess.check_output([
-            'relation-list', '--format=json', '-r', relid]).strip()
-        if json_units:
-            units = json.loads(subprocess.check_output([
-                'relation-list', '--format=json', '-r', relid]))
-            wanted_units.extend(units)
+        wanted_units.extend(relation_list(relid))
 
-    if len(wanted_units) == 0:
-        # No relationships. Trash repmgr database.
+    if not wanted_units:  # No relationships. Trash repmgr database.
+        # Restore a hot standby to a standalone configuration.
+        if cluster_is_in_recovery():
+            pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
+            run("sudo -u postgres {} promote -D '{}'".format(
+                pg_ctl, postgresql_cluster_dir))
+
         if os.path.exists(repmgr_config):
             juju_log(MSG_INFO, "No longer replicated. Dropping repmgr.")
             os.unlink(repmgr_config)
+
         if os.path.exists(postgres_pgpass):
             os.unlink(postgres_pgpass)
+
         drop_database('repmgr')
+
         relation_set(dict(state='standalone'))
 
+
     elif is_master():
-        # At least one other slave.
+        # At least one other slave. Cleanup all the dropped units from
+        # repmgr.
         wanted_units.append(os.environ['JUJU_UNIT_NAME'])
         cur = db_cursor(autocommit=True, db='repmgr')
         cur.execute(
@@ -1338,15 +1336,26 @@ def replication_relation_changed():
                 generate_pgpass(dict(repmgr=relation['repmgr_password']))
                 generate_repmgr_config(get_next_repmgr_node_id())
 
+                # Before we start destroying anything, ensure that the
+                # master is contactable.
+                wait_for_db(
+                    db='repmgr', user='repmgr',
+                    host=relation['private-address'])
+
+                TODO(
+                    "Cloning can fail if another unit is added at the same "
+                    "time causing the master db to be bounced.")
+
                 juju_log(MSG_INFO, "Destroying existing cluster on slave")
                 postgresql_stop()
-                shutil.rmtree(postgresql_cluster_dir)
+                if os.path.isdir(postgresql_cluster_dir):
+                    shutil.rmtree(postgresql_cluster_dir)
                 try:
                     run_repmgr(
                         '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
                         'standby clone {}'.format(
                             postgresql_cluster_dir,
-                            relation_get('private-address')),
+                            relation['private-address']),
                         exit_on_error=False)
                 except subprocess.CalledProcessError:
                     # We failed, and this cluster is broken. Rebuild a
@@ -1354,9 +1363,12 @@ def replication_relation_changed():
                     # can retry hooks again. Even assuming the charm is
                     # functioning correctly, the clone may still fail
                     # due to eg. lack of disk space.
-                    shutil.rmtree(postgresql_cluster_dir)
-                    shutil.rmtree(postgresql_config_dir)
+                    if os.path.exists(postgresql_cluster_dir):
+                        shutil.rmtree(postgresql_cluster_dir)
+                    if os.path.exists(postgresql_config_dir):
+                        shutil.rmtree(postgresql_config_dir)
                     run('pg_createcluster 9.1 main')
+                    config_changed(postgresql_config)
                     relation_set(dict(state='standalone'))
                     raise
                 finally:
@@ -1388,16 +1400,6 @@ def replication_relation_broken():
         TODO("Failover if master unit is removed")
 
     else:
-        # Restore the hot standby to a standalone configuration.
-        if cluster_is_in_recovery():
-            pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
-            run("sudo -u postgres {} promote -D '{}'".format(
-                pg_ctl, postgresql_cluster_dir))
-        if os.path.exists(repmgr_config):
-            os.unlink(repmgr_config)
-        if os.path.exists(postgres_pgpass):
-            os.unlink(postgres_pgpass)
-
         # Once promotion has completed and the cluster is writable, drop the
         # repmgr database.
         timeout = 120
@@ -1407,7 +1409,7 @@ def replication_relation_broken():
                 juju_log(MSG_ERROR, "Failed to promote slave to standalone")
                 sys.exit(1)
             time.sleep(0.5)
-        juju_log(MSG_INFO, "Slave promoted to standalone. Dropping repmgr db.")
+        juju_log(MSG_INFO, "Unit is now standalone. Dropping repmgr db.")
         drop_database('repmgr')
 
 
@@ -1424,17 +1426,9 @@ def cluster_is_in_recovery():
     return cur.fetchone()[0]
 
 
-def wait_for_db(timeout=120):
+def wait_for_db(timeout=120, db='template1', user='postgres', host=None):
     '''Wait until the db is fully up.'''
-    start = time.time()
-    while True:
-        try:
-            db_cursor(autocommit=True)
-            break
-        except psycopg2.DatabaseError:
-            if time.time() > start + timeout:
-                raise
-        time.sleep(0.3)
+    db_cursor(db=db, user=user, host=host, timeout=timeout)
 
 
 def update_nrpe_checks():
