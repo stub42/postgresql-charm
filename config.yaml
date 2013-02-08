@@ -147,28 +147,33 @@ options:
         'minimal', 'archive' or 'hot_standby'. Defines how much information
         is written to the WAL. Set to 'minimal' for stand alone databases
         and 'hot_standby' for replicated setups. Overridden by juju when
-        master/slave relations are used.
+        replication s used.
   max_wal_senders:
     default: 0
     type: int
     description: |
         Maximum number of hot standbys that can connect using
-        streaming replication. Overridden by juju when master/slave relations
-        are used.
+        streaming replication. Set this to the expected maximum number of
+        hot standby units to avoid unnecessary blocking and database restarts.
+        Overridden by juju if necessary.
   wal_keep_segments:
     default: 0
     type: int
     description: |
         Number of old WAL files to keep, providing a larger buffer for
         streaming hot standbys to catch up from when lagged. Each WAL file
-        is 16MB in size. When this service is in master/slave relationships,
-        the larger value of wal_keep_segments and
-        replicated_wal_keep_segments is used.
+        is 16MB in size. The WAL files are the buffer of how far a
+        hot standby can lag behind the master, and replication fails if
+        this buffer is overrun. When this service is replicated, the larger
+        value of wal_keep_segments and replicated_wal_keep_segments is used.
   replicated_wal_keep_segments:
     default: 5000
     type: int
     description: |
-        Value of wal_keep_segments used when this server replicated.
+        Value of wal_keep_segments used when this service is replicated.
+        This setting only exists to provide a sane default when replication
+        is requested (so it doesn't fail) and nobody bothered to change the
+        wal_keep_segments setting.
   archive_mode:
     default: False
     type: boolean

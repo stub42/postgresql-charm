@@ -154,7 +154,7 @@ EOF
 #------------------------------------------------------------------------------
 def run(command, exit_on_error=True):
     try:
-        juju_log(MSG_INFO, command)
+        juju_log(MSG_DEBUG, command)
         return subprocess.check_output(
             command, stderr=subprocess.STDOUT, shell=True)
     except subprocess.CalledProcessError, e:
@@ -218,6 +218,24 @@ def postgresql_start():
 
 def postgresql_restart():
     if postgresql_is_running():
+        # If the database is in backup mode, we don't want to restart
+        # PostgreSQL and abort the procedure. This may be another unit being
+        # cloned, or a filesystem level backup is being made. There is no
+        # timeout here, as backups can take hours or days. Instead, keep
+        # logging so admins know wtf is going on.
+        last_warning = time.time()
+        while postgresql_is_in_backup_mode():
+            if time.time() + 120 > last_warning:
+                juju_log(
+                    MSG_WARNING,
+                    "In backup mode. PostgreSQL restart blocked.")
+                juju_log(
+                    MSG_INFO,
+                    "Run \"psql -U postgres -c 'SELECT pg_stop_backup()'\""
+                    "to cancel backup mode and forcefully unblock this hook.")
+                last_warning = time.time()
+            time.sleep(5)
+
         status, output = \
             commands.getstatusoutput("invoke-rc.d postgresql restart")
         if status != 0:
@@ -231,6 +249,45 @@ def postgresql_reload():
     # reload returns a reliable exit status
     status, output = commands.getstatusoutput("invoke-rc.d postgresql reload")
     return (status == 0)
+
+
+def postgresql_reload_or_restart():
+    """Reload PostgreSQL configuration, restarting if necessary."""
+    # Pull in current values of settings that can only be changed on
+    # server restart.
+    if not postgresql_is_running():
+        return postgresql_restart()
+
+    cur = db_cursor()
+    cur.execute(
+        "SELECT name, setting FROM pg_settings WHERE context='postmaster'")
+
+    for name, live_value in cur.fetchall():
+        if not config_data.has_key(name):
+            continue
+
+        # Cast the changed value to a string, matching what we get from
+        # pg_settings.
+        new_value = config_data[name]
+        if isinstance(new_value, bool):
+            if new_value:
+                new_value = 'on'
+            else:
+                new_value = 'off'
+        else:
+            new_value = str(new_value)
+
+        if new_value != live_value:
+            # A change has been requested that requires a restart.
+            del cur
+            juju_log(
+                MSG_WARNING,
+                "Configuration change requires PostgreSQL restart. "
+                "Restarting.")
+            return postgresql_restart()
+
+    juju_log(MSG_DEBUG, "PostgreSQL reload, config changes taking effect.")
+    return postgresql_reload()  # No pending need to bounce, just reload.
 
 
 #------------------------------------------------------------------------------
@@ -279,17 +336,17 @@ def get_service_port(postgresql_config):
 #                relation_id:  specify relation id for out of context usage.
 #------------------------------------------------------------------------------
 def relation_json(scope=None, unit_name=None, relation_id=None):
-    relation_cmd_line = ['relation-get', '--format=json']
+    command = ['relation-get', '--format=json']
     if relation_id is not None:
-        relation_cmd_line.extend(('-r', relation_id))
+        command.extend(('-r', relation_id))
     if scope is not None:
-        relation_cmd_line.append(scope)
+        command.append(scope)
     else:
-        relation_cmd_line.append('-')
+        command.append('-')
     if unit_name is not None:
-        relation_cmd_line.append(unit_name)
-    relation_data = run(" ".join(relation_cmd_line), exit_on_error=False)
-    return relation_data
+        command.append(unit_name)
+    output = subprocess.check_output(command, stderr=subprocess.STDOUT)
+    return output or None
 
 
 #------------------------------------------------------------------------------
@@ -312,7 +369,7 @@ def relation_set(keyvalues, relation_id=None):
     args = []
     if relation_id:
         args.extend(['-r', relation_id])
-    args.extend(["{}='{}'".format(k, v) for k, v in keyvalues.items()])
+    args.extend(["{}='{}'".format(k, v or '') for k, v in keyvalues.items()])
     run("relation-set {}".format(' '.join(args)))
 
     ## Posting json to relation-set doesn't seem to work as documented?
@@ -432,38 +489,31 @@ def create_postgresql_config(postgresql_config):
     # If we are replicating, some settings may need to be overridden to
     # certain minimum levels.
     num_slaves = slave_count()
-    modified_config_data = dict(config_data)
     if num_slaves > 0:
         juju_log(
-            MSG_INFO,
-            'Master replicated to {} slaves. '
+            MSG_INFO, 'Master replicated to {} hot standbys. '
             'Enforcing minimal replication settings'.format(num_slaves))
-        modified_config_data['hot_standby'] = 'on'
-        modified_config_data['wal_level'] = 'hot_standby'
-        if modified_config_data['archive_mode'] is False:
+        config_data['hot_standby'] = 'on'
+        config_data['wal_level'] = 'hot_standby'
+        if config_data['archive_mode'] is False:
             # If archive_mode was not configured, we need to override it
             # to keep repmgr happy despite the fact it doesn't really
             # need it. We also need set a noop archive_command. If
             # archive_mode was already set, we don't mess with the
             # archive_command setting.
-            modified_config_data['archive_mode'] = 'True'
+            config_data['archive_mode'] = 'True'
             if not config_data['archive_command']:
-                modified_config_data['archive_command'] = 'cd .'
-        if config_data['max_wal_senders']:
-            modified_config_data['max_wal_senders'] = max(
-                config_data['max_wal_senders'], num_slaves)
-        else:
-            modified_config_data['max_wal_senders'] = num_slaves
-        modified_config_data['wal_keep_segments'] = max(
-            modified_config_data['wal_keep_segments'],
-            modified_config_data['replicated_wal_keep_segments'])
+                config_data['archive_command'] = 'cd .'
+        config_data['max_wal_senders'] = max(
+            num_slaves, config_data['max_wal_senders'])
+        config_data['wal_keep_segments'] = max(
+            config_data['wal_keep_segments'],
+            config_data['replicated_wal_keep_segments'])
 
     # Send config data to the template
     # Return it as pg_config
-    pg_config = \
-        Template(
-            open("templates/postgresql.conf.tmpl").read()).render(
-                modified_config_data)
+    pg_config = Template(
+            open("templates/postgresql.conf.tmpl").read()).render(config_data)
     install_file(pg_config, postgresql_config)
 
 
@@ -530,16 +580,13 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             }
         relation_data.append(local_repmgr)
 
-    juju_log(MSG_INFO, str(relation_data))
     pg_hba_template = Template(
         open("templates/pg_hba.conf.tmpl").read()).render(
             access_list=relation_data)
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
     if do_reload:
-        if config_change_command in ["reload", "restart"]:
-            subprocess.call(['invoke-rc.d', 'postgresql',
-                config_data["config_change_command"]])
+        postgresql_reload()
 
 
 #------------------------------------------------------------------------------
@@ -656,7 +703,7 @@ def db_cursor(
         try:
             conn = psycopg2.connect(conn_str)
             break
-        except psycopg2.DatabaseError:
+        except psycopg2.Error:
             if time.time() > start + timeout:
                 raise
         time.sleep(0.3)
@@ -784,8 +831,7 @@ def config_changed_volume_apply():
 ###############################################################################
 # Hook functions
 ###############################################################################
-def config_changed(postgresql_config):
-    config_change_command = config_data["config_change_command"]
+def config_changed(postgresql_config, force_restart=False):
     # Trigger volume initialization logic for permanent storage
     volid = volume_get_volume_id()
     if not volid:
@@ -806,7 +852,7 @@ def config_changed(postgresql_config):
         ## it necessary, ie: new volume setup
         if config_changed_volume_apply():
             enable_service_start("postgresql")
-            config_change_command = "restart"
+            force_restart = True
         else:
             disable_service_start("postgresql")
             postgresql_stop()
@@ -824,16 +870,9 @@ def config_changed(postgresql_config):
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
     update_nrpe_checks()
-    juju_log(MSG_INFO,
-        "about reconfigure service with config_change_command = '%s'" %
-        config_change_command)
-    if config_change_command == "reload":
-        return postgresql_reload()
-    elif config_change_command == "restart":
+    if force_restart:
         return postgresql_restart()
-    juju_log(MSG_ERROR, "invalid config_change_command = '%s'" %
-        config_change_command)
-    return False
+    return postgresql_reload_or_restart()
 
 
 def token_sql_safe(value):
@@ -872,6 +911,8 @@ def install(run_pre=True):
         mode=0755)
     install_postgresql_crontab(postgresql_crontab)
     open_port(5432)
+
+    generate_postgresql_hba(postgresql_hba)  # Ensure access granted for hooks.
 
 
 def user_name(relid, remote_unit, admin=False, schema=False):
@@ -1137,7 +1178,7 @@ def drop_database(dbname, warn=True):
         try:
             db_cursor(autocommit=True).execute(
                 'DROP DATABASE IF EXISTS "{}"'.format(dbname))
-        except psycopg2.DatabaseError:
+        except psycopg2.Error:
             if time.time() > now + timeout:
                 if warn:
                     juju_log(
@@ -1191,9 +1232,10 @@ def repmgr_gc():
     for relid in relation_ids(replication_relation_types):
         wanted_units.extend(relation_list(relid))
 
-    if not wanted_units:  # No relationships. Trash repmgr database.
+    # If there are replication relationships, trash the local repmgr setup.
+    if not wanted_units:
         # Restore a hot standby to a standalone configuration.
-        if cluster_is_in_recovery():
+        if postgresql_is_in_recovery():
             pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
             run("sudo -u postgres {} promote -D '{}'".format(
                 pg_ctl, postgresql_cluster_dir))
@@ -1211,8 +1253,8 @@ def repmgr_gc():
 
 
     elif is_master():
-        # At least one other slave. Cleanup all the dropped units from
-        # repmgr.
+        # There is at least one hot standby, and I'm the master.
+        # Cleanup any dropped units from repmgr.
         wanted_units.append(os.environ['JUJU_UNIT_NAME'])
         cur = db_cursor(autocommit=True, db='repmgr')
         cur.execute(
@@ -1275,8 +1317,6 @@ def replication_relation_changed():
     ensure_local_ssh()  # Generate SSH key and publish details
     authorize_remote_ssh()  # Authorize relationship SSH keys.
     config_changed(postgresql_config)  # Ensure minimal replication settings.
-    TODO("config_changed() should restart PostgreSQL, if necessary")
-    postgresql_restart()
 
     install_repmgr()
 
@@ -1294,6 +1334,7 @@ def replication_relation_changed():
             repmgr_password = create_user(
                 'repmgr', admin=True, replication=True)
             generate_pgpass(dict(repmgr=repmgr_password))
+            drop_database('repmgr')
             ensure_database('repmgr', 'repmgr', 'repmgr')
             master_node_id = get_next_repmgr_node_id()
             generate_repmgr_config(master_node_id)
@@ -1314,15 +1355,11 @@ def replication_relation_changed():
 
     else:  # A hot standby, now or soon.
         remote_is_master = (relation.get('state', '') == 'master')
-        juju_log(
-            MSG_INFO, "Remote state is {}".format(relation.get('role','???')))
 
         remote_has_authorized = False
         for unit in relation.get('authorized', '').split():
             if unit == os.environ['JUJU_UNIT_NAME']:
                 remote_has_authorized = True
-        juju_log(
-            MSG_INFO, "Remote authorized is {}".format(remote_has_authorized))
 
         if remote_is_master and remote_has_authorized:
             if local_state == 'standalone':
@@ -1342,11 +1379,8 @@ def replication_relation_changed():
                     db='repmgr', user='repmgr',
                     host=relation['private-address'])
 
-                TODO(
-                    "Cloning can fail if another unit is added at the same "
-                    "time causing the master db to be bounced.")
-
-                juju_log(MSG_INFO, "Destroying existing cluster on slave")
+                juju_log(
+                    MSG_INFO, "Destroying existing cluster on hot standby")
                 postgresql_stop()
                 if os.path.isdir(postgresql_cluster_dir):
                     shutil.rmtree(postgresql_cluster_dir)
@@ -1396,22 +1430,6 @@ def replication_relation_broken():
     config_changed(postgresql_config)
     authorize_remote_ssh()
 
-    if is_master():
-        TODO("Failover if master unit is removed")
-
-    else:
-        # Once promotion has completed and the cluster is writable, drop the
-        # repmgr database.
-        timeout = 120
-        start = time.time()
-        while cluster_is_in_recovery():
-            if time.time() > start + timeout:
-                juju_log(MSG_ERROR, "Failed to promote slave to standalone")
-                sys.exit(1)
-            time.sleep(0.5)
-        juju_log(MSG_INFO, "Unit is now standalone. Dropping repmgr db.")
-        drop_database('repmgr')
-
 
 def slave_count():
     num_slaves = 0
@@ -1420,10 +1438,15 @@ def slave_count():
     return num_slaves
 
 
-def cluster_is_in_recovery():
+def postgresql_is_in_recovery():
     cur = db_cursor(autocommit=True)
     cur.execute("SELECT pg_is_in_recovery()")
     return cur.fetchone()[0]
+
+
+def postgresql_is_in_backup_mode():
+    return os.path.exists(
+        os.path.join(postgresql_cluster_dir, 'backup_label'))
 
 
 def wait_for_db(timeout=120, db='template1', user='postgres', host=None):
@@ -1523,6 +1546,7 @@ replication_relation_types = ['master', 'slave', 'replication']
 ###############################################################################
 # Main section
 ###############################################################################
+juju_log(MSG_INFO, "Running {} hook".format(hook_name))
 if hook_name == "install":
     install()
 #-------- config-changed
