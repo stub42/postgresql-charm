@@ -17,13 +17,12 @@ import commands
 from pwd import getpwnam
 from grp import getgrnam
 
-# These modules may not be importable until after the install hook has
-# run.
-try:
-    import psycopg2
+
+# jinja2 may not be importable until the install hook has installed the
+# required packages.
+def Template(*args, **kw):
     from jinja2 import Template
-except ImportError:
-    pass
+    return Template(*args, **kw)
 
 
 ###############################################################################
@@ -580,7 +579,6 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             }
         relation_data.append(local_repmgr)
 
-    from jinja2 import Template
     pg_hba_template = Template(
         open("templates/pg_hba.conf.tmpl").read()).render(
             access_list=relation_data)
@@ -599,7 +597,6 @@ def install_postgresql_crontab(postgresql_ident):
         'scripts_dir': postgresql_scripts_dir,
         'backup_days': config_data["backup_retention_count"],
     }
-    from jinja2 import Template
     crontab_template = Template(
         open("templates/postgres.cron.tmpl").read()).render(crontab_data)
     install_file(str(crontab_template), "/etc/cron.d/postgres", mode=0644)
@@ -689,6 +686,7 @@ def get_password(user):
 
 def db_cursor(
     autocommit=False, db='template1', user='postgres', host=None, timeout=120):
+    import psycopg2
     if host:
         conn_str = "dbname={} host={} user={}".format(db, host, user)
     else:
@@ -713,6 +711,7 @@ def db_cursor(
 
 
 def run_sql_as_postgres(sql, *parameters):
+    import psycopg2
     cur = db_cursor(autocommit=True)
     try:
         cur.execute(sql, parameters)
@@ -892,7 +891,6 @@ def install(run_pre=True):
         "python-psycopg2",
         "postgresql-%s-debversion" % config_data["version"]]:
         apt_get_install(package)
-    from jinja2 import Template
     install_dir(postgresql_backups_dir, owner="postgres", mode=0755)
     install_dir(postgresql_scripts_dir, owner="postgres", mode=0755)
     install_dir(postgresql_logs_dir, owner="postgres", mode=0755)
@@ -916,7 +914,7 @@ def install(run_pre=True):
     # Ensure at least minimal access granted for hooks to run.
     # Reload because we are using the default cluster setup and started
     # when we installed the PostgreSQL packages.
-    generate_postgresql_hba(postgresql_hba, do_reload=True)
+    config_changed(postgresql_config, force_restart=True)
 
 
 def user_name(relid, remote_unit, admin=False, schema=False):
@@ -1176,6 +1174,7 @@ def run_repmgr(cmd, exit_on_error=True):
 
 
 def drop_database(dbname, warn=True):
+    import psycopg2
     timeout = 120
     now = time.time()
     while True:
@@ -1317,7 +1316,6 @@ def is_master():
 
 
 def replication_relation_changed():
-    juju_log(MSG_INFO, "Hook replication_relation_changed()")
     ensure_local_ssh()  # Generate SSH key and publish details
     authorize_remote_ssh()  # Authorize relationship SSH keys.
     config_changed(postgresql_config)  # Ensure minimal replication settings.
