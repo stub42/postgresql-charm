@@ -16,12 +16,12 @@ provides:
     interface: pgsql
   master:
     interface: repmgr
-  slave:
-    interface: repmgr
-    limit: 1
 requires:
   persistent-storage:
     interface: directory-path
+  slave:
+    interface: repmgr
+    limit: 1
 peers:
   replication:
     interface: repmgr-peer
