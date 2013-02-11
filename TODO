@@ -29,3 +29,5 @@
   cluster running and attempting to replicate from a master that is refusing
   its connections. Bug #872264.
 
+- Automatic restart/reload handling is always reloading - value
+  retrieved from db is normalized, value in config has units.

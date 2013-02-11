@@ -261,6 +261,7 @@ def postgresql_reload_or_restart():
     cur.execute(
         "SELECT name, setting FROM pg_settings WHERE context='postmaster'")
 
+    restart = False
     for name, live_value in cur.fetchall():
         if not config_data.has_key(name):
             continue
@@ -268,22 +269,28 @@ def postgresql_reload_or_restart():
         # Cast the changed value to a string, matching what we get from
         # pg_settings.
         new_value = config_data[name]
-        if isinstance(new_value, bool):
-            if new_value:
-                new_value = 'on'
-            else:
-                new_value = 'off'
+
+        # Cast our booleans, which are alas not actually booleans, to
+        # what PostgreSQL emits.
+        if new_value == 'True':
+            new_value = 'on'
         else:
-            new_value = str(new_value)
+            new_value = 'off'
 
         if new_value != live_value:
-            # A change has been requested that requires a restart.
-            del cur
             juju_log(
-                MSG_WARNING,
-                "Configuration change requires PostgreSQL restart. "
-                "Restarting.")
-            return postgresql_restart()
+                MSG_INFO, "Changed {} from {} to {}".format(
+                    name, live_value, new_value))
+            restart = True
+    del cur
+
+    if restart:
+        # A change has been requested that requires a restart.
+        juju_log(
+            MSG_WARNING,
+            "Configuration change requires PostgreSQL restart. "
+            "Restarting.")
+        return postgresql_restart()
 
     juju_log(MSG_DEBUG, "PostgreSQL reload, config changes taking effect.")
     return postgresql_reload()  # No pending need to bounce, just reload.
@@ -1271,11 +1278,6 @@ def is_master():
     Return True if I am the active master, or if neither myself nor
     the remote unit is and I win an election.
     '''
-    # Do I think I am the master?
-    if relation_get('state', os.environ['JUJU_UNIT_NAME']) == 'master':
-        TODO("Handle failover - multiple units may think they are master")
-        return True
-
     TODO(
         "Detect incompatible relationships, such as cascading or mixed "
         "peer & master/slave relationships")
@@ -1285,10 +1287,17 @@ def is_master():
         # No units in my service can be a master.
         return False
 
-    # If there are any other peers claiming to be the master, then I am
-    # not the master.
+    # Lets see what out peer group thinks.
     peer_units = set()
     for relid in relation_ids(relation_types=['replication']):
+
+        # Do I think I am the master in my peer group?
+        if relation_get(
+            'state', os.environ['JUJU_UNIT_NAME'], relid) == 'master':
+            return True
+
+        # If there are any other peers claiming to be the master, then I am
+        # not the master.
         for unit in relation_list(relid):
             peer_units.add(unit)
             if relation_get('state', unit, relid) == 'master':
