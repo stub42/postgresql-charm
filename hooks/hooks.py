@@ -580,6 +580,7 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             }
         relation_data.append(local_repmgr)
 
+    from jinja2 import Template
     pg_hba_template = Template(
         open("templates/pg_hba.conf.tmpl").read()).render(
             access_list=relation_data)
@@ -912,7 +913,10 @@ def install(run_pre=True):
     install_postgresql_crontab(postgresql_crontab)
     open_port(5432)
 
-    generate_postgresql_hba(postgresql_hba)  # Ensure access granted for hooks.
+    # Ensure at least minimal access granted for hooks to run.
+    # Reload because we are using the default cluster setup and started
+    # when we installed the PostgreSQL packages.
+    generate_postgresql_hba(postgresql_hba, do_reload=True)
 
 
 def user_name(relid, remote_unit, admin=False, schema=False):
