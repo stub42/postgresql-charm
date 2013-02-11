@@ -1111,7 +1111,7 @@ def authorize_remote_ssh():
     known_hosts = []
     for relid in relation_ids(relation_types=replication_relation_types):
         for unit in relation_list(relid):
-            relation = relation_get(unit_name=unit)
+            relation = relation_get(unit_name=unit, relation_id=relid)
             public_key = relation.get('public_ssh_key', None)
             if public_key:
                 authorized_units.append(unit)
@@ -1308,8 +1308,10 @@ def is_master():
     # There are no masters, so we need an election within this peer
     # relation. Lowest unit number wins and gets to be the master.
     remote_nums = sorted(int(unit.split('/', 1)[1]) for unit in peer_units)
+    if not remote_nums:
+        return True  # Only unit in a service in a master relationship.
     my_num = int(os.environ['JUJU_UNIT_NAME'].split('/', 1)[1])
-    if remote_nums and my_num < remote_nums[0]:
+    if my_num < remote_nums[0]:
         return True
     else:
         return False
@@ -1330,6 +1332,7 @@ def replication_relation_changed():
     relation = relation_get()
 
     if is_master():
+        juju_log(MSG_INFO, "I am the master")
         if local_state == 'standalone':  # Initial setup of a master.
             # The user repmgr connects as for both replication and
             # administration.
@@ -1356,6 +1359,7 @@ def replication_relation_changed():
             raise AssertionError("Unknown state {}".format(relation['state']))
 
     else:  # A hot standby, now or soon.
+        juju_log(MSG_INFO, "I am a hot standby")
         remote_is_master = (relation.get('state', '') == 'master')
 
         remote_has_authorized = False
