@@ -34,3 +34,6 @@
 
 - If a service containing two or more units is added as a slave, the
   master unit needs to switch to being a slave.
+
+- Cannot build two replicas at the same time, due to repmgr limitations?
+  Switch to pg_basebackup to clone.
