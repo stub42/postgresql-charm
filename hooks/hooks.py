@@ -40,6 +40,55 @@ def juju_log(level, msg):
     subprocess.call(['/usr/bin/juju-log', '-l', level, msg])
 
 
+class State(dict):
+    """Encapsulate state common to the unit for repuslishing to relations."""
+    def __init__(self, state_file):
+        self._state_file = state_file
+        self.load()
+
+    def load(self):
+        if os.path.exists(self._state_file):
+            state = pickle.load(open(self._state_file, 'rb'))
+        else:
+            state = {}
+        self.clear()
+
+        self.update(state)
+
+    def save(self):
+        state = {}
+        state.update(self)
+        pickle.dump(state, open(self._state_file, 'wb'))
+
+    def publish(self):
+        """Publish relevant unit state to relations"""
+
+        def add(state_dict, key):
+            if self.has_key(key):
+                state_dict[key] = self[key]
+
+        client_state = {}
+        add(client_state, 'state')
+
+        for relid in relation_ids(relation_types=['db', 'db-admin']):
+            relation_set(client_state, relid)
+
+        replication_state = dict(client_state)
+
+        add(replication_state, 'public_ssh_key')
+        add(replication_state, 'ssh_host_key')
+        add(replication_state, 'repmgr_password')
+
+        authorized = self.get('authorized', None)
+        if authorized:
+            replication_state['authorized'] = ' '.join(authorized)
+
+        for relid in relation_ids(relation_types=replication_relation_types):
+            relation_set(replication_state, relid)
+
+        self.save()
+
+
 ###############################################################################
 
 # Volume managment
@@ -245,8 +294,9 @@ def postgresql_restart():
 
     # Store a copy of our known live configuration so
     # postgresql_reload_or_restart() can make good choices.
-    if os.path.exists('current_config.pickle'):
-        shutil.copyfile('current_config.pickle', 'live_config.pickle')
+    if local_state.has_key('saved_config'):
+        local_state['live_config'] = local_state['saved_config']
+        local_state.save()
 
     return postgresql_is_running()
 
@@ -265,17 +315,14 @@ def postgresql_reload_or_restart():
         return postgresql_restart()
 
     # Suck in the config last written to postgresql.conf.
-    if os.path.exists('current_config.pickle'):
-        current_config = pickle.load(open('current_config.pickle', 'rb'))
-    else:
+    saved_config = local_state.get('saved_config', None)
+    if not saved_config:
         # No record of postgresql.conf state, perhaps an upgrade.
         # Better restart.
         return postgresql_restart()
 
     # Suck in our live config from last time we restarted.
-    live_config = {}
-    if os.path.exists('live_config.pickle'):
-        live_config = pickle.load(open('live_config.pickle', 'rb'))
+    live_config = local_state.setdefault('live_config', {})
 
     # Pull in a list of PostgreSQL settings.
     cur = db_cursor()
@@ -283,12 +330,13 @@ def postgresql_reload_or_restart():
     requires_restart = False
     for name, context in cur.fetchall():
         live_value = live_config.get(name, None)
-        new_value = current_config.get(name, None)
+        new_value = saved_config.get(name, None)
 
         if new_value != live_value:
-            juju_log(
-                MSG_INFO, "Changed {} from {} to {}".format(
-                    name, live_value, new_value))
+            if live_config:
+                juju_log(
+                    MSG_INFO, "Changed {} from {} to {}".format(
+                        name, repr(live_value), repr(new_value)))
             if context == 'postmaster':
                 # A setting has changed that requires PostgreSQL to be
                 # restarted before it will take effect.
@@ -306,11 +354,11 @@ def postgresql_reload_or_restart():
             MSG_DEBUG, "PostgreSQL reload, config changes taking effect.")
         rc = postgresql_reload()  # No pending need to bounce, just reload.
 
-    if rc == 0:
-        # Store a copy of our known live configuration so
-        # postgresql_reload_or_restart() can make good choices.
-        if os.path.exists('current_config.pickle'):
-            shutil.copyfile('current_config.pickle', 'live_config.pickle')
+    if rc == 0 and local_state.has_key('saved_config'):
+        local_state['live_config'] = local_state['saved_config']
+        local_state.save()
+
+    return rc
 
 
 #------------------------------------------------------------------------------
@@ -539,9 +587,8 @@ def create_postgresql_config(postgresql_config):
             open("templates/postgresql.conf.tmpl").read()).render(config_data)
     install_file(pg_config, postgresql_config)
 
-    # Store a machine readable copy of our stored config so
-    # postgresql_reload_or_restart() can make informed decisions.
-    pickle.dump(config_data, open('current_config.pickle', 'wb'))
+    local_state['saved_config'] = config_data
+    local_state.save()
 
 
 #------------------------------------------------------------------------------
@@ -917,8 +964,13 @@ def install(run_pre=True):
         for f in glob.glob('exec.d/*/charm-pre-install'):
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 subprocess.check_call(['sh', '-c', f])
+
+    # Intialize local state.
+    local_state.setdefault('state', 'standalone')
+    local_state.publish()
+
     for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
-        "python-psycopg2", "units",
+        "python-psycopg2",
         "postgresql-%s-debversion" % config_data["version"]]:
         apt_get_install(package)
     install_dir(postgresql_backups_dir, owner="postgres", mode=0755)
@@ -964,7 +1016,7 @@ def user_name(relid, remote_unit, admin=False, schema=False):
 
 
 def database_names(admin=False):
-    omit_tables = ['template0', 'template1']
+    omit_tables = ['template0', 'template1', 'repmgr']
     sql = \
     "SELECT datname FROM pg_database WHERE datname NOT IN (" + \
     ",".join(["%s"] * len(omit_tables)) + ")"
@@ -1107,10 +1159,17 @@ def install_repmgr():
     '''Install the repmgr package if it isn't already.'''
     TODO('Get repmgr packages in official repository')
     extra_repos = config_get('extra_archives')
+    extra_repos_added = local_state.setdefault('extra_repos_added', set())
     if extra_repos:
+        repos_added = False
         for repo in extra_repos.split():
-            run("add-apt-repository --yes '{}'".format(repo))
-        run('apt-get update')
+            if repo not in extra_repos_added:
+                run("add-apt-repository --yes '{}'".format(repo))
+                extra_repos_added.add(repo)
+                repos_added = True
+        if repos_added:
+            run('apt-get update')
+            local_state.save()
     apt_get_install('repmgr')
     apt_get_install('postgresql-9.1-repmgr')
 
@@ -1130,23 +1189,24 @@ def ensure_local_ssh():
             "-f '{}'".format(comment, postgres_ssh_private_key))
     public_key = open(postgres_ssh_public_key, 'r').read().strip()
     host_key = open('/etc/ssh/ssh_host_ecdsa_key.pub').read().strip()
-    juju_log(MSG_INFO, "Publishing SSH credentials")
-    relation_set(dict(public_ssh_key=public_key, ssh_host_key=host_key))
+    local_state['public_ssh_key'] = public_key
+    local_state['ssh_host_key'] = host_key
+    local_state.publish()
 
 
 def authorize_remote_ssh():
     """Generate the SSH authorized_keys file."""
-    authorized_units = []
-    authorized_keys = []
-    known_hosts = []
+    authorized_units = set()
+    authorized_keys = set()
+    known_hosts = set()
     for relid in relation_ids(relation_types=replication_relation_types):
         for unit in relation_list(relid):
             relation = relation_get(unit_name=unit, relation_id=relid)
             public_key = relation.get('public_ssh_key', None)
             if public_key:
-                authorized_units.append(unit)
-                authorized_keys.append(public_key)
-                known_hosts.append('{} {}'.format(
+                authorized_units.add(unit)
+                authorized_keys.add(public_key)
+                known_hosts.add('{} {}'.format(
                     relation['private-address'], relation['ssh_host_key']))
 
     # Generate known_hosts
@@ -1160,7 +1220,8 @@ def authorize_remote_ssh():
         owner="postgres", group="postgres", mode=0o400)
 
     # Publish details, so relation knows they have been granted access.
-    relation_set(dict(authorized=' '.join(authorized_units)))
+    local_state['authorized'] = authorized_units
+    local_state.publish()
 
 
 def generate_pgpass(passwords):
@@ -1282,13 +1343,16 @@ def repmgr_gc():
 
         drop_database('repmgr')
 
-        relation_set(dict(state='standalone'))
+        local_state['state'] = 'standalone'
 
 
     elif is_master():
         # There is at least one hot standby, and I'm the master.
         # Cleanup any dropped units from repmgr.
         wanted_units.append(os.environ['JUJU_UNIT_NAME'])
+        juju_log(
+            MSG_INFO, "Remaining repmgr nodes {}".format(
+                ', '.join(wanted_units)))
         cur = db_cursor(autocommit=True, db='repmgr')
         cur.execute(
             "DELETE FROM repmgr_juju.repl_nodes WHERE NOT ARRAY[name] <@ %s",
@@ -1308,17 +1372,16 @@ def is_master():
     if relation_ids(relation_types=['slave']):
         # I'm explicitly the slave in a master/slave relationship.
         # No units in my service can be a master.
+        TODO("If peer group added as a slave, handle the peer master")
         return False
+
+    # Do I think I'm the master?
+    if local_state['state'] == 'master':
+        return True
 
     # Lets see what out peer group thinks.
     peer_units = set()
     for relid in relation_ids(relation_types=['replication']):
-
-        # Do I think I am the master in my peer group?
-        if relation_get(
-            'state', os.environ['JUJU_UNIT_NAME'], relid) == 'master':
-            return True
-
         # If there are any other peers claiming to be the master, then I am
         # not the master.
         for unit in relation_list(relid):
@@ -1356,16 +1419,11 @@ def replication_relation_changed():
 
     install_repmgr()
 
-    local_state = relation_get('state', os.environ['JUJU_UNIT_NAME'])
-    if not local_state:
-        local_state = 'standalone'
-        relation_set(dict(state=local_state))
-
     relation = relation_get()
 
     if is_master():
-        juju_log(MSG_INFO, "I am the master")
-        if local_state == 'standalone':  # Initial setup of a master.
+        if local_state['state'] == 'standalone':  # Initial setup of a master.
+            juju_log(MSG_INFO, "I am standalone and becoming the master")
             # The user repmgr connects as for both replication and
             # administration.
             repmgr_password = create_user(
@@ -1376,19 +1434,24 @@ def replication_relation_changed():
             master_node_id = get_next_repmgr_node_id()
             generate_repmgr_config(master_node_id)
             run_repmgr('master register')
-            relation_set(dict(
-                state='master', repmgr_password=repmgr_password))
+            local_state['state'] = 'master'
+            local_state['repmgr_password'] = repmgr_password
+            juju_log(MSG_INFO, "Publishing repmgr details to hot standbys")
+            local_state.publish()
 
-        elif local_state == 'master':  # Already the master.
-            pass  # Already the master.
+        elif local_state['state'] == 'master':  # Already the master.
+            juju_log(MSG_INFO, "I am the master")
 
-        elif local_state == 'hot standby':  # I've been promoted
+        elif local_state['state'] == 'hot standby':  # I've been promoted
+            juju_log(MSG_INFO, "I am a hot standby being promoted to master")
             TODO("This won't play well with repmgrd, but not using that yet")
             run_repmgr('standby promote')
-            relation_set('state', 'master')
+            local_state['state'] = 'master'
+            local_state.publish()
 
         else:
-            raise AssertionError("Unknown state {}".format(relation['state']))
+            raise AssertionError(
+                "Unknown state {}".format(local_state['state']))
 
     else:  # A hot standby, now or soon.
         juju_log(MSG_INFO, "I am a hot standby")
@@ -1400,11 +1463,11 @@ def replication_relation_changed():
                 remote_has_authorized = True
 
         if remote_is_master and remote_has_authorized:
-            if local_state == 'standalone':
+            if local_state['state'] == 'standalone':
                 # Republish the repmgr password in case we failover to
                 # being the master in the future. Bug #806098.
-                relation_set(dict(
-                    repmgr_password=relation['repmgr_password']))
+                local_state['repmgr_password'] = relation['repmgr_password']
+                local_state.publish()
 
                 # We are just joining replication, and have found a
                 # master. Clone and follow it.
@@ -1441,17 +1504,17 @@ def replication_relation_changed():
                         shutil.rmtree(postgresql_config_dir)
                     run('pg_createcluster 9.1 main')
                     config_changed(postgresql_config)
-                    relation_set(dict(state='standalone'))
                     raise
                 finally:
                     postgresql_start()
                 juju_log(MSG_INFO, "Cloned cluster")
                 wait_for_db()
                 run_repmgr('standby register')
-                relation_set(dict(state='hot standby'))
                 juju_log(MSG_INFO, "Registered cluster with repmgr")
+                local_state['state'] = 'hot standby'
+                local_state.publish()
 
-            elif local_state == 'hot standby':
+            elif local_state['state'] == 'hot standby':
                 TODO("If master has changed, follow the new master")
                 # rc, out = run_repmgr('standby follow', exit_on_error=False)
                 # if rc != 0:
@@ -1460,7 +1523,8 @@ def replication_relation_changed():
                 #     raise SystemExit(1)
 
             else:
-                raise AssertionError("Unknown state {}".format(local_state))
+                raise AssertionError(
+                    "Unknown state {}".format(local_state['state']))
 
 
 def replication_relation_broken():
@@ -1580,6 +1644,7 @@ postgres_pgpass = os.path.expanduser('~postgres/.pgpass')
 repmgr_config = os.path.expanduser('~postgres/repmgr.conf')
 hook_name = os.path.basename(sys.argv[0])
 replication_relation_types = ['master', 'slave', 'replication']
+local_state = State('local_state.pickle')
 
 ###############################################################################
 # Main section
