@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # vim: et ai ts=4 sw=4:
 
+import cPickle as pickle
 import json
 import yaml
 import os
@@ -241,6 +242,12 @@ def postgresql_restart():
             return False
     else:
         postgresql_start()
+
+    # Store a copy of our known live configuration so
+    # postgresql_reload_or_restart() can make good choices.
+    if os.path.exists('current_config.pickle'):
+        shutil.copyfile('current_config.pickle', 'live_config.pickle')
+
     return postgresql_is_running()
 
 
@@ -257,43 +264,53 @@ def postgresql_reload_or_restart():
     if not postgresql_is_running():
         return postgresql_restart()
 
+    # Suck in the config last written to postgresql.conf.
+    if os.path.exists('current_config.pickle'):
+        current_config = pickle.load(open('current_config.pickle', 'rb'))
+    else:
+        # No record of postgresql.conf state, perhaps an upgrade.
+        # Better restart.
+        return postgresql_restart()
+
+    # Suck in our live config from last time we restarted.
+    live_config = {}
+    if os.path.exists('live_config.pickle'):
+        live_config = pickle.load(open('live_config.pickle', 'rb'))
+
+    # Pull in a list of PostgreSQL settings.
     cur = db_cursor()
-    cur.execute(
-        "SELECT name, setting FROM pg_settings WHERE context='postmaster'")
-
-    restart = False
-    for name, live_value in cur.fetchall():
-        if not config_data.has_key(name):
-            continue
-
-        # Cast the changed value to a string, matching what we get from
-        # pg_settings.
-        new_value = config_data[name]
-
-        # Cast our booleans, which are alas not actually booleans, to
-        # what PostgreSQL emits.
-        if new_value == 'True':
-            new_value = 'on'
-        else:
-            new_value = 'off'
+    cur.execute("SELECT name, context FROM pg_settings")
+    requires_restart = False
+    for name, context in cur.fetchall():
+        live_value = live_config.get(name, None)
+        new_value = current_config.get(name, None)
 
         if new_value != live_value:
             juju_log(
                 MSG_INFO, "Changed {} from {} to {}".format(
                     name, live_value, new_value))
-            restart = True
-    del cur
+            if context == 'postmaster':
+                # A setting has changed that requires PostgreSQL to be
+                # restarted before it will take effect.
+                requires_restart = True
 
-    if restart:
+    if requires_restart:
         # A change has been requested that requires a restart.
         juju_log(
             MSG_WARNING,
             "Configuration change requires PostgreSQL restart. "
             "Restarting.")
-        return postgresql_restart()
+        rc = postgresql_restart()
+    else:
+        juju_log(
+            MSG_DEBUG, "PostgreSQL reload, config changes taking effect.")
+        rc = postgresql_reload()  # No pending need to bounce, just reload.
 
-    juju_log(MSG_DEBUG, "PostgreSQL reload, config changes taking effect.")
-    return postgresql_reload()  # No pending need to bounce, just reload.
+    if rc == 0:
+        # Store a copy of our known live configuration so
+        # postgresql_reload_or_restart() can make good choices.
+        if os.path.exists('current_config.pickle'):
+            shutil.copyfile('current_config.pickle', 'live_config.pickle')
 
 
 #------------------------------------------------------------------------------
@@ -522,6 +539,10 @@ def create_postgresql_config(postgresql_config):
             open("templates/postgresql.conf.tmpl").read()).render(config_data)
     install_file(pg_config, postgresql_config)
 
+    # Store a machine readable copy of our stored config so
+    # postgresql_reload_or_restart() can make informed decisions.
+    pickle.dump(config_data, open('current_config.pickle', 'wb'))
+
 
 #------------------------------------------------------------------------------
 # create_postgresql_ident:  Creates the pg_ident.conf file
@@ -731,7 +752,9 @@ def run_sql_as_postgres(sql, *parameters):
 def run_select_as_postgres(sql, *parameters):
     cur = db_cursor()
     cur.execute(sql, parameters)
-    return (cur.rowcount, cur.fetchall())
+    # NB. Need to suck in the results before the rowcount is valid.
+    results = cur.fetchall()
+    return (cur.rowcount, results)
 
 
 #------------------------------------------------------------------------------
@@ -895,7 +918,7 @@ def install(run_pre=True):
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 subprocess.check_call(['sh', '-c', f])
     for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
-        "python-psycopg2",
+        "python-psycopg2", "units",
         "postgresql-%s-debversion" % config_data["version"]]:
         apt_get_install(package)
     install_dir(postgresql_backups_dir, owner="postgres", mode=0755)
