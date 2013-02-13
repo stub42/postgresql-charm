@@ -41,7 +41,7 @@ def juju_log(level, msg):
 
 
 class State(dict):
-    """Encapsulate state common to the unit for repuslishing to relations."""
+    """Encapsulate state common to the unit for republishing to relations."""
     def __init__(self, state_file):
         self._state_file = state_file
         self.load()
