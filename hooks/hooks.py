@@ -441,8 +441,7 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
         # http://stackoverflow.com/q/319279/196832
         try:
             socket.inet_aton(relation['private-address'])
-            relation['private-address'] = ''.join([relation['private-address'],
-                                                  str('/'), '32'])
+            relation['private-address'] = "%s/32" % relation['private-address']
         except socket.error:
             # It's not an IP address.
             pass
