@@ -467,7 +467,7 @@ def relation_list(relation_id=None):
     json_units = subprocess.check_output(cmd).strip()
     if json_units:
         return json.loads(subprocess.check_output(cmd))
-    return None
+    return []
 
 
 #------------------------------------------------------------------------------
@@ -1157,7 +1157,6 @@ def TODO(msg):
 
 def install_repmgr():
     '''Install the repmgr package if it isn't already.'''
-    TODO('Get repmgr packages in official repository')
     extra_repos = config_get('extra_archives')
     extra_repos_added = local_state.setdefault('extra_repos_added', set())
     if extra_repos:
@@ -1365,14 +1364,23 @@ def is_master():
     Return True if I am the active master, or if neither myself nor
     the remote unit is and I win an election.
     '''
-    TODO(
-        "Detect incompatible relationships, such as cascading or mixed "
-        "peer & master/slave relationships")
+    master_relation_ids = relation_ids(relation_types=['master'])
+    slave_relation_ids = relation_ids(relation_types=['slave'])
+    if master_relation_ids and slave_relation_ids:
+        # Both master and slave relations, so an attempt has been made
+        # to set up cascading replication. This is not yet supported in
+        # PostgreSQL, so we cannot support it either. Unfortunately,
+        # there is no way yet to inform juju about this so we just have
+        # to leave the impossible relation in a broken state.
+        juju_log(
+            MSG_CRITICAL,
+            "Unable to create relationship. "
+            "Cascading replication not supported.")
+        raise SystemExit(1)
 
-    if relation_ids(relation_types=['slave']):
+    if slave_relation_ids:
         # I'm explicitly the slave in a master/slave relationship.
         # No units in my service can be a master.
-        TODO("If peer group added as a slave, handle the peer master")
         return False
 
     # Do I think I'm the master?
