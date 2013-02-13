@@ -427,6 +427,7 @@ def create_postgresql_ident(postgresql_ident):
 def generate_postgresql_hba(postgresql_hba, do_reload=True):
     relation_data = relation_get_all(relation_types=['db', 'db-admin'])
     config_change_command = config_data["config_change_command"]
+    import socket
     for relation in relation_data:
         if re.search('db-admin', relation['relation-id']):
             relation['user'] = 'all'
@@ -437,6 +438,14 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             relation['schema_user'] = user_name(relation['relation-id'],
                                                 relation['unit'],
                                                 schema=True)
+        # http://stackoverflow.com/q/319279/196832
+        try:
+            socket.inet_aton(relation['private-address'])
+            relation['private-address'] = "%s/32" % relation['private-address']
+        except socket.error:
+            # It's not an IP address.
+            pass
+
     juju_log(MSG_INFO, str(relation_data))
     pg_hba_template = Template(
         open("templates/pg_hba.conf.tmpl").read()).render(
