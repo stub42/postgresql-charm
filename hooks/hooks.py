@@ -10,6 +10,7 @@ import random
 import re
 import shutil
 import string
+import socket
 import subprocess
 import sys
 import time
@@ -608,6 +609,19 @@ def create_postgresql_ident(postgresql_ident):
 # generate_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
 def generate_postgresql_hba(postgresql_hba, do_reload=True):
+
+    # Per Bug #1117542, when generating the postgresql_hba file we
+    # need to cope with private-address being either an IP address
+    # or a hostname.
+    def munge_address(addr):
+        # http://stackoverflow.com/q/319279/196832
+        try:
+            socket.inet_aton(addr)
+            return "%s/32" % addr
+        except socket.error:
+            # It's not an IP address.
+            return addr
+
     relation_data = relation_get_all(relation_types=['db', 'db-admin'])
     config_change_command = config_data["config_change_command"]
     for relation in relation_data:
@@ -625,6 +639,11 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             raise RuntimeError(
                 'Unknown relation type {}'.format(repr(relation_id)))
 
+        relation['private-address'] = munge_address(
+            relation['private-address'])
+
+    juju_log(MSG_INFO, str(relation_data))
+
     # Replication connections. Each unit needs to be able to connect to
     # every other unit's repmgr database and the magic replication
     # database. It also needs to be able to connect to its own repmgr
@@ -632,16 +651,17 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
     replication_relations = relation_get_all(
         relation_types=replication_relation_types)
     for relation in replication_relations:
+        remote_addr = munge_address(relation['private-address'])
         remote_replication = {
             'database': 'replication', 'user': 'repmgr',
-            'private-address': relation['private-address'],
+            'private-address': remote_addr,
             'relation-id': relation['relation-id'],
             'unit': relation['private-address'],
             }
         relation_data.append(remote_replication)
         remote_repmgr = {
             'database': 'repmgr', 'user': 'repmgr',
-            'private-address': relation['private-address'],
+            'private-address': remote_addr,
             'relation-id': relation['relation-id'],
             'unit': relation['private-address'],
             }
@@ -649,7 +669,7 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
     if replication_relations:
         local_repmgr = {
             'database': 'repmgr', 'user': 'repmgr',
-            'private-address': get_unit_host(),
+            'private-address': munge_address(get_unit_host()),
             'relation-id': relation['relation-id'],
             'unit': get_unit_host(),
             }
@@ -971,7 +991,7 @@ def install(run_pre=True):
     local_state.publish()
 
     for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
-        "python-psycopg2",
+        "python-psycopg2", "postgresql-contrib", 
         "postgresql-%s-debversion" % config_data["version"]]:
         apt_get_install(package)
     install_dir(postgresql_backups_dir, owner="postgres", mode=0755)
