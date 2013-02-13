@@ -335,7 +335,7 @@ def postgresql_reload_or_restart():
         if new_value != live_value:
             if live_config:
                 juju_log(
-                    MSG_INFO, "Changed {} from {} to {}".format(
+                    MSG_DEBUG, "Changed {} from {} to {}".format(
                         name, repr(live_value), repr(new_value)))
             if context == 'postmaster':
                 # A setting has changed that requires PostgreSQL to be
@@ -562,8 +562,9 @@ def create_postgresql_config(postgresql_config):
     num_slaves = slave_count()
     if num_slaves > 0:
         juju_log(
-            MSG_INFO, 'Master replicated to {} hot standbys. '
-            'Enforcing minimal replication settings'.format(num_slaves))
+            MSG_INFO, 'Master replicated to {} hot standbys.'.format(
+                num_slaves))
+        juju_log(MSG_INFO, 'Ensuring minimal replication settings')
         config_data['hot_standby'] = 'on'
         config_data['wal_level'] = 'hot_standby'
         if config_data['archive_mode'] is False:
@@ -998,6 +999,11 @@ def install(run_pre=True):
     # when we installed the PostgreSQL packages.
     config_changed(postgresql_config, force_restart=True)
 
+    # repmgr needs to find pg_ctl in the PATH.
+    run(
+        "update-alternatives --install /usr/local/bin/pg_ctl "
+        "pg_ctl {}/pg_ctl 50".format(postgresql_bin_dir))
+
 
 def user_name(relid, remote_unit, admin=False, schema=False):
     def sanitize(s):
@@ -1345,12 +1351,12 @@ def repmgr_gc():
         local_state['state'] = 'standalone'
 
 
-    elif is_master():
+    elif is_master() and not postgresql_is_in_recovery():
         # There is at least one hot standby, and I'm the master.
         # Cleanup any dropped units from repmgr.
         wanted_units.append(os.environ['JUJU_UNIT_NAME'])
         juju_log(
-            MSG_INFO, "Remaining repmgr nodes {}".format(
+            MSG_DEBUG, "Remaining repmgr nodes are {}".format(
                 ', '.join(wanted_units)))
         cur = db_cursor(autocommit=True, db='repmgr')
         cur.execute(
@@ -1449,13 +1455,35 @@ def replication_relation_changed():
 
         elif local_state['state'] == 'master':  # Already the master.
             juju_log(MSG_INFO, "I am the master")
+            repmgr_gc()
 
         elif local_state['state'] == 'hot standby':  # I've been promoted
             juju_log(MSG_INFO, "I am a hot standby being promoted to master")
-            TODO("This won't play well with repmgrd, but not using that yet")
-            run_repmgr('standby promote')
+            # Urgh. I can't just promote the hot standby to a master,
+            # as it fails because the master db is still running alive
+            # and well despite no longer being in the relation, due to
+            # Bug #872264. repmgr thinks I'm trying to blow my foot off.
+            # And I can't shoot it in the head if it is still alive,
+            # because the master might be in a different service and we
+            # want to keep it and its data alive (eg. replicating a
+            # production database into a new service, then breaking the
+            # relation and using it as a staging environment).
+            # For now, we just attempt the promotion and fail if the
+            # master is still alive; shutting down the spurious
+            # PostgreSQL server and 'juju resolved --retry' will get
+            # things back on track.
+            try:
+                run_repmgr('--verbose standby promote', exit_on_error=False)
+            except subprocess.CalledProcessError, x:
+                juju_log(
+                    MSG_CRITICAL,
+                    "Failed to promote. Is the old master still alive? "
+                    "Shut it down and 'juju resolved --retry' this "
+                    "relation to resolve.")
+                raise SystemExit(x.returncode)
             local_state['state'] = 'master'
             local_state.publish()
+            repmgr_gc()
 
         else:
             raise AssertionError(
@@ -1471,7 +1499,7 @@ def replication_relation_changed():
                 remote_has_authorized = True
 
         if remote_is_master and remote_has_authorized:
-            if local_state['state'] == 'standalone':
+            if local_state['state'] in ['standalone', 'master']:
                 # Republish the repmgr password in case we failover to
                 # being the master in the future. Bug #806098.
                 local_state['repmgr_password'] = relation['repmgr_password']
@@ -1488,15 +1516,14 @@ def replication_relation_changed():
                     db='repmgr', user='repmgr',
                     host=relation['private-address'])
 
-                juju_log(
-                    MSG_INFO, "Destroying existing cluster on hot standby")
                 postgresql_stop()
-                if os.path.isdir(postgresql_cluster_dir):
-                    shutil.rmtree(postgresql_cluster_dir)
+                juju_log(
+                    MSG_INFO,
+                    "Cloning master {}".format(os.environ['JUJU_REMOTE_UNIT']))
                 try:
                     run_repmgr(
                         '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
-                        'standby clone {}'.format(
+                        '--force standby clone {}'.format(
                             postgresql_cluster_dir,
                             relation['private-address']),
                         exit_on_error=False)
@@ -1506,6 +1533,7 @@ def replication_relation_changed():
                     # can retry hooks again. Even assuming the charm is
                     # functioning correctly, the clone may still fail
                     # due to eg. lack of disk space.
+                    juju_log(MSG_ERROR, "Clone failed, db cluster destroyed")
                     if os.path.exists(postgresql_cluster_dir):
                         shutil.rmtree(postgresql_cluster_dir)
                     if os.path.exists(postgresql_config_dir):
@@ -1515,20 +1543,21 @@ def replication_relation_changed():
                     raise
                 finally:
                     postgresql_start()
-                juju_log(MSG_INFO, "Cloned cluster")
                 wait_for_db()
                 run_repmgr('standby register')
                 juju_log(MSG_INFO, "Registered cluster with repmgr")
                 local_state['state'] = 'hot standby'
+                local_state['following'] = os.environ['JUJU_REMOTE_UNIT']
                 local_state.publish()
 
             elif local_state['state'] == 'hot standby':
-                TODO("If master has changed, follow the new master")
-                # rc, out = run_repmgr('standby follow', exit_on_error=False)
-                # if rc != 0:
-                #     juju_log(MSG_CRITICAL, "Failed to follow new master.")
-                #     juju_log(MSG_ERROR, out)
-                #     raise SystemExit(1)
+                if local_state['following'] != os.environ['JUJU_REMOTE_UNIT']:
+                    juju_log(
+                        MSG_INFO, "New master {} found. Following".format(
+                            os.environ['JUJU_REMOTE_UNIT']))
+                    run_repmgr('standby follow', exit_on_error=True)
+                    local_state['following'] = os.environ['JUJU_REMOTE_UNIT']
+                    local_state.save()
 
             else:
                 raise AssertionError(
@@ -1536,9 +1565,9 @@ def replication_relation_changed():
 
 
 def replication_relation_broken():
-    repmgr_gc()
     config_changed(postgresql_config)
     authorize_remote_ssh()
+    repmgr_gc()
 
 
 def slave_count():
@@ -1570,7 +1599,7 @@ def update_nrpe_checks():
         nagios_uid = getpwnam('nagios').pw_uid
         nagios_gid = getgrnam('nagios').gr_gid
     except:
-        subprocess.call(['juju-log', "Nagios user not set up. Exiting."])
+        juju_log(MSG_DEBUG, "Nagios user not set up. Exiting.")
         return
 
     unit_name = os.environ['JUJU_UNIT_NAME'].replace('/', '-')
@@ -1653,6 +1682,7 @@ repmgr_config = os.path.expanduser('~postgres/repmgr.conf')
 hook_name = os.path.basename(sys.argv[0])
 replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')
+
 
 ###############################################################################
 # Main section
