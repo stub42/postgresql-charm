@@ -424,9 +424,8 @@ def create_postgresql_ident(postgresql_ident):
 #------------------------------------------------------------------------------
 # generate_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
-def generate_postgresql_hba(postgresql_hba, do_reload=True):
+def generate_postgresql_hba(postgresql_hba):
     relation_data = relation_get_all(relation_types=['db', 'db-admin'])
-    config_change_command = config_data["config_change_command"]
     import socket
     for relation in relation_data:
         if re.search('db-admin', relation['relation-id']):
@@ -452,10 +451,8 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
         access_list= relation_data)
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
-    if do_reload:
-        if config_change_command in ["reload", "restart"]:
-            subprocess.call(['invoke-rc.d', 'postgresql',
-                config_data["config_change_command"]])
+    # hba_conf changes do not need full db restarts
+    subprocess.call(['invoke-rc.d', 'postgresql', 'reload'])
 
 
 #------------------------------------------------------------------------------
@@ -721,7 +718,7 @@ def config_changed(postgresql_config):
             sys.exit(1)
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
-    generate_postgresql_hba(postgresql_hba, do_reload=False)
+    generate_postgresql_hba(postgresql_hba)
     create_postgresql_ident(postgresql_ident)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
