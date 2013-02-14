@@ -1,4 +1,8 @@
 options:
+  extra-packages:
+    default: ""
+    type: string
+    description: Extra packages to install on the postgresql service units.
   dumpfile_location:
     default: "None"
     type: string

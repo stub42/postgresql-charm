@@ -353,7 +353,7 @@ def relation_get_all(*args, **kwargs):
                         unit_data[key] = unit_data[key].split()
                 unit_data['relation-id'] = relid
                 unit_data['unit'] = unit
-            relation_data.append(unit_data)
+                relation_data.append(unit_data)
     except Exception, e:
         subprocess.call(['juju-log', str(e)])
         relation_data = []
@@ -362,13 +362,13 @@ def relation_get_all(*args, **kwargs):
 
 
 #------------------------------------------------------------------------------
-# apt_get_install( package ):  Installs a package
+# apt_get_install( packages ):  Installs package(s)
 #------------------------------------------------------------------------------
 def apt_get_install(packages=None):
     if packages is None:
         return(False)
     cmd_line = ['apt-get', '-y', 'install', '-qq']
-    cmd_line.append(packages)
+    cmd_line.extend(packages)
     return(subprocess.call(cmd_line))
 
 
@@ -438,7 +438,7 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             relation['schema_user'] = user_name(relation['relation-id'],
                                                 relation['unit'],
                                                 schema=True)
-        # http://stackoverflow.com/q/319279/196832
+        # LP:1117542 - http://stackoverflow.com/q/319279/196832
         try:
             socket.inet_aton(relation['private-address'])
             relation['private-address'] = "%s/32" % relation['private-address']
@@ -750,10 +750,12 @@ def install(run_pre=True):
         for f in glob.glob('exec.d/*/charm-pre-install'):
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 subprocess.check_call(['sh', '-c', f])
-    for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
-        "python-psycopg2", "postgresql-contrib", 
-        "postgresql-%s-debversion" % config_data["version"]]:
-        apt_get_install(package)
+    packages = ["postgresql", "pwgen", "python-jinja2", "syslinux",
+                "python-psycopg2", "postgresql-contrib", "postgresql-plpython",
+                "postgresql-%s-debversion" % config_data["version"]]
+    packages.extend(config_data["extra-packages"].split())
+    apt_get_install(packages)
+
     from jinja2 import Template
     install_dir(postgresql_backups_dir, owner="postgres", mode=0755)
     install_dir(postgresql_scripts_dir, owner="postgres", mode=0755)
