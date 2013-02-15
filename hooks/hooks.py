@@ -1540,6 +1540,10 @@ def replication_relation_changed():
                 juju_log(
                     MSG_INFO,
                     "Cloning master {}".format(os.environ['JUJU_REMOTE_UNIT']))
+                # repmgr clone fails, even with --force specified, with
+                # rsync errors if symlinks have been changed.
+                if os.path.isdir(postgresql_cluster_dir):
+                    shutil.rmtree(postgresql_cluster_dir)
                 try:
                     run_repmgr(
                         '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
