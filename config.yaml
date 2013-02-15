@@ -48,16 +48,16 @@ options:
         statements running at least this number
         of milliseconds
   log_checkpoints:
-    default: "off"
-    type: string
+    default: False
+    type: boolean
     description: Log checkpoints
   log_connections:
-    default: "off"
-    type: string
+    default: False
+    type: boolean
     description: Log connections
   log_disconnections:
-    default: "off"
-    type: string
+    default: False
+    type: boolean
     description: Log disconnections
   log_line_prefix:
     default: "%t "
@@ -83,17 +83,17 @@ options:
           %% = '%'
         e.g. '<%u%%%d> '
   log_lock_waits:
-    default: "off"
-    type: string
+    default: False
+    type: boolean
     description: log lock waits >= deadlock_timeout
   log_timezone:
     default: "UTC"
     type: string
     description: Log timezone
   autovacuum:
-    default: "on"
-    type: string
-    description: Autovacuum
+    default: True
+    type: boolean
+    description: Autovacuum should almost always be running.
   log_autovacuum_min_duration:
     default: -1
     type: int
@@ -123,29 +123,71 @@ options:
     type: string
     descripton: Schema names
   standard_conforming_strings:
-    default: "on"
-    type: string
+    default: True
+    type: boolean
     description: Standard conforming strings
   hot_standby:
-    default: ""
-    type: string
-    description: Hot standby
+    default: False
+    type: boolean
+    description: |
+        Hot standby or warm standby. When True, queries can be run against
+        the database is in recovery or standby mode (ie. replicated).
+        Overridden by juju when master/slave relations are used.
   hot_standby_feedback:
-    default: ""
-    type: string
-    description: Hot standby feedback
+    default: False
+    type: boolean
+    description: |
+        Hot standby feedback, informing a master about in progress
+        transactions on a streaming hot standby and allowing the master to
+        defer cleanup and avoid query cancelations on the hot standby.
   wal_level:
-    default: ""
+    default: minimal
     type: string
-    description: WAL level
+    description: |
+        'minimal', 'archive' or 'hot_standby'. Defines how much information
+        is written to the WAL. Set to 'minimal' for stand alone databases
+        and 'hot_standby' for replicated setups. Overridden by juju when
+        replication s used.
   max_wal_senders:
-    default: ""
-    type: string
-    description: WAL level senders
+    default: 0
+    type: int
+    description: |
+        Maximum number of hot standbys that can connect using
+        streaming replication. Set this to the expected maximum number of
+        hot standby units to avoid unnecessary blocking and database restarts.
+        Overridden by juju if necessary.
   wal_keep_segments:
+    default: 0
+    type: int
+    description: |
+        Number of old WAL files to keep, providing a larger buffer for
+        streaming hot standbys to catch up from when lagged. Each WAL file
+        is 16MB in size. The WAL files are the buffer of how far a
+        hot standby can lag behind the master, and replication fails if
+        this buffer is overrun. When this service is replicated, the larger
+        value of wal_keep_segments and replicated_wal_keep_segments is used.
+  replicated_wal_keep_segments:
+    default: 5000
+    type: int
+    description: |
+        Value of wal_keep_segments used when this service is replicated.
+        This setting only exists to provide a sane default when replication
+        is requested (so it doesn't fail) and nobody bothered to change the
+        wal_keep_segments setting.
+  archive_mode:
+    default: False
+    type: boolean
+    description: |
+        Enable archiving of WAL files using the command specified by
+        archive_command. If archive_mode is enabled and archive_command not
+        set, then archiving is deferred until archive_command is set and the
+        WAL files will accumulate.
+  archive_command:
     default: ""
     type: string
-    description: WAL keep segments
+    description: |
+        Command used to archive WAL files when archive_mode is set and
+        wal_level > minimal.
   work_mem:
     default: "1MB"
     type: string
@@ -245,3 +287,10 @@ options:
             juju-postgresql-0
         If you're running multiple environments with the same services in them
         this allows you to differentiate between them.
+  extra_archives:
+    default: "ppa:stub/repmgr"
+    type: string
+    description: |
+        Extra archive to add with add-apt-repository(1). This option is
+        currently needed to locate the repmgr packages, and should be removed
+        once the packages are in a more official location.
