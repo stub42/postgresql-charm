@@ -103,25 +103,30 @@ connection::
   have finished building. `juju deploy -n 3` and `juju add-unit -n 2`
   will likely fail. This will be fixed for PostgreSQL 9.1.
 
-# Postgresql Service
+# Interacting with the Postgresql Service
 
+Typically, you just need to join a the `db` relation, and a user and database
+will be created for you.  For more advanced uses, you can join the `db-admin`
+relation, and a super user will be created.  Using this account, you can
+manipulate all other aspects of the database.
 
-## During db-relation-joined,
-
+## During db-relation-changed
 
 ### the postgresql service provides:
 
-- `host`
-- `user`
-- `database`
-- `password`
+- `host`: the host to contact
+- `user`: a regular user authorized to read the database
+- `database`: a regular database
+- `password`: the password for `user`
 - `state`: 'standalone', 'master' or 'hot standby'.
 
-
-## During db-relation-changed,
+## During db-admin-relation-changed
 
 ### the postgresql service provides:
 
+- `host`: The host to contact
+- `user`: A created super user
+- `password`: The password for `user`
 - `state`: 'standalone', 'master' or 'hot standby'.
 
 
