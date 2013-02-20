@@ -518,13 +518,13 @@ def relation_get_all(*args, **kwargs):
 
 
 #------------------------------------------------------------------------------
-# apt_get_install( package ):  Installs a package
+# apt_get_install( packages ):  Installs package(s)
 #------------------------------------------------------------------------------
 def apt_get_install(packages=None):
     if packages is None:
         return(False)
     cmd_line = ['apt-get', '-y', 'install', '-qq']
-    cmd_line.append(packages)
+    cmd_line.extend(packages)
     return(subprocess.call(cmd_line))
 
 
@@ -608,7 +608,7 @@ def create_postgresql_ident(postgresql_ident):
 #------------------------------------------------------------------------------
 # generate_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
-def generate_postgresql_hba(postgresql_hba, do_reload=True):
+def generate_postgresql_hba(postgresql_hba):
 
     # Per Bug #1117542, when generating the postgresql_hba file we
     # need to cope with private-address being either an IP address
@@ -623,7 +623,6 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             return addr
 
     relation_data = relation_get_all(relation_types=['db', 'db-admin'])
-    config_change_command = config_data["config_change_command"]
     for relation in relation_data:
         relation_id = relation['relation-id']
         if relation_id.startswith('db-admin:'):
@@ -680,8 +679,8 @@ def generate_postgresql_hba(postgresql_hba, do_reload=True):
             access_list=relation_data)
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
-    if do_reload:
-        postgresql_reload()
+    postgresql_reload()
+
 
 
 #------------------------------------------------------------------------------
@@ -963,7 +962,7 @@ def config_changed(postgresql_config, force_restart=False):
             sys.exit(1)
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
-    generate_postgresql_hba(postgresql_hba, do_reload=False)
+    generate_postgresql_hba(postgresql_hba)
     create_postgresql_ident(postgresql_ident)
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
@@ -990,10 +989,12 @@ def install(run_pre=True):
     local_state.setdefault('state', 'standalone')
     local_state.publish()
 
-    for package in ["postgresql", "pwgen", "python-jinja2", "syslinux",
-        "python-psycopg2", "postgresql-contrib", 
-        "postgresql-%s-debversion" % config_data["version"]]:
-        apt_get_install(package)
+    packages = ["postgresql", "pwgen", "python-jinja2", "syslinux",
+                "python-psycopg2", "postgresql-contrib", "postgresql-plpython",
+                "postgresql-%s-debversion" % config_data["version"]]
+    packages.extend(config_data["extra-packages"].split())
+    apt_get_install(packages)
+
     install_dir(postgresql_backups_dir, owner="postgres", mode=0755)
     install_dir(postgresql_scripts_dir, owner="postgres", mode=0755)
     install_dir(postgresql_logs_dir, owner="postgres", mode=0755)
@@ -1300,8 +1301,7 @@ def drop_database(dbname, warn=True):
         except psycopg2.Error:
             if time.time() > now + timeout:
                 if warn:
-                    juju_log(
-                        MSG_WARN, "Unable to drop database {}".format(dbname))
+                    juju_log(MSG_WARNING, "Unable to drop database %s" % dbname)
                 else:
                     raise
             time.sleep(0.5)
