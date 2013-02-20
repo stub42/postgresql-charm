@@ -13,9 +13,6 @@
   between services and failover, and it is unclear how that would work
   anyway (get failover working fist for units within a service).
 
-- Should the cluster_name really be configurable? Just name the cluster
-  after the unit to avoid conflicts.
-
 - Drop config_change_command from config.yaml, or make it work.
   "restart" should be the default, as there may be required config changes
   to get replication working. "reload" would mean blocking a hook requesting
@@ -28,12 +25,3 @@
 - No hook is invoked when removing a unit, leaving the host standby PostgreSQL
   cluster running and attempting to replicate from a master that is refusing
   its connections. Bug #872264.
-
-- If a unit is added as a slave, and is already the master end of a
-  relationship, fail with CRITICAL error.
-
-- If a service containing two or more units is added as a slave, the
-  master unit needs to switch to being a slave.
-
-- Cannot build two replicas at the same time, due to repmgr limitations?
-  Switch to pg_basebackup to clone.
