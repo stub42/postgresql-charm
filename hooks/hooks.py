@@ -1711,76 +1711,86 @@ local_state = State('local_state.pickle')
 ###############################################################################
 # Main section
 ###############################################################################
-juju_log(MSG_INFO, "Running {} hook".format(hook_name))
-if hook_name == "install":
-    install()
-#-------- config-changed
-elif hook_name == "config-changed":
-    config_changed(postgresql_config)
-#-------- upgrade-charm
-elif hook_name == "upgrade-charm":
-    install(run_pre=False)
-    config_changed(postgresql_config)
-#-------- start
-elif hook_name == "start":
-    if not postgresql_restart():
-        sys.exit(1)
-#-------- stop
-elif hook_name == "stop":
-    if not postgresql_stop():
-        sys.exit(1)
-#-------- db-relation-joined, db-relation-changed
-elif hook_name in ["db-relation-joined", "db-relation-changed"]:
-    roles = filter(None, relation_get('roles').split(","))
-    database = relation_get('database')
-    if database == '':
-        # Missing some information. We expect it to appear in a
-        # future call to the hook.
-        juju_log(MSG_WARNING, "No database set in relation, exiting")
-        sys.exit(0)
-    user = \
-        user_name(os.environ['JUJU_RELATION_ID'],
-            os.environ['JUJU_REMOTE_UNIT'])
-    if user != '' and database != '':
-        db_relation_joined_changed(user, database, roles)
-#-------- db-relation-broken
-elif hook_name == "db-relation-broken":
-    database = relation_get('database')
-    user = \
-        user_name(os.environ['JUJU_RELATION_ID'],
-            os.environ['JUJU_REMOTE_UNIT'])
-    db_relation_broken(user, database)
-#-------- db-admin-relation-joined, db-admin-relation-changed
-elif hook_name in ["db-admin-relation-joined", "db-admin-relation-changed"]:
-    user = user_name(os.environ['JUJU_RELATION_ID'],
-        os.environ['JUJU_REMOTE_UNIT'], admin=True)
-    db_admin_relation_joined_changed(user, 'all')
-#-------- db-admin-relation-broken
-elif hook_name == "db-admin-relation-broken":
-    # XXX: Fix: relation is not set when it is already broken
-    # cannot determine the user name
-    user = user_name(os.environ['JUJU_RELATION_ID'],
-        os.environ['JUJU_REMOTE_UNIT'], admin=True)
-    db_admin_relation_broken(user)
-elif hook_name == "nrpe-external-master-relation-changed":
-    update_nrpe_checks()
-elif hook_name in (
-    'master-relation-joined', 'master-relation-changed',
-    'slave-relation-joined', 'slave-relation-changed',
-    'replication-relation-joined', 'replication-relation-changed'):
-    replication_relation_changed()
-elif hook_name in (
-    'master-relation-broken', 'slave-relation-broken',
-    'replication-relation-broken', 'replication-relation-departed'):
-    replication_relation_broken()
-#-------- persistent-storage-relation-joined,
-#         persistent-storage-relation-changed
-#elif hook_name in ["persistent-storage-relation-joined",
-#    "persistent-storage-relation-changed"]:
-#    persistent_storage_relation_joined_changed()
-#-------- persistent-storage-relation-broken
-#elif hook_name == "persistent-storage-relation-broken":
-#    persistent_storage_relation_broken()
-else:
-    print "Unknown hook {}".format(hook_name)
-    sys.exit(1)
+def main():
+    juju_log(MSG_INFO, "Running {} hook".format(hook_name))
+    if hook_name == "install":
+        install()
+
+    elif hook_name == "config-changed":
+        config_changed(postgresql_config)
+
+    elif hook_name == "upgrade-charm":
+        install(run_pre=False)
+        config_changed(postgresql_config)
+
+    elif hook_name == "start":
+        if not postgresql_restart():
+            raise SystemExit(1)
+
+    elif hook_name == "stop":
+        if not postgresql_stop():
+            raise SystemExit(1)
+
+    elif hook_name in ["db-relation-joined", "db-relation-changed"]:
+        roles = filter(None, relation_get('roles').split(","))
+        database = relation_get('database')
+        if database == '':
+            # Missing some information. We expect it to appear in a
+            # future call to the hook.
+            juju_log(MSG_WARNING, "No database set in relation, exiting")
+            sys.exit(0)
+        user = \
+            user_name(os.environ['JUJU_RELATION_ID'],
+                os.environ['JUJU_REMOTE_UNIT'])
+        if user != '' and database != '':
+            db_relation_joined_changed(user, database, roles)
+
+    elif hook_name == "db-relation-broken":
+        database = relation_get('database')
+        user = \
+            user_name(os.environ['JUJU_RELATION_ID'],
+                os.environ['JUJU_REMOTE_UNIT'])
+        db_relation_broken(user, database)
+
+    elif hook_name in [
+        "db-admin-relation-joined", "db-admin-relation-changed"]:
+        user = user_name(os.environ['JUJU_RELATION_ID'],
+            os.environ['JUJU_REMOTE_UNIT'], admin=True)
+        db_admin_relation_joined_changed(user, 'all')
+
+    elif hook_name == "db-admin-relation-broken":
+        # XXX: Fix: relation is not set when it is already broken
+        # cannot determine the user name
+        user = user_name(os.environ['JUJU_RELATION_ID'],
+            os.environ['JUJU_REMOTE_UNIT'], admin=True)
+        db_admin_relation_broken(user)
+
+    elif hook_name == "nrpe-external-master-relation-changed":
+        update_nrpe_checks()
+
+    elif hook_name in (
+        'master-relation-joined', 'master-relation-changed',
+        'slave-relation-joined', 'slave-relation-changed',
+        'replication-relation-joined', 'replication-relation-changed'):
+        replication_relation_changed()
+
+    elif hook_name in (
+        'master-relation-broken', 'slave-relation-broken',
+        'replication-relation-broken', 'replication-relation-departed'):
+        replication_relation_broken()
+
+    #-------- persistent-storage-relation-joined,
+    #         persistent-storage-relation-changed
+    #elif hook_name in ["persistent-storage-relation-joined",
+    #    "persistent-storage-relation-changed"]:
+    #    persistent_storage_relation_joined_changed()
+    #-------- persistent-storage-relation-broken
+    #elif hook_name == "persistent-storage-relation-broken":
+    #    persistent_storage_relation_broken()
+    else:
+        print "Unknown hook {}".format(hook_name)
+        raise SystemExit(1)
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
