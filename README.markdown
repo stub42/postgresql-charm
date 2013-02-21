@@ -97,7 +97,9 @@ connection::
   to create a redundant copy of your database until the client charms
   are updated.
 
-- You cannot host multiple units in a single juju container.
+- You cannot host multiple units in a single juju container. This is
+  problematic as some PostgreSQL features, such as tablespaces, use
+  user specified absolute paths.
 
 - You cannot add a new unit to a service until all existing 'hot standby's
   have finished building. `juju deploy -n 3` and `juju add-unit -n 2`
