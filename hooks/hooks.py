@@ -39,7 +39,7 @@ MSG_WARNING = "WARNING"
 
 
 def juju_log(level, msg):
-    subprocess.call(['/usr/bin/juju-log', '-l', level, msg])
+    subprocess.call(['juju-log', '-l', level, msg])
 
 
 class State(dict):
@@ -718,7 +718,7 @@ def load_postgresql_config(postgresql_config):
 def open_port(port=None, protocol="TCP"):
     if port is None:
         return(None)
-    return(subprocess.call(['/usr/bin/open-port', "%d/%s" %
+    return(subprocess.call(['open-port', "%d/%s" %
         (int(port), protocol)]))
 
 
@@ -729,7 +729,7 @@ def open_port(port=None, protocol="TCP"):
 def close_port(port=None, protocol="TCP"):
     if port is None:
         return(None)
-    return(subprocess.call(['/usr/bin/close-port', "%d/%s" %
+    return(subprocess.call(['close-port', "%d/%s" %
         (int(port), protocol)]))
 
 
