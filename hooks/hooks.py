@@ -648,30 +648,33 @@ def generate_postgresql_hba(postgresql_hba):
     # every other unit's repmgr database and the magic replication
     # database. It also needs to be able to connect to its own repmgr
     # database.
-    replication_relations = relation_get_all(
-        relation_types=replication_relation_types)
-    for relation in replication_relations:
-        remote_addr = munge_address(relation['private-address'])
-        remote_replication = {
-            'database': 'replication', 'user': 'repmgr',
-            'private-address': remote_addr,
-            'relation-id': relation['relation-id'],
-            'unit': relation['private-address'],
-            }
-        relation_data.append(remote_replication)
-        remote_repmgr = {
-            'database': 'repmgr', 'user': 'repmgr',
-            'private-address': remote_addr,
-            'relation-id': relation['relation-id'],
-            'unit': relation['private-address'],
-            }
-        relation_data.append(remote_repmgr)
-    if replication_relations:
+    for relid in relation_ids(relation_types=replication_relation_types):
+        for unit in relation_list(relid):
+            replicated = True
+            relation = relation_get(unit_name=unit, relation_id=relid)
+            remote_addr = munge_address(relation['private-address'])
+            remote_replication = {
+                'database': 'replication', 'user': 'repmgr',
+                'private-address': remote_addr,
+                'relation-id': relid,
+                'unit': unit,
+                }
+            relation_data.append(remote_replication)
+            remote_repmgr = {
+                'database': 'repmgr', 'user': 'repmgr',
+                'private-address': remote_addr,
+                'relation-id': relid,
+                'unit': unit,
+                }
+            relation_data.append(remote_repmgr)
+
+    # Hooks need permissions too to setup replication.
+    for relid in relation_ids(relation_types=['replication']):
         local_repmgr = {
             'database': 'repmgr', 'user': 'repmgr',
             'private-address': munge_address(get_unit_host()),
-            'relation-id': relation['relation-id'],
-            'unit': get_unit_host(),
+            'relation-id': relid,
+            'unit': os.environ['JUJU_UNIT_NAME'],
             }
         relation_data.append(local_repmgr)
 
@@ -800,6 +803,9 @@ def db_cursor(
             break
         except psycopg2.Error:
             if time.time() > start + timeout:
+                juju_log(
+                    MSG_CRITICAL, "Database connection {!r} failed".format(
+                        conn_str))
                 raise
         time.sleep(0.3)
     conn.autocommit = autocommit
@@ -1312,7 +1318,6 @@ def drop_database(dbname, warn=True):
 def get_next_repmgr_node_id():
     # This hook does not run as ~postgres, so inform libpq where the
     # password file is.
-    os.environ['PGPASSFILE'] = postgres_pgpass
     if is_master():
         host = get_unit_host()
     else:
@@ -1415,12 +1420,21 @@ def is_master():
 
     # Lets see what out peer group thinks.
     peer_units = set()
+    peer_host = {}  # Cache of addresses for peer units.
+    peer_authorized = {}  # True if the peer unit has authorized us.
     for relid in relation_ids(relation_types=['replication']):
         # If there are any other peers claiming to be the master, then I am
         # not the master.
         for unit in relation_list(relid):
+            relation = relation_get(unit_name=unit, relation_id=relid)
             peer_units.add(unit)
-            if relation_get('state', unit, relid) == 'master':
+            peer_host[unit] = relation['private-address']
+            peer_authorized[unit] = False
+            for a in relation.get('authorized', '').split():
+                if a == os.environ['JUJU_UNIT_NAME']:
+                    peer_authorized[unit] = True
+                    break
+            if relation.get('state', None) == 'master':
                 return False
 
     # Are there other units? Maybe we are the only one left in the
@@ -1434,12 +1448,35 @@ def is_master():
         juju_log(MSG_INFO, "I am alone, no point being a master")
         return False
 
+    # If the peer group has lost a master, the hot standby with the
+    # least lag should be the new master. Perhaps that is me?
+    my_offset = postgresql_wal_received_offset(
+        host=None, db='postgres', user='postgres')
+    if my_offset is not None:
+        # Store the offset, unit number & unit in a tuple for easy
+        # sorting.
+        my_unit = os.environ['JUJU_UNIT_NAME']
+        offsets = set([(my_offset, int(my_unit.split('/')[1]), my_unit)])
+        for unit in peer_units:
+            if peer_authorized[unit]:
+                # If the peer has not yet got as far as authorizing us,
+                # it will not be further in sync with the master than
+                # us.
+                host = peer_host[unit]
+                offset = postgresql_wal_received_offset(host)
+                if offset is not None:
+                    if offset < my_offset:
+                        return False  # Short circuit.
+                    offsets.add((offset, int(unit.split('/')[1]), unit))
+        best_unit = sorted(offsets)[0][2]  # Lowest number wins a tie.
+        return (best_unit == my_unit)
+
     # There are no masters, so we need an election within this peer
     # relation. Lowest unit number wins and gets to be the master.
-    remote_nums = sorted(int(unit.split('/', 1)[1]) for unit in peer_units)
+    remote_nums = sorted(int(unit.split('/')[1]) for unit in peer_units)
     if not remote_nums:
         return True  # Only unit in a service in a master relationship.
-    my_num = int(os.environ['JUJU_UNIT_NAME'].split('/', 1)[1])
+    my_num = int(os.environ['JUJU_UNIT_NAME'].split('/')[1])
     if my_num < remote_nums[0]:
         return True
     else:
@@ -1454,6 +1491,8 @@ def replication_relation_changed():
     install_repmgr()
 
     relation = relation_get()
+
+    juju_log(MSG_INFO, "Current state is {}".format(local_state['state']))
 
     if is_master():
         if local_state['state'] == 'standalone':  # Initial setup of a master.
@@ -1479,28 +1518,12 @@ def replication_relation_changed():
 
         elif local_state['state'] == 'hot standby':  # I've been promoted
             juju_log(MSG_INFO, "I am a hot standby being promoted to master")
-            # Urgh. I can't just promote the hot standby to a master,
-            # as it fails because the master db is still running alive
-            # and well despite no longer being in the relation, due to
-            # Bug #872264. repmgr thinks I'm trying to blow my foot off.
-            # And I can't shoot it in the head if it is still alive,
-            # because the master might be in a different service and we
-            # want to keep it and its data alive (eg. replicating a
-            # production database into a new service, then breaking the
-            # relation and using it as a staging environment).
-            # For now, we just attempt the promotion and fail if the
-            # master is still alive; shutting down the spurious
-            # PostgreSQL server and 'juju resolved --retry' will get
-            # things back on track.
-            try:
-                run_repmgr('--verbose standby promote', exit_on_error=False)
-            except subprocess.CalledProcessError, x:
-                juju_log(
-                    MSG_CRITICAL,
-                    "Failed to promote. Is the old master still alive? "
-                    "Shut it down and 'juju resolved --retry' this "
-                    "relation to resolve.")
-                raise SystemExit(x.returncode)
+            # Rather than using 'pg_ctl promote', we do the promotion
+            # this way to avoid creating a timeline change. Switch this
+            # to using 'pg_ctl promote' once PostgreSQL propagates
+            # timeline changes via streaming replication.
+            os.unlink(os.path.join(postgresql_cluster_dir, 'recovery.conf'))
+            postgresql_restart()
             local_state['state'] = 'master'
             local_state.publish()
             repmgr_gc()
@@ -1510,7 +1533,6 @@ def replication_relation_changed():
                 "Unknown state {}".format(local_state['state']))
 
     else:  # A hot standby, now or soon.
-        juju_log(MSG_INFO, "I am a hot standby")
         remote_is_master = (relation.get('state', '') == 'master')
 
         remote_has_authorized = False
@@ -1519,7 +1541,12 @@ def replication_relation_changed():
                 remote_has_authorized = True
 
         if remote_is_master and remote_has_authorized:
-            if local_state['state'] in ['standalone', 'master']:
+            # Building a fresh hot standby. Either a new node
+            # ('standalone'), or a unit in a service that is being
+            # attached as a slave.
+            slave_relation_ids = relation_ids(relation_types=['slave'])
+            if local_state['state'] == 'standalone' or slave_relation_ids:
+                juju_log(MSG_INFO, "I am becoming a hot standby")
                 # Republish the repmgr password in case we failover to
                 # being the master in the future. Bug #806098.
                 local_state['repmgr_password'] = relation['repmgr_password']
@@ -1541,17 +1568,26 @@ def replication_relation_changed():
                     relation['private-address'])
 
                 run_repmgr('standby register')
-                juju_log(MSG_INFO, "Registered cluster with repmgr")
+                juju_log(MSG_INFO, "Registered hot standby with repmgr")
                 local_state['state'] = 'hot standby'
                 local_state['following'] = os.environ['JUJU_REMOTE_UNIT']
                 local_state.publish()
 
             elif local_state['state'] == 'hot standby':
+                juju_log(MSG_INFO, "I am a hot standby")
                 if local_state['following'] != os.environ['JUJU_REMOTE_UNIT']:
                     juju_log(
                         MSG_INFO, "New master {} found. Following".format(
                             os.environ['JUJU_REMOTE_UNIT']))
-                    run_repmgr('standby follow', exit_on_error=True)
+                    recovery_conf = dedent("""\
+                        standby_mode = on
+                        primary_conninfo = 'host={} user=repmgr'
+                        """.format(relation['private-address']))
+                    install_file(
+                        recovery_conf,
+                        os.path.join(postgresql_cluster_dir, 'recovery.conf'),
+                        owner="postgres", group="postgres")
+                    postgresql_restart()
                     local_state['following'] = os.environ['JUJU_REMOTE_UNIT']
                     local_state.save()
 
@@ -1559,11 +1595,15 @@ def replication_relation_changed():
                 raise AssertionError(
                     "Unknown state {}".format(local_state['state']))
 
+        elif remote_is_master:
+            juju_log(
+                MSG_INFO,
+                "I am waiting for a master to authorize me")
+
 
 def replication_relation_broken():
     config_changed(postgresql_config)
     authorize_remote_ssh()
-    repmgr_gc()
 
 
 def clone(master_unit, master_host):
@@ -1592,7 +1632,7 @@ def clone(master_unit, master_host):
         recovery_conf = dedent("""\
                 standby_mode = on
                 primary_conninfo = 'host={} user=repmgr'
-                """)
+                """.format(master_host))
         install_file(
             recovery_conf,
             os.path.join(postgresql_cluster_dir, 'recovery.conf'),
@@ -1633,6 +1673,21 @@ def postgresql_is_in_recovery():
 def postgresql_is_in_backup_mode():
     return os.path.exists(
         os.path.join(postgresql_cluster_dir, 'backup_label'))
+
+
+def postgresql_wal_received_offset(host, db='repmgr', user='repmgr'):
+    cur = db_cursor(autocommit=True, db=db, user=user, host=host)
+    cur.execute('SELECT pg_is_in_recovery(), pg_last_xlog_receive_location()')
+    is_in_recovery, xlog_received = cur.fetchone()
+    if is_in_recovery:
+        return wal_location_to_bytes(xlog_received)
+    return None
+
+
+def wal_location_to_bytes(wal_location):
+    """Convert WAL + offset to num bytes, so they can be compared."""
+    logid, offset = wal_location.split('/')
+    return int(logid, 16) * 16 * 1024 * 1024 * 255 + int(offset, 16)
 
 
 def wait_for_db(timeout=120, db='template1', user='postgres', host=None):
@@ -1729,6 +1784,9 @@ repmgr_config = os.path.expanduser('~postgres/repmgr.conf')
 hook_name = os.path.basename(sys.argv[0])
 replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')
+
+# Hooks, running as root, need to be pointed at the correct .pgpass.
+os.environ['PGPASSFILE'] = postgres_pgpass
 
 
 ###############################################################################
