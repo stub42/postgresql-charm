@@ -101,10 +101,6 @@ connection::
   problematic as some PostgreSQL features, such as tablespaces, use
   user specified absolute paths.
 
-- You cannot add a new unit to a service until all existing 'hot standby's
-  have finished building. `juju deploy -n 3` and `juju add-unit -n 2`
-  will likely fail. This will be fixed for PostgreSQL 9.1.
-
 # Interacting with the Postgresql Service
 
 Typically, you just need to join a the `db` relation, and a user and database
