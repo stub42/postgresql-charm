@@ -1197,7 +1197,8 @@ def install_repmgr():
         if repos_added:
             run('apt-get update')
             local_state.save()
-    apt_get_install(['repmgr', 'postgresql-9.1-repmgr'])
+    packages = ["repmgr", "postgresql-%s-repmgr" % config_data["version"]]
+    apt_get_install(packages)
 
 
 def ensure_local_ssh():
