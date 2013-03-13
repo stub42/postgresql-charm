@@ -1027,11 +1027,6 @@ def install(run_pre=True):
     # when we installed the PostgreSQL packages.
     config_changed(postgresql_config, force_restart=True)
 
-    # repmgr needs to find pg_ctl in the PATH.
-    run(
-        "update-alternatives --install /usr/local/bin/pg_ctl "
-        "pg_ctl {}/pg_ctl 50".format(postgresql_bin_dir))
-
 
 def user_name(relid, remote_unit, admin=False, schema=False):
     def sanitize(s):
