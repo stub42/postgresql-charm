@@ -1102,10 +1102,8 @@ def ensure_role(role):
         # role already exists
         pass
     else:
-        sql = "CREATE ROLE %s INHERIT"
-        run_sql_as_postgres(sql, role)
-        sql = "ALTER ROLE %s NOLOGIN"
-        run_sql_as_postgres(sql, role)
+        sql = "CREATE ROLE {} INHERIT NOLOGIN".format(role)
+        run_sql_as_postgres(sql)
 
 
 def ensure_database(user, schema_user, database):
