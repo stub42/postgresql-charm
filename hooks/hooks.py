@@ -13,6 +13,7 @@ import string
 import socket
 import subprocess
 import sys
+from textwrap import dedent
 import time
 from yaml.constructor import ConstructorError
 import commands
@@ -1101,10 +1102,8 @@ def ensure_role(role):
         # role already exists
         pass
     else:
-        sql = "CREATE ROLE %s INHERIT"
-        run_sql_as_postgres(sql, role)
-        sql = "ALTER ROLE %s NOLOGIN"
-        run_sql_as_postgres(sql, role)
+        sql = "CREATE ROLE {} INHERIT NOLOGIN".format(role)
+        run_sql_as_postgres(sql)
 
 
 def ensure_database(user, schema_user, database):
@@ -1196,8 +1195,8 @@ def install_repmgr():
         if repos_added:
             run('apt-get update')
             local_state.save()
-    apt_get_install('repmgr')
-    apt_get_install('postgresql-9.1-repmgr')
+    packages = ["repmgr", "postgresql-%s-repmgr" % config_data["version"]]
+    apt_get_install(packages)
 
 
 def ensure_local_ssh():
@@ -1536,38 +1535,10 @@ def replication_relation_changed():
                     db='repmgr', user='repmgr',
                     host=relation['private-address'])
 
-                postgresql_stop()
-                juju_log(
-                    MSG_INFO,
-                    "Cloning master {}".format(os.environ['JUJU_REMOTE_UNIT']))
-                # repmgr clone fails, even with --force specified, with
-                # rsync errors if symlinks have been changed.
-                if os.path.isdir(postgresql_cluster_dir):
-                    shutil.rmtree(postgresql_cluster_dir)
-                try:
-                    run_repmgr(
-                        '-D {} -d repmgr -p 5432 -U repmgr -R postgres '
-                        '--force standby clone {}'.format(
-                            postgresql_cluster_dir,
-                            relation['private-address']),
-                        exit_on_error=False)
-                except subprocess.CalledProcessError:
-                    # We failed, and this cluster is broken. Rebuild a
-                    # working cluster so start/stop etc. works and we
-                    # can retry hooks again. Even assuming the charm is
-                    # functioning correctly, the clone may still fail
-                    # due to eg. lack of disk space.
-                    juju_log(MSG_ERROR, "Clone failed, db cluster destroyed")
-                    if os.path.exists(postgresql_cluster_dir):
-                        shutil.rmtree(postgresql_cluster_dir)
-                    if os.path.exists(postgresql_config_dir):
-                        shutil.rmtree(postgresql_config_dir)
-                    run('pg_createcluster 9.1 main')
-                    config_changed(postgresql_config)
-                    raise
-                finally:
-                    postgresql_start()
-                wait_for_db()
+                clone(
+                    os.environ['JUJU_REMOTE_UNIT'],
+                    relation['private-address'])
+
                 run_repmgr('standby register')
                 juju_log(MSG_INFO, "Registered cluster with repmgr")
                 local_state['state'] = 'hot standby'
@@ -1592,6 +1563,57 @@ def replication_relation_broken():
     config_changed(postgresql_config)
     authorize_remote_ssh()
     repmgr_gc()
+
+
+def clone(master_unit, master_host):
+    postgresql_stop()
+    juju_log(MSG_INFO, "Cloning master {}".format(master_unit))
+
+    cmd = [
+        'sudo', '-u', 'postgres',
+        'pg_basebackup', '-D', postgresql_cluster_dir,
+        '--xlog', '--checkpoint=fast', '--no-password',
+        '-h', master_host, '-p', '5432', '--username=repmgr',
+        ]
+    juju_log(MSG_DEBUG, ' '.join(cmd))
+    if os.path.isdir(postgresql_cluster_dir):
+        shutil.rmtree(postgresql_cluster_dir)
+    try:
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        juju_log(MSG_DEBUG, output)
+        # Debian by default expects SSL certificates in the datadir.
+        os.symlink(
+            '/etc/ssl/certs/ssl-cert-snakeoil.pem',
+            os.path.join(postgresql_cluster_dir, 'server.crt'))
+        os.symlink(
+            '/etc/ssl/private/ssl-cert-snakeoil.key',
+            os.path.join(postgresql_cluster_dir, 'server.key'))
+        recovery_conf = dedent("""\
+                standby_mode = on
+                primary_conninfo = 'host={} user=repmgr'
+                """)
+        install_file(
+            recovery_conf,
+            os.path.join(postgresql_cluster_dir, 'recovery.conf'),
+            owner="postgres", group="postgres")
+    except subprocess.CalledProcessError, x:
+        # We failed, and this cluster is broken. Rebuild a
+        # working cluster so start/stop etc. works and we
+        # can retry hooks again. Even assuming the charm is
+        # functioning correctly, the clone may still fail
+        # due to eg. lack of disk space.
+        juju_log(MSG_ERROR, "Clone failed, db cluster destroyed")
+        juju_log(MSG_ERROR, x.output)
+        if os.path.exists(postgresql_cluster_dir):
+            shutil.rmtree(postgresql_cluster_dir)
+        if os.path.exists(postgresql_config_dir):
+            shutil.rmtree(postgresql_config_dir)
+        run('pg_createcluster {} main'.format(version))
+        config_changed(postgresql_config)
+        raise
+    finally:
+        postgresql_start()
+        wait_for_db()
 
 
 def slave_count():
