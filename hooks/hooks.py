@@ -1108,10 +1108,8 @@ def ensure_role(role):
         # role already exists
         pass
     else:
-        sql = "CREATE ROLE %s INHERIT"
-        run_sql_as_postgres(sql, role)
-        sql = "ALTER ROLE %s NOLOGIN"
-        run_sql_as_postgres(sql, role)
+        sql = "CREATE ROLE {} INHERIT NOLOGIN".format(role)
+        run_sql_as_postgres(sql)
 
 
 def ensure_database(user, schema_user, database):
@@ -1206,7 +1204,8 @@ def add_extra_repos():
 
 def install_repmgr():
     '''Install the repmgr package if it isn't already.'''
-    apt_get_install(['repmgr', 'postgresql-9.1-repmgr'])
+    packages = ["repmgr", "postgresql-%s-repmgr" % config_data["version"]]
+    apt_get_install(packages)
 
 
 def ensure_local_ssh():
