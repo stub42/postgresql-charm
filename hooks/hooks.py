@@ -936,6 +936,9 @@ def config_changed_volume_apply():
 # Hook functions
 ###############################################################################
 def config_changed(postgresql_config, force_restart=False):
+
+    add_extra_repos()
+
     # Trigger volume initialization logic for permanent storage
     volid = volume_get_volume_id()
     if not volid:
@@ -991,6 +994,8 @@ def install(run_pre=True):
         for f in glob.glob('exec.d/*/charm-pre-install'):
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 subprocess.check_call(['sh', '-c', f])
+
+    add_extra_repos()
 
     # Intialize local state.
     local_state.setdefault('state', 'standalone')
@@ -1184,8 +1189,7 @@ def TODO(msg):
     juju_log(MSG_WARNING, 'TODO> %s' % msg)
 
 
-def install_repmgr():
-    '''Install the repmgr package if it isn't already.'''
+def add_extra_repos():
     extra_repos = config_get('extra_archives')
     extra_repos_added = local_state.setdefault('extra_repos_added', set())
     if extra_repos:
@@ -1198,6 +1202,10 @@ def install_repmgr():
         if repos_added:
             run('apt-get update')
             local_state.save()
+
+
+def install_repmgr():
+    '''Install the repmgr package if it isn't already.'''
     apt_get_install(['repmgr', 'postgresql-9.1-repmgr'])
 
 
