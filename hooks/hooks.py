@@ -1047,7 +1047,8 @@ def user_name(relid, remote_unit, admin=False, schema=False):
         s = s.replace('"', '_')
         s = s.replace("'", '_')
         return s
-    components = [sanitize(relid), sanitize(remote_unit)]
+    # Per Bug #1160530, don't append the remote unit number to the user name.
+    components = [sanitize(relid), sanitize(re.split("/",remote_unit)[0])]
     if admin:
         components.append("admin")
     elif schema:
