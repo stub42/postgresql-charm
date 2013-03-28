@@ -1,4 +1,17 @@
 options:
+  locale:
+    default: "C"
+    type: string
+    description: |
+      Locale of service, defining language, default collation order,
+      and default formatting of numbers, currency, dates & times. Can only be
+      set when deploying the first unit of a service.
+  encoding:
+    default: "UTF-8"
+    type: string
+    description: |
+      Default encoding used to store text in this service. Can only be
+      set when deploying the first unit of a service.
   extra-packages:
     default: ""
     type: string
