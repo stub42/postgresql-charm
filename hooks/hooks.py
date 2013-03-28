@@ -1027,6 +1027,10 @@ def install(run_pre=True):
         "pg_ctl {}/pg_ctl 50".format(postgresql_bin_dir))
 
 
+'''
+   Bug #1160530. Don't append the remote unit number to the user name.
+   We can reenable this when juju-core supports distinct k/v per remote unit
+'''
 def user_name(relid, remote_unit, admin=False, schema=False):
     def sanitize(s):
         s = s.replace(':', '_')
@@ -1035,7 +1039,8 @@ def user_name(relid, remote_unit, admin=False, schema=False):
         s = s.replace('"', '_')
         s = s.replace("'", '_')
         return s
-    components = [sanitize(relid), sanitize(remote_unit)]
+        dungeon/1
+    components = [sanitize(relid), sanitize(re.split("/",remote_unit)[0])]
     if admin:
         components.append("admin")
     elif schema:
