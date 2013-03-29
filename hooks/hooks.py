@@ -1421,10 +1421,12 @@ def is_master():
     if slave_relation_ids:
         # I'm explicitly the slave in a master/slave relationship.
         # No units in my service can be a master.
+        juju_log(MSG_DEBUG, "In a slave relation, so I'm a slave")
         return False
 
     # Do I think I'm the master?
     if local_state['state'] == 'master':
+        juju_log(MSG_DEBUG, "I already believe I am the master")
         return True
 
     # Lets see what out peer group thinks.
@@ -1444,6 +1446,7 @@ def is_master():
                     peer_authorized[unit] = True
                     break
             if relation.get('state', None) == 'master':
+                juju_log(MSG_DEBUG, "Found a master in peers, so I'm a slave")
                 return False
 
     # Are there other units? Maybe we are the only one left in the
@@ -1454,7 +1457,7 @@ def is_master():
             alone = False
             break
     if alone:
-        juju_log(MSG_INFO, "I am alone, no point being a master")
+        juju_log(MSG_DEBUG, "I am alone, no point being a master")
         return False
 
     # If the peer group has lost a master, the hot standby with the
@@ -1475,10 +1478,23 @@ def is_master():
                 offset = postgresql_wal_received_offset(host)
                 if offset is not None:
                     if offset < my_offset:
+                        juju_log(
+                            MSG_DEBUG,
+                            "A peer is less lagged than me, so I'm a slave")
                         return False  # Short circuit.
                     offsets.add((offset, int(unit.split('/')[1]), unit))
+            else:
+                juju_log(
+                    MSG_DEBUG,
+                    "Unable to check {} wal offset - unauthorized".format(
+                        unit))
         best_unit = sorted(offsets)[0][2]  # Lowest number wins a tie.
-        return (best_unit == my_unit)
+        if best_unit == my_unit:
+            juju_log(MSG_DEBUG, "I won the lag tie breaker and am the master")
+            return True
+        else:
+            juju_log(MSG_DEBUG, "I lost the lag tie breaker and am a slave")
+            return False
 
     # There are no masters, so we need an election within this peer
     # relation. Lowest unit number wins and gets to be the master.
@@ -1487,8 +1503,10 @@ def is_master():
         return True  # Only unit in a service in a master relationship.
     my_num = int(os.environ['JUJU_UNIT_NAME'].split('/')[1])
     if my_num < remote_nums[0]:
+        juju_log(MSG_DEBUG, "Lowest unit so I'm the master")
         return True
     else:
+        juju_log(MSG_DEBUG, "Not the lowest unit so I'm a slave")
         return False
 
 
