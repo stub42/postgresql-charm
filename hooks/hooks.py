@@ -1274,37 +1274,6 @@ def generate_pgpass(passwords):
         owner="postgres", group="postgres", mode=0o400)
 
 
-def generate_repmgr_config(node_id):
-    """Regenerate the repmgr config file.
-
-    node_id is an integer, and must be a unique in the cluster.
-    """
-    params = {
-        'node_id': node_id,
-        'node_name': os.environ['JUJU_UNIT_NAME'],
-        'host': get_unit_host(),
-        'user': 'repmgr',
-        }
-    config = Template(
-        open("templates/repmgr.conf.tmpl").read()).render(params)
-    install_file(
-        config, repmgr_config, owner="postgres", group="postgres", mode=0o400)
-
-
-def run_repmgr(cmd, exit_on_error=True):
-    full_command = "sudo -u postgres repmgr -f '{}' {}".format(
-        repmgr_config, cmd)
-    juju_log(MSG_DEBUG, full_command)
-    try:
-        return subprocess.check_output(
-            full_command, stderr=subprocess.STDOUT, shell=True)
-    except subprocess.CalledProcessError, x:
-        juju_log(MSG_ERROR, x.output)
-        if exit_on_error:
-            raise SystemExit(x.returncode)
-        raise
-
-
 def drop_database(dbname, warn=True):
     import psycopg2
     timeout = 120
@@ -1373,29 +1342,12 @@ def repmgr_gc():
             run("sudo -u postgres {} promote -D '{}'".format(
                 pg_ctl, postgresql_cluster_dir))
 
-        if os.path.exists(repmgr_config):
-            juju_log(MSG_INFO, "No longer replicated. Dropping repmgr.")
-            os.unlink(repmgr_config)
-
         if os.path.exists(postgres_pgpass):
             os.unlink(postgres_pgpass)
 
         drop_database('repmgr')
 
         local_state['state'] = 'standalone'
-
-
-    elif is_master() and not postgresql_is_in_recovery():
-        # There is at least one hot standby, and I'm the master.
-        # Cleanup any dropped units from repmgr.
-        wanted_units.append(os.environ['JUJU_UNIT_NAME'])
-        juju_log(
-            MSG_DEBUG, "Remaining repmgr nodes are {}".format(
-                ', '.join(wanted_units)))
-        cur = db_cursor(autocommit=True, db='repmgr')
-        cur.execute(
-            "DELETE FROM repmgr_juju.repl_nodes WHERE NOT ARRAY[name] <@ %s",
-            (wanted_units,))
 
 
 def is_master():
@@ -1532,8 +1484,6 @@ def replication_relation_changed():
             drop_database('repmgr')
             ensure_database('repmgr', 'repmgr', 'repmgr')
             master_node_id = get_next_repmgr_node_id()
-            generate_repmgr_config(master_node_id)
-            run_repmgr('master register')
             local_state['state'] = 'master'
             local_state['repmgr_password'] = repmgr_password
             juju_log(MSG_INFO, "Publishing repmgr details to hot standbys")
@@ -1582,7 +1532,6 @@ def replication_relation_changed():
                 # We are just joining replication, and have found a
                 # master. Clone and follow it.
                 generate_pgpass(dict(repmgr=relation['repmgr_password']))
-                generate_repmgr_config(get_next_repmgr_node_id())
 
                 # Before we start destroying anything, ensure that the
                 # master is contactable.
@@ -1594,8 +1543,6 @@ def replication_relation_changed():
                     os.environ['JUJU_REMOTE_UNIT'],
                     relation['private-address'])
 
-                run_repmgr('standby register')
-                juju_log(MSG_INFO, "Registered hot standby with repmgr")
                 local_state['state'] = 'hot standby'
                 local_state['following'] = os.environ['JUJU_REMOTE_UNIT']
                 local_state.publish()
