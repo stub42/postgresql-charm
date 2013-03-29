@@ -1209,12 +1209,6 @@ def add_extra_repos():
             local_state.save()
 
 
-def install_repmgr():
-    '''Install the repmgr package if it isn't already.'''
-    packages = ["repmgr", "postgresql-%s-repmgr" % config_data["version"]]
-    apt_get_install(packages)
-
-
 def ensure_local_ssh():
     """Generate SSH keys for postgres user.
 
@@ -1466,8 +1460,6 @@ def replication_relation_changed():
     ensure_local_ssh()  # Generate SSH key and publish details
     authorize_remote_ssh()  # Authorize relationship SSH keys.
     config_changed(postgresql_config)  # Ensure minimal replication settings.
-
-    install_repmgr()
 
     relation = relation_get()
 
