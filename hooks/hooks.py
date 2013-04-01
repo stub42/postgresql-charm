@@ -1044,7 +1044,7 @@ def upgrade_charm():
     if from_repmgr and local_state['state'] == 'master':
         replication_password = create_user(
             'juju_replication', admin=True, replication=True)
-        generate_pgpass(dict(juju_replication=replication_password))
+        generate_pgpass()
         local_state['replication_password'] = replication_password
         juju_log(MSG_INFO, "Updating replication connection details")
         local_state.publish()
@@ -1059,6 +1059,7 @@ def upgrade_charm():
                         standby_mode = on
                         primary_conninfo = 'host={} user=juju_replication'
                         """.format(relation['private-address']))
+                    juju_log(MSG_DEBUG, recovery_conf)
                     install_file(
                         recovery_conf,
                         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
@@ -1511,8 +1512,7 @@ def replication_relation_changed():
             if local_state.get(
                 'replication_password', None) != replication_password:
                 local_state['replication_password'] = replication_password
-                generate_pgpass(dict(
-                    juju_replication=relation['replication_password']))
+                generate_pgpass()
 
             slave_relation_ids = relation_ids(relation_types=['slave'])
             if local_state['state'] == 'standalone' or slave_relation_ids:
@@ -1528,8 +1528,7 @@ def replication_relation_changed():
 
                 # We are just joining replication, and have found a
                 # master. Clone and follow it.
-                generate_pgpass(dict(
-                    replication_password=relation['replication_password']))
+                generate_pgpass()
 
                 # Before we start destroying anything, ensure that the
                 # master is contactable.
@@ -1555,6 +1554,7 @@ def replication_relation_changed():
                         standby_mode = on
                         primary_conninfo = 'host={} user=juju_replication'
                         """.format(relation['private-address']))
+                    juju_log(MSG_DEBUG, recovery_conf)
                     install_file(
                         recovery_conf,
                         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
@@ -1605,6 +1605,7 @@ def clone(master_unit, master_host):
                 standby_mode = on
                 primary_conninfo = 'host={} user=juju_replication'
                 """.format(master_host))
+        juju_log(MSG_DEBUG, recovery_conf)
         install_file(
             recovery_conf,
             os.path.join(postgresql_cluster_dir, 'recovery.conf'),
