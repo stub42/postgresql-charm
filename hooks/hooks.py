@@ -83,7 +83,7 @@ class State(dict):
 
         authorized = self.get('authorized', None)
         if authorized:
-            replication_state['authorized'] = ' '.join(authorized)
+            replication_state['authorized'] = ' '.join(sorted(authorized))
 
         for relid in relation_ids(relation_types=replication_relation_types):
             relation_set(replication_state, relid)
@@ -1454,9 +1454,22 @@ def is_master():
 
 
 def replication_relation_changed():
-    ensure_local_ssh()  # Generate SSH key and publish details
-    authorize_remote_ssh()  # Authorize relationship SSH keys.
+    ## Without repmgr, we no longer need SSH authorization
+    ## Leaving the code around for now in case we want it as the log
+    ## shipping transport.
+    ##
+    ## ensure_local_ssh()  # Generate SSH key and publish details
+    ## authorize_remote_ssh()  # Authorize relationship SSH keys.
     config_changed(postgresql_config)  # Ensure minimal replication settings.
+
+    # Now that pg_hba.conf has been regenerated and loaded, inform related
+    # units that they have been granted replication access.
+    authorized_units = set()
+    for relid in relation_ids(relation_types=replication_relation_types):
+        for unit in relation_list(relid):
+            authorized_units.add(unit)
+    local_state['authorized'] = authorized_units
+    local_state.publish()
 
     relation = relation_get()
 
