@@ -113,8 +113,9 @@ manipulate all other aspects of the database.
 ### the postgresql service provides:
 
 - `host`: the host to contact
-- `user`: a regular user authorized to read the database
 - `database`: a regular database
+- `port`: the port PostgreSQL is listening on
+- `user`: a regular user authorized to read the database
 - `password`: the password for `user`
 - `state`: 'standalone', 'master' or 'hot standby'.
 
@@ -122,10 +123,8 @@ manipulate all other aspects of the database.
 
 ### the postgresql service provides:
 
-- `host`: The host to contact
-- `user`: A created super user
-- `password`: The password for `user`
-- `state`: 'standalone', 'master' or 'hot standby'.
-
-
-
+- `host`: the host to contact
+- `port`: the port PostgreSQL is listening on
+- `user`: a created super user
+- `password`: the password for `user`
+- `state`: 'standalone', 'master' or 'hot standby'
