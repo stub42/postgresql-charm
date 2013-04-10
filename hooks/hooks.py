@@ -614,24 +614,29 @@ def generate_postgresql_hba(postgresql_hba):
             # It's not an IP address.
             return addr
 
-    relation_data = relation_get_all(relation_types=['db', 'db-admin'])
-    for relation in relation_data:
-        relation_id = relation['relation-id']
-        if relation_id.startswith('db-admin:'):
-            relation['user'] = 'all'
-            relation['database'] = 'all'
-        elif relation_id.startswith('db:'):
-            relation['user'] = user_name(relation['relation-id'],
-                                         relation['unit'])
-            relation['schema_user'] = user_name(relation['relation-id'],
-                                                relation['unit'],
-                                                schema=True)
-        else:
-            raise RuntimeError(
-                'Unknown relation type {}'.format(repr(relation_id)))
+    relation_data = []
+    for relid in relation_ids(relation_types=['db', 'db-admin']):
+        local_relation = relation_get(
+            unit_name=os.environ['JUJU_UNIT_NAME'], relation_id=relid)
+        for unit in relation_list(relid):
+            relation = relation_get(unit_name=unit, relation_id=relid)
+            relation['relation-id']  = relid
+            relation['unit'] = unit
 
-        relation['private-address'] = munge_address(
-            relation['private-address'])
+            if relid.startswith('db-admin:'):
+                relation['user'] = 'all'
+                relation['database'] = 'all'
+            elif relid.startswith('db:'):
+                relation['user'] = local_relation['user']
+                relation['schema_user'] = local_relation['schema_user']
+                relation['database'] = local_relation['database']
+            else:
+                raise RuntimeError(
+                    'Unknown relation type {}'.format(repr(relation_id)))
+
+            relation['private-address'] = munge_address(
+                relation['private-address'])
+            relation_data.append(relation)
 
     juju_log(MSG_INFO, str(relation_data))
 
@@ -1800,25 +1805,37 @@ def main():
         if not postgresql_stop():
             raise SystemExit(1)
 
-    elif hook_name in ["db-relation-joined", "db-relation-changed"]:
+    elif hook_name == "db-relation-joined":
+        # By default, we create a database named after the remote
+        # servicename. The remote service can override this by setting
+        # the database property on the relation.
+        database = os.environ['JUJU_REMOTE_UNIT'].split('/')[0]
+
+        # Generate a unique username for this relation to use. We should
+        # probably change this to share the username between all units
+        # in the remote service, as it makes connection pooling better.
+        user = user_name(
+            os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
+
+        db_relation_joined_changed(user, database, [])  # No roles yet.
+
+    elif hook_name == "db-relation-changed":
         roles = filter(None, relation_get('roles').split(","))
+
+        # If the remote service has requested we use a particular database
+        # name, honour that request.
         database = relation_get('database')
-        if database == '':
-            # Missing some information. We expect it to appear in a
-            # future call to the hook.
-            juju_log(MSG_WARNING, "No database set in relation, exiting")
-            sys.exit(0)
-        user = \
-            user_name(os.environ['JUJU_RELATION_ID'],
-                os.environ['JUJU_REMOTE_UNIT'])
-        if user != '' and database != '':
-            db_relation_joined_changed(user, database, roles)
+        if not database:
+            database = relation_get('database', os.environ['JUJU_UNIT_NAME'])
+
+        user = relation_get('user', os.environ['JUJU_UNIT_NAME'])
+        assert user, 'user not set'
+        db_relation_joined_changed(user, database, roles)
 
     elif hook_name == "db-relation-broken":
         database = relation_get('database')
-        user = \
-            user_name(os.environ['JUJU_RELATION_ID'],
-                os.environ['JUJU_REMOTE_UNIT'])
+        user = user_name(
+            os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
         db_relation_broken(user, database)
 
     elif hook_name in [
