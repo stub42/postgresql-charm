@@ -52,9 +52,9 @@ class State(dict):
         if os.path.exists(self._state_file):
             state = pickle.load(open(self._state_file, 'rb'))
         else:
-            state = {}
+            state = {
+                'cluster_name': os.environ['JUJU_UNIT_NAME'].replace('/','_')}
         self.clear()
-
         self.update(state)
 
     def save(self):
@@ -248,7 +248,7 @@ def postgresql_is_running():
     if status != 0:
         return False
     # e.g. output: "Running clusters: 9.1/main"
-    vc = "%s/%s" % (config_data["version"], config_data["cluster_name"])
+    vc = "%s/%s" % (config_data["version"], local_state['cluster_name'])
     return vc in output.decode('utf8').split()
 
 
@@ -468,7 +468,7 @@ def relation_list(relation_id=None):
     cmd = ['relation-list', '--format=json', '-r', relation_id]
     json_units = subprocess.check_output(cmd).strip()
     if json_units:
-        return json.loads(subprocess.check_output(cmd))
+        return json.loads(json_units)
     return []
 
 
@@ -851,7 +851,7 @@ def config_changed_volume_apply():
         mount_point = volume_mount_point_from_volid(volid)
         new_pg_dir = os.path.join(mount_point, "postgresql")
         new_pg_version_cluster_dir = os.path.join(new_pg_dir,
-            config_data["version"], config_data["cluster_name"])
+            config_data["version"], local_state['cluster_name'])
         if not mount_point:
             juju_log(MSG_ERROR, "invalid mount point from volid = \"%s\", " +
                      "not applying changes." % mount_point)
@@ -989,6 +989,8 @@ def install(run_pre=True):
 
     add_extra_repos()
 
+    postgresql_already_installed = package_installed('postgresql')
+
     packages = ["postgresql", "pwgen", "python-jinja2", "syslinux",
                 "python-psycopg2", "postgresql-contrib", "postgresql-plpython",
                 "postgresql-%s-debversion" % config_data["version"]]
@@ -1003,11 +1005,15 @@ def install(run_pre=True):
         local_state.setdefault('state', 'standalone')
         local_state.publish()
 
-        # Drop the cluster created when the postgresql package was
-        # installed, and rebuild it with the requested locale and encoding.
-        run("pg_dropcluster --stop 9.1 main")
-        run("pg_createcluster --locale='{}' --encoding='{}' 9.1 main".format(
-            config_data['locale'], config_data['encoding']))
+    if not postgresql_already_installed:
+        # We just installed PostgreSQL, and a database cluster was
+        # created that we don't want. Nuke it. Note that if we didn't
+        # just install the postgresql package, a cohosted charm already
+        # in this container may be using it.
+        run("pg_dropcluster --stop 9.1 {}".format(local_state['cluster_name']))
+
+    if not pg_cluster_exists():
+        pg_createcluster()
 
     install_dir(postgresql_backups_dir, owner="postgres", mode=0755)
     install_dir(postgresql_scripts_dir, owner="postgres", mode=0755)
@@ -1066,6 +1072,10 @@ def upgrade_charm():
                         owner="postgres", group="postgres")
                     postgresql_restart()
                     break
+
+    if not local_state.has_key('cluster_name'):
+        local_state['cluster_name'] = 'main'
+        local_state.save()
 
 
 def user_name(relid, remote_unit, admin=False, schema=False):
@@ -1636,7 +1646,7 @@ def clone(master_unit, master_host):
             shutil.rmtree(postgresql_cluster_dir)
         if os.path.exists(postgresql_config_dir):
             shutil.rmtree(postgresql_config_dir)
-        run('pg_createcluster {} main'.format(version))
+        pg_createcluster()
         config_changed(postgresql_config)
         raise
     finally:
@@ -1649,6 +1659,14 @@ def slave_count():
     for relid in relation_ids(relation_types=replication_relation_types):
         num_slaves += len(relation_list(relid))
     return num_slaves
+
+def pg_cluster_exists():
+    raise NotImplementedError()
+
+def pg_createcluster():
+    run("pg_createcluster --locale='{}' --encoding='{}' {} {}".format(
+        config_data['locale'], config_data['encoding'],
+        version, local_state['cluster_name']))
 
 
 def postgresql_is_in_recovery():
@@ -1747,13 +1765,14 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
 # Global variables
 ###############################################################################
 config_data = config_get()
+local_state = State('local_state.pickle')
 version = config_data['version']
-cluster_name = config_data['cluster_name']
 postgresql_data_dir = "/var/lib/postgresql"
 postgresql_cluster_dir = os.path.join(
-    postgresql_data_dir, version, cluster_name)
+    postgresql_data_dir, version, local_state['cluster_name'])
 postgresql_bin_dir = os.path.join('/usr/lib/postgresql', version, 'bin')
-postgresql_config_dir = os.path.join("/etc/postgresql", version, cluster_name)
+postgresql_config_dir = os.path.join(
+    "/etc/postgresql", version, local_state['cluster_name'])
 postgresql_config = os.path.join(postgresql_config_dir, "postgresql.conf")
 postgresql_ident = os.path.join(postgresql_config_dir, "pg_ident.conf")
 postgresql_hba = os.path.join(postgresql_config_dir, "pg_hba.conf")
