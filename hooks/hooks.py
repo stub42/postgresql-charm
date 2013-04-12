@@ -991,15 +991,25 @@ def install(run_pre=True):
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 subprocess.check_call(['sh', '-c', f])
 
-    # Intialize local state.
-    local_state.setdefault('state', 'standalone')
-    local_state.publish()
-
     packages = ["postgresql", "pwgen", "python-jinja2", "syslinux",
                 "python-psycopg2", "postgresql-contrib", "postgresql-plpython",
                 "postgresql-%s-debversion" % config_data["version"]]
     packages.extend(config_data["extra-packages"].split())
     apt_get_install(packages)
+
+    if not local_state.has_key('state'):
+        # Fresh installation. Because this function is invoked by both
+        # the install hook and the upgrade-charm hook, we need to guard
+        # any non-idempotent setup. We should probably fix this; it
+        # seems rather fragile.
+        local_state.setdefault('state', 'standalone')
+        local_state.publish()
+
+        # Drop the cluster created when the postgresql package was
+        # installed, and rebuild it with the requested locale and encoding.
+        run("pg_dropcluster --stop 9.1 main")
+        run("pg_createcluster --locale='{}' --encoding='{}' 9.1 main".format(
+            config_data['locale'], config_data['encoding']))
 
     install_dir(postgresql_backups_dir, owner="postgres", mode=0755)
     install_dir(postgresql_scripts_dir, owner="postgres", mode=0755)
