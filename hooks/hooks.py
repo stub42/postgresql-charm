@@ -1060,10 +1060,10 @@ def upgrade_charm():
             for unit in relation_list(relid):
                 relation = relation_get(unit_name=unit, relation_id=relid)
                 if relation.get('state', None) == 'master':
-                    recovery_conf = dedent("""\
-                        standby_mode = on
-                        primary_conninfo = 'host={} user=juju_replication'
-                        """.format(relation['private-address']))
+                    recovery_conf = Template(
+                        open("templates/recovery.conf.tmpl").read()).render({
+                            'host': relation['private-address'],
+                            'password': local_state['replication_password']})
                     juju_log(MSG_DEBUG, recovery_conf)
                     install_file(
                         recovery_conf,
@@ -1303,7 +1303,7 @@ def generate_pgpass():
             "*:*:*:{}:{}".format(username, password)
                 for username, password in passwords.items())
         install_file(
-            pgpass, postgres_pgpass,
+            pgpass, charm_pgpass,
             owner="postgres", group="postgres", mode=0o400)
 
 
@@ -1318,7 +1318,8 @@ def drop_database(dbname, warn=True):
         except psycopg2.Error:
             if time.time() > now + timeout:
                 if warn:
-                    juju_log(MSG_WARNING, "Unable to drop database %s" % dbname)
+                    juju_log(
+                        MSG_WARNING, "Unable to drop database %s" % dbname)
                 else:
                     raise
             time.sleep(0.5)
@@ -1340,8 +1341,8 @@ def replication_gc():
             run("sudo -u postgres {} promote -D '{}'".format(
                 pg_ctl, postgresql_cluster_dir))
 
-        if os.path.exists(postgres_pgpass):
-            os.unlink(postgres_pgpass)
+        if os.path.exists(charm_pgpass):
+            os.unlink(charm_pgpass)
 
         local_state['state'] = 'standalone'
 
@@ -1601,7 +1602,7 @@ def clone(master_unit, master_host):
     juju_log(MSG_INFO, "Cloning master {}".format(master_unit))
 
     cmd = [
-        'sudo', '-u', 'postgres',
+        'sudo', '-E', '-u', 'postgres',  # -E needed to locate pgpass file.
         'pg_basebackup', '-D', postgresql_cluster_dir,
         '--xlog', '--checkpoint=fast', '--no-password',
         '-h', master_host, '-p', '5432', '--username=juju_replication',
@@ -1619,10 +1620,10 @@ def clone(master_unit, master_host):
         os.symlink(
             '/etc/ssl/private/ssl-cert-snakeoil.key',
             os.path.join(postgresql_cluster_dir, 'server.key'))
-        recovery_conf = dedent("""\
-                standby_mode = on
-                primary_conninfo = 'host={} user=juju_replication'
-                """.format(master_host))
+        recovery_conf = Template(
+            open("templates/recovery.conf.tmpl").read()).render({
+                'host': master_host,
+                'password': local_state['replication_password']})
         juju_log(MSG_DEBUG, recovery_conf)
         install_file(
             recovery_conf,
@@ -1771,13 +1772,14 @@ postgres_ssh_public_key = os.path.join(postgres_ssh_dir, 'id_rsa.pub')
 postgres_ssh_private_key = os.path.join(postgres_ssh_dir, 'id_rsa')
 postgres_ssh_authorized_keys = os.path.join(postgres_ssh_dir, 'authorized_keys')
 postgres_ssh_known_hosts = os.path.join(postgres_ssh_dir, 'known_hosts')
-postgres_pgpass = os.path.expanduser('~postgres/.pgpass')
 hook_name = os.path.basename(sys.argv[0])
 replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')
+charm_pgpass = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..', 'pgpass'))
 
 # Hooks, running as root, need to be pointed at the correct .pgpass.
-os.environ['PGPASSFILE'] = postgres_pgpass
+os.environ['PGPASSFILE'] = charm_pgpass
 
 
 ###############################################################################
