@@ -305,9 +305,7 @@ options:
         If you're running multiple environments with the same services in them
         this allows you to differentiate between them.
   extra_archives:
-    default: "ppa:stub/repmgr"
+    default: ""
     type: string
     description: |
-        Extra archive to add with add-apt-repository(1). This option is
-        currently needed to locate the repmgr packages, and should be removed
-        once the packages are in a more official location.
+        Extra archives to add with add-apt-repository(1).
