@@ -5,6 +5,7 @@ import json
 import os.path
 import subprocess
 import testtools
+from testtools.content import text_content
 import unittest
 
 
@@ -13,17 +14,32 @@ TEST_CHARM = 'local:postgresql'
 PSQL_CHARM = 'local:postgresql-psql'
 
 
+def _run(detail_collector, cmd, input=''):
+    proc = subprocess.Popen(
+        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE)
+    (out, err) = proc.communicate(input)
+    if out:
+        detail_collector.addDetail('stdout', text_content(out))
+    if err:
+        detail_collector.addDetail('stderr', text_content(err))
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(
+            proc.returncode, cmd, err)
+    return out
+
+
 class JujuFixture(fixtures.Fixture):
     """Interact with juju. Assumes juju environment is bootstrapped."""
     def do(self, cmd):
-        cmd = ['juju', '--log=/dev/null'] + cmd
-        subprocess.check_call(cmd)
+        cmd = ['juju'] + cmd
+        _run(self, cmd)
 
     def get_result(self, cmd):
-        cmd = ['juju', '--log=/dev/null'] + cmd + ['--format=json']
-        json_result = subprocess.check_output(cmd)
-        if json_result:
-            return json.loads(json_result)
+        cmd = ['juju'] + cmd + ['--format=json']
+        out = _run(self, cmd)
+        if out:
+            return json.loads(out)
         return None
 
     # The most recent environment status, updated by refresh_status()
@@ -31,33 +47,39 @@ class JujuFixture(fixtures.Fixture):
 
     def refresh_status(self):
         self.status = self.get_result(['status'])
+        return self.status
 
     def wait_until_ready(self):
         ready = False
         while not ready:
             self.refresh_status()
             ready = True
-            for unit in self.status['services']['units']:
-                agent_state = (
-                    self.status['services']['units'][unit]['agent-state'])
-                if agent_state != 'started':
-                    ready = False
-                    break
+            for service in self.status['services']:
+                for unit in self.status['services'][service]['units']:
+                    agent_state = (
+                        self.status['services'][service][
+                            'units'][unit]['agent-state'])
+                    if agent_state != 'started':
+                        ready = False
 
     def setUp(self):
         super(JujuFixture, self).setUp()
+        self.reset()
         self.addCleanup(self.reset)
 
     def reset(self):
         # Tear down any services left running.
-        for service in status['services']:
+        self.refresh_status()
+        for service in self.status['services']:
             self.do(['destroy-service', service])
         # We unfortunately cannot reuse machines, as we have no
         # guarantee they are still in a usable state. Tear them down
         # too.
-        dirty_machines = [m for m in status['machines'].keys() if m != '0']
-        if dirty_machines:
-            self.do(['terminate-machine'] + dirty_machines)
+        ## But it is sloooow... so lets see what happens for now.
+        ## dirty_machines = [
+        ##     m for m in self.status['machines'].keys() if m != '0']
+        ## if dirty_machines:
+        ##     self.do(['terminate-machine'] + dirty_machines)
 
 
 class LocalCharmRepositoryFixture(fixtures.Fixture):
@@ -95,17 +117,60 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         cls.juju = JujuFixture()
         cls.juju.setUp()
 
+        # Ensure the charm cached in the environment is the charm we are
+        # trying to test.
+        cls.juju.do(['deploy', '--upgrade', TEST_CHARM, 'postgresql'])
+        cls.juju.do(['destroy-service', 'postgresql'])
+
     @classmethod
     def tearDownClass(cls):
         cls.juju.cleanUp()
 
     def setUp(self):
         super(PostgreSQLCharmTestCase, self).setUp()
-        self.useFixture(LocalCharmRepositoryFixture())
-        self.juju.reset()
 
-    def sql(self):
-        units = self.juju.status["services"]["psql"]
+        ## Disabled until postgresql-psql is in the charm store.
+        ## Otherwise, we need to make the local:postgresql-psql charm
+        ## discoverable.
+        ## self.useFixture(LocalCharmRepositoryFixture())
+
+        # If the charms fail, we don't want tests to hang indefinitely.
+        # We might need to increase this in some environments or if the
+        # environment doesn't have enough machines warmed up.
+        ## Disabled for development.
+        ## self.useFixture(fixtures.Timeout(300, gentle=True))
+
+    def sql(self, sql, psql_unit=None, postgres_unit=None, dbname=None):
+        '''Run some SQL on postgres_unit from psql_unit.
+
+        Uses a random psql_unit and postgres_unit if not specified.
+
+        A db-admin relation is used if dbname is specified. Otherwise,
+        a standard db relation is used.
+        '''
+        # Machine we are going to run the SQL from.
+        if psql_unit is None:
+            psql_unit = (
+                self.juju.status['services']['psql']['units'].keys()[0])
+        machine = self.juju.status[
+            'services']['psql']['units'][psql_unit]['machine']
+
+        # The command we run to connect psql to the desired database.
+        if postgres_unit is None:
+            postgres_unit = (
+                self.juju.status['services']['postgresql']['units'].keys()[0])
+        if dbname is None:
+            psql_cmd = ['psql-db-{}'.format(postgres_unit.replace('/', '-'))]
+        else:
+            psql_cmd = [
+                'psql-db-admin-{}'.format(postgres_unit.replace('/', '-')),
+                '-d', dbname]
+        psql_args = [
+            '--quiet', '--tuples-only', '--no-align', '--no-password',
+            '--field-separator=,', '--file=-']
+        cmd = ['juju', 'ssh', str(machine)] + psql_cmd + psql_args
+        out = _run(self, cmd, input=sql)
+        return [line.split(',').strip() for line in out.splitlines()]
 
     def test_basic(self):
         '''Set up a single unit service'''
@@ -113,6 +178,10 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.juju.do(['deploy', PSQL_CHARM, 'psql'])
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
+        self.addDetail('status', text_content(repr(self.juju.status)))
+        result = self.sql('SELECT TRUE')
+        self.assertEqual(result, [['TRUE']])
+
 
 
 if __name__ == '__main__':
