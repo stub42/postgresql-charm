@@ -36,6 +36,10 @@ options:
     default: "9.1"
     type: string
     description: Version of PostgreSQL that we want to install
+  cluster_name:
+    default: "main"
+    type: string
+    description: Name of the cluster we want to install the DBs into
   listen_ip:
     default: "*"
     type: string
