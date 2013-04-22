@@ -14,7 +14,14 @@ provides:
     interface: pgsql
   db-admin:
     interface: pgsql
+  master:
+    interface: repmgr
 requires:
   persistent-storage:
     interface: directory-path
-
+  slave:
+    interface: repmgr
+    limit: 1
+peers:
+  replication:
+    interface: repmgr-peer

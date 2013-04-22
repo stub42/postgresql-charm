@@ -8,9 +8,11 @@ local   all        nagios                            md5
 
 {% if access_list is defined -%}
 {% for unit in access_list -%}
-host {{unit['database']}} {{unit['user']}} {{unit['private-address']}}/32 md5
+# {{unit['relation-id']}} from {{unit['unit']}}
+host {{unit['database']}} {{unit['user']}} {{unit['private-address']}} md5
+
 {% if 'schema_user' in unit -%} 
-host {{unit['database']}} {{unit['schema_user']}} {{unit['private-address']}}/32 md5
+host {{unit['database']}} {{unit['schema_user']}} {{unit['private-address']}} md5
 {% endif -%}
 {% endfor -%}
 {% endif -%}
