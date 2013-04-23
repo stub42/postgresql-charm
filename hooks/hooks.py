@@ -1133,8 +1133,8 @@ def grant_roles(user, roles):
 
     for role in roles:
         ensure_role(role)
-        sql = "GRANT {} to {}".format(role, user)
-        run_sql_as_postgres(sql)
+        sql = "GRANT %s to %s"
+        run_sql_as_postgres(sql, role, user)
 
 
 def ensure_role(role):
@@ -1143,8 +1143,8 @@ def ensure_role(role):
         # role already exists
         pass
     else:
-        sql = "CREATE ROLE {} INHERIT NOLOGIN".format(role)
-        run_sql_as_postgres(sql)
+        sql = "CREATE ROLE %s INHERIT NOLOGIN"
+        run_sql_as_postgres(sql, role)
 
 
 def ensure_database(user, schema_user, database):
@@ -1153,13 +1153,12 @@ def ensure_database(user, schema_user, database):
         # DB already exists
         pass
     else:
-        sql = "CREATE DATABASE {}".format(database)
-        run_sql_as_postgres(sql)
-    sql = "GRANT ALL PRIVILEGES ON DATABASE {} TO {}".format(
-        database, schema_user)
-    run_sql_as_postgres(sql)
-    sql = "GRANT CONNECT ON DATABASE {} TO {}".format(database, user)
-    run_sql_as_postgres(sql)
+        sql = "CREATE DATABASE %s"
+        run_sql_as_postgres(sql, database)
+    sql = "GRANT ALL PRIVILEGES ON DATABASE %s TO %s"
+    run_sql_as_postgres(sql, database, schema_user)
+    sql = "GRANT CONNECT ON DATABASE %s TO %s"
+    run_sql_as_postgres(sql, database, user)
 
 
 def get_relation_host():
@@ -1206,15 +1205,14 @@ def db_admin_relation_joined_changed(user, database='all'):
 
 
 def db_relation_broken(user, database):
-    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}".format(database, user)
-    run_sql_as_postgres(sql)
-    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}_schema".format(database, user)
-    run_sql_as_postgres(sql)
+    sql = "REVOKE ALL PRIVILEGES ON %s FROM %s"
+    run_sql_as_postgres(sql, database, user)
+    run_sql_as_postgres(sql, database, user + "_schema")
 
 
 def db_admin_relation_broken(user):
-    sql = "ALTER USER {} NOSUPERUSER".format(user)
-    run_sql_as_postgres(sql)
+    sql = "ALTER USER %s NOSUPERUSER"
+    run_sql_as_postgres(sql, user)
     generate_postgresql_hba(postgresql_hba)
 
 
