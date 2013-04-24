@@ -599,7 +599,8 @@ def create_postgresql_ident(postgresql_ident):
 #------------------------------------------------------------------------------
 # generate_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
-def generate_postgresql_hba(postgresql_hba):
+def generate_postgresql_hba(postgresql_hba, user=None,
+                            schema_user=None, database=None):
 
     # Per Bug #1117542, when generating the postgresql_hba file we
     # need to cope with private-address being either an IP address
@@ -626,9 +627,16 @@ def generate_postgresql_hba(postgresql_hba):
                 relation['user'] = 'all'
                 relation['database'] = 'all'
             elif relid.startswith('db:'):
-                relation['user'] = local_relation['user']
-                relation['schema_user'] = local_relation['schema_user']
-                relation['database'] = local_relation['database']
+                relation['user'] = local_relation.get('user', user)
+                relation['schema_user'] = local_relation.get('schema_user',
+                                                             schema_user)
+                relation['database'] = local_relation.get('database', database)
+
+                if ((relation['user'] is None
+                     or relation['schema_user'] is None
+                     or relation['database'] is None)):
+                    # Missing info in relation for this unit, so skip it.
+                    continue
             else:
                 raise RuntimeError(
                     'Unknown relation type {}'.format(repr(relid)))
@@ -1075,14 +1083,59 @@ def upgrade_charm():
                     break
 
 
+def quote_identifier(identifier):
+    r'''Quote an identifier, such as a table or role name.
+
+    In SQL, identifiers are quoted using " rather than ' (which is reserved
+    for strings).
+
+    >>> print(quote_identifier('hello'))
+    "hello"
+
+    Quotes and Unicode are handled if you make use of them in your
+    identifiers.
+
+    >>> print(quote_identifier("'"))
+    "'"
+    >>> print(quote_identifier('"'))
+    """"
+    >>> print(quote_identifier("\\"))
+    "\"
+    >>> print(quote_identifier('\\"'))
+    "\"""
+    >>> print(quote_identifier('\\ aargh \u0441\u043b\u043e\u043d'))
+    U&"\\ aargh \0441\043b\043e\043d"
+    '''
+    try:
+        return '"%s"' % identifier.encode('US-ASCII').replace('"', '""')
+    except UnicodeEncodeError:
+        escaped = []
+        for c in identifier:
+            if c == '\\':
+                escaped.append('\\\\')
+            elif c == '"':
+                escaped.append('""')
+            else:
+                c = c.encode('US-ASCII', 'backslashreplace')
+                # Note Python only supports 32 bit unicode, so we use
+                # the 4 hexdigit PostgreSQL syntax (\1234) rather than
+                # the 6 hexdigit format (\+123456).
+                if c.startswith('\\u'):
+                    c = '\\' + c[2:]
+                escaped.append(c)
+        return 'U&"%s"' % ''.join(escaped)
+
+
+def sanitize(s):
+    s = s.replace(':', '_')
+    s = s.replace('-', '_')
+    s = s.replace('/', '_')
+    s = s.replace('"', '_')
+    s = s.replace("'", '_')
+    return s
+
+
 def user_name(relid, remote_unit, admin=False, schema=False):
-    def sanitize(s):
-        s = s.replace(':', '_')
-        s = s.replace('-', '_')
-        s = s.replace('/', '_')
-        s = s.replace('"', '_')
-        s = s.replace("'", '_')
-        return s
     # Per Bug #1160530, don't append the remote unit number to the user name.
     components = [sanitize(relid), sanitize(re.split("/", remote_unit)[0])]
     if admin:
@@ -1101,6 +1154,8 @@ def user_exists(user):
 
 
 def create_user(user, admin=False, replication=False):
+    from psycopg2.extensions import AsIs
+
     password = get_password(user)
     if password is None:
         password = pwgen()
@@ -1109,8 +1164,7 @@ def create_user(user, admin=False, replication=False):
         action = ["ALTER ROLE"]
     else:
         action = ["CREATE ROLE"]
-    action.append('"{}"'.format(user))
-    action.append('WITH LOGIN')
+    action.append('%s WITH LOGIN')
     if admin:
         action.append('SUPERUSER')
     else:
@@ -1121,11 +1175,13 @@ def create_user(user, admin=False, replication=False):
         action.append('NOREPLICATION')
     action.append('PASSWORD %s')
     sql = ' '.join(action)
-    run_sql_as_postgres(sql, password)
+    run_sql_as_postgres(sql, AsIs(quote_identifier(user)), password)
     return password
 
 
 def grant_roles(user, roles):
+    from psycopg2.extensions import AsIs
+
     # Delete previous roles
     sql = ("DELETE FROM pg_auth_members WHERE member IN ("
            "SELECT oid FROM pg_roles WHERE rolname = %s)")
@@ -1134,31 +1190,38 @@ def grant_roles(user, roles):
     for role in roles:
         ensure_role(role)
         sql = "GRANT %s to %s"
-        run_sql_as_postgres(sql, role, user)
+        run_sql_as_postgres(sql, AsIs(quote_identifier(role)),
+                            AsIs(quote_identifier(user)))
 
 
 def ensure_role(role):
+    from psycopg2.extensions import AsIs
+
     sql = "SELECT oid FROM pg_roles WHERE rolname = %s"
     if run_select_as_postgres(sql, role)[0] != 0:
         # role already exists
         pass
     else:
         sql = "CREATE ROLE %s INHERIT NOLOGIN"
-        run_sql_as_postgres(sql, role)
+        run_sql_as_postgres(sql, AsIs(quote_identifier(role)))
 
 
 def ensure_database(user, schema_user, database):
+    from psycopg2.extensions import AsIs
+
     sql = "SELECT datname FROM pg_database WHERE datname = %s"
     if run_select_as_postgres(sql, database)[0] != 0:
         # DB already exists
         pass
     else:
         sql = "CREATE DATABASE %s"
-        run_sql_as_postgres(sql, database)
+        run_sql_as_postgres(sql, AsIs(quote_identifier(database)))
     sql = "GRANT ALL PRIVILEGES ON DATABASE %s TO %s"
-    run_sql_as_postgres(sql, database, schema_user)
+    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                        AsIs(quote_identifier(schema_user)))
     sql = "GRANT CONNECT ON DATABASE %s TO %s"
-    run_sql_as_postgres(sql, database, user)
+    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                        AsIs(quote_identifier(user)))
 
 
 def get_relation_host():
@@ -1190,7 +1253,9 @@ def db_relation_joined_changed(user, database, roles):
     host = get_unit_host()
     run("relation-set host='%s' database='%s' port='%s'" % (
         host, database, config_data["listen_port"]))
-    generate_postgresql_hba(postgresql_hba)
+    generate_postgresql_hba(postgresql_hba, user=user,
+                            schema_user=schema_user,
+                            database=database)
 
 
 def db_admin_relation_joined_changed(user, database='all'):
@@ -1205,14 +1270,20 @@ def db_admin_relation_joined_changed(user, database='all'):
 
 
 def db_relation_broken(user, database):
+    from psycopg2.extensions import AsIs
+
     sql = "REVOKE ALL PRIVILEGES ON %s FROM %s"
-    run_sql_as_postgres(sql, database, user)
-    run_sql_as_postgres(sql, database, user + "_schema")
+    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                        AsIs(quote_identifier(user)))
+    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                        AsIs(quote_identifier(user + "_schema")))
 
 
 def db_admin_relation_broken(user):
+    from psycopg2.extensions import AsIs
+
     sql = "ALTER USER %s NOSUPERUSER"
-    run_sql_as_postgres(sql, user)
+    run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
     generate_postgresql_hba(postgresql_hba)
 
 
@@ -1830,7 +1901,9 @@ def main():
             database = relation_get('database', os.environ['JUJU_UNIT_NAME'])
 
         user = relation_get('user', os.environ['JUJU_UNIT_NAME'])
-        assert user, 'user not set'
+        if not user:
+            user = user_name(
+                os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
         db_relation_joined_changed(user, database, roles)
 
     elif hook_name == "db-relation-broken":
