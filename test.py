@@ -161,13 +161,16 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # If the charms fail, we don't want tests to hang indefinitely.
         # We might need to increase this in some environments or if the
         # environment doesn't have enough machines warmed up.
-        timeout = int(os.environ.get('TEST_TIMEOUT', 600))
+        timeout = int(os.environ.get('TEST_TIMEOUT', 900))
         self.useFixture(fixtures.Timeout(timeout, gentle=True))
 
     def sql(self, sql, psql_unit=None, postgres_unit=None, dbname=None):
         '''Run some SQL on postgres_unit from psql_unit.
 
         Uses a random psql_unit and postgres_unit if not specified.
+
+        postgres_unit may be set to an explicit unit name, 'master' or
+        'hot standby'.
 
         A db-admin relation is used if dbname is specified. Otherwise,
         a standard db relation is used.
@@ -189,6 +192,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         if postgres_unit is None:
             postgres_unit = (
                 self.juju.status['services']['postgresql']['units'].keys()[0])
+        elif postgres_unit == 'hot standby':
+            postgres_unit = 'hot-standby'
         if dbname is None:
             psql_cmd = [
                 'bin/psql-db-{}'.format(postgres_unit.replace('/', '-'))]
@@ -206,7 +211,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         return result
 
     def test_basic(self):
-        '''Set up a single unit service'''
+        """Set up a single unit service."""
         self.juju.do(['deploy', TEST_CHARM, 'postgresql'])
         self.juju.do(['deploy', PSQL_CHARM, 'psql'])
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
@@ -220,6 +225,73 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         result = self.sql('SELECT TRUE')
         self.assertEqual(result, [['t']])
 
+    def is_master(self, postgres_unit):
+         is_master = self.sql(
+             'SELECT NOT pg_is_in_recovery()',
+             postgres_unit=postgres_unit)[0][0]
+         return (is_master == 't')
+
+    def test_failover(self):
+        """Set up a three unit service and perform a failover."""
+        self.juju.do(['deploy', '--num-units', '4', TEST_CHARM, 'postgresql'])
+        self.juju.do(['deploy', PSQL_CHARM, 'psql'])
+        self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
+        self.juju.wait_until_ready()
+
+        units = unit_sorted(
+            self.juju.status['services']['postgresql']['units'].keys())
+        master_unit, standby_unit_1, standby_unit_2, standby_unit_3 = units
+
+        # Confirm units agree on their roles. On a freshly setup
+        # service, lowest numbered unit is always the master.
+        self.assertIs(True, self.is_master(master_unit))
+        self.assertIs(False, self.is_master(standby_unit_1))
+        self.assertIs(False, self.is_master(standby_unit_2))
+        self.assertIs(False, self.is_master(standby_unit_3))
+
+        # Remove the master unit.
+        self.juju.do(['remove-unit', master_unit])
+        self.juju.wait_until_ready()
+
+        # All hot standbys were fully in sync with the master, so the
+        # lowest numbered standby will be the new master.
+        self.assertIs(True, self.is_master(standby_unit_1))
+        self.assertIs(False, self.is_master(standby_unit_2))
+        self.assertIs(False, self.is_master(standby_unit_3))
+
+        self.sql('CREATE TABLE Foo (integer bar)', postgres_unit='master')
+
+        # Pause replication on unit 2, to allow it to get out of sync
+        # with the master. Then make some DB changes.
+        self.sql('SELECT pg_xlog_replay_pause()', standby_unit_2)
+        self.sql('INSERT INTO Foo VALUES (1)', standby_unit_1)
+
+        # Remove the master unit. In this case, unit 3 will end up as
+        # the new master because it is more in sync.
+        self.juju.do(['remove-unit', standby_unit_1])
+        self.juju.wait_until_ready()
+
+        # Confirm unit 2 is a standby, and unit 3 is the master.
+        self.assertIs(False, self.is_master(standby_unit_2))
+        self.assertIs(True, self.is_master(standby_unit_3))
+
+        # Confirm sync status.
+        result_2 = self.sql('SELECT COUNT(*) FROM Foo', standby_unit_2)
+        self.assertEqual(result_2, [['0']])
+        result_3 = self.sql('SELECT COUNT(*) FROM Foo', standby_unit_3)
+        self.assertEqual(result_3, [['1']])
+
+        # Reenable replication on unit 2, and confirm it works.
+        self.sql('SELECT pg_xlog_replay_resume()', standby_unit_2)
+        result_2 = self.sql('SELECT COUNT(*) FROM Foo', standby_unit_2)
+        self.assertEqual(result_2, [['1']])
+
+
+def unit_sorted(units):
+    """Return a correctly sorted list of unit names."""
+    return sorted(
+        units, lambda a,b:
+            cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
 
 if __name__ == '__main__':
     raise SystemExit(unittest.main())
