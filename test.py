@@ -1,11 +1,16 @@
 #!/usr/bin/python
 
+"""
+TEST_DEBUG_FILE=test-debug.log TEST_TIMEOUT=600 ./test.py -vv
+"""
+
 import fixtures
 import json
 import os.path
 import subprocess
 import testtools
 from testtools.content import text_content
+import time
 import unittest
 
 
@@ -14,16 +19,35 @@ TEST_CHARM = 'local:postgresql'
 PSQL_CHARM = 'local:postgresql-psql'
 
 
+def DEBUG(msg):
+    """Allow us to watch these slow tests as they run."""
+    debug_file = os.environ.get('TEST_DEBUG_FILE', '')
+    if debug_file:
+        with open(debug_file, 'a') as f:
+            f.write('{}> {}\n'.format(time.ctime(), msg))
+            f.flush()
+
+
 def _run(detail_collector, cmd, input=''):
-    proc = subprocess.Popen(
-        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE)
+    DEBUG("Running {}".format(' '.join(cmd)))
+    try:
+        proc = subprocess.Popen(
+            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError, x:
+        DEBUG("exception: {!r}".format(x))
+        DEBUG("stderr: {}".format(proc.stderr.read()))
+        raise
+
     (out, err) = proc.communicate(input)
     if out:
+        DEBUG("stdout: {}".format(out))
         detail_collector.addDetail('stdout', text_content(out))
     if err:
+        DEBUG("stderr: {}".format(err))
         detail_collector.addDetail('stderr', text_content(err))
     if proc.returncode != 0:
+        DEBUG("rv: {}".format(proc.returncode))
         raise subprocess.CalledProcessError(
             proc.returncode, cmd, err)
     return out
@@ -137,8 +161,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # If the charms fail, we don't want tests to hang indefinitely.
         # We might need to increase this in some environments or if the
         # environment doesn't have enough machines warmed up.
-        ## Disabled for development.
-        ## self.useFixture(fixtures.Timeout(300, gentle=True))
+        timeout = int(os.environ.get('TEST_TIMEOUT', 600))
+        self.useFixture(fixtures.Timeout(timeout, gentle=True))
 
     def sql(self, sql, psql_unit=None, postgres_unit=None, dbname=None):
         '''Run some SQL on postgres_unit from psql_unit.
@@ -155,22 +179,31 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         machine = self.juju.status[
             'services']['psql']['units'][psql_unit]['machine']
 
+        # The psql statements we are going to execute.
+        sql = sql.strip()
+        if not sql.endswith(';'):
+            sql += ';'
+        sql += '\n\\q\n'
+
         # The command we run to connect psql to the desired database.
         if postgres_unit is None:
             postgres_unit = (
                 self.juju.status['services']['postgresql']['units'].keys()[0])
         if dbname is None:
-            psql_cmd = ['psql-db-{}'.format(postgres_unit.replace('/', '-'))]
+            psql_cmd = [
+                'bin/psql-db-{}'.format(postgres_unit.replace('/', '-'))]
         else:
             psql_cmd = [
-                'psql-db-admin-{}'.format(postgres_unit.replace('/', '-')),
-                '-d', dbname]
+                'bin/psql-db-admin-{}'.format(
+                    postgres_unit.replace('/', '-')), '-d', dbname]
         psql_args = [
             '--quiet', '--tuples-only', '--no-align', '--no-password',
             '--field-separator=,', '--file=-']
         cmd = ['juju', 'ssh', str(machine)] + psql_cmd + psql_args
         out = _run(self, cmd, input=sql)
-        return [line.split(',').strip() for line in out.splitlines()]
+        result = [line.split(',') for line in out.splitlines()]
+        self.addDetail('sql', text_content(repr((sql, result))))
+        return result
 
     def test_basic(self):
         '''Set up a single unit service'''
@@ -178,10 +211,14 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.juju.do(['deploy', PSQL_CHARM, 'psql'])
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
+
+        # There a race condition here, as hooks may still be running
+        # from adding the relation. I'm protected here as 'juju status'
+        # takes about 25 seconds to run from here to my test cloud but
+        # others might not be so 'lucky'.
         self.addDetail('status', text_content(repr(self.juju.status)))
         result = self.sql('SELECT TRUE')
-        self.assertEqual(result, [['TRUE']])
-
+        self.assertEqual(result, [['t']])
 
 
 if __name__ == '__main__':
