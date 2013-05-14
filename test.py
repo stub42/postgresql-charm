@@ -87,11 +87,13 @@ class JujuFixture(fixtures.Fixture):
                         ready = False
 
     def setUp(self):
+        DEBUG("JujuFixture.setUp()")
         super(JujuFixture, self).setUp()
         self.reset()
         self.addCleanup(self.reset)
 
     def reset(self):
+        DEBUG("JujuFixture.reset()")
         # Tear down any services left running.
         self.refresh_status()
         for service in self.status['services']:
