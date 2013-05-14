@@ -467,7 +467,9 @@ def relation_list(relation_id=None):
     cmd = ['relation-list', '--format=json', '-r', relation_id]
     json_units = subprocess.check_output(cmd).strip()
     if json_units:
-        return json.loads(json_units)
+        data = json.loads(json_units)
+        if data is not None:
+            return data
     return []
 
 
