@@ -153,6 +153,9 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
     def setUp(self):
         super(PostgreSQLCharmTestCase, self).setUp()
 
+        # Reset juju environment between tests.
+        self.addCleanup(self.juju.reset)
+
         ## Disabled until postgresql-psql is in the charm store.
         ## Otherwise, we need to make the local:postgresql-psql charm
         ## discoverable.
