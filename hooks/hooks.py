@@ -66,7 +66,7 @@ class State(dict):
         """Publish relevant unit state to relations"""
 
         def add(state_dict, key):
-            if self.has_key(key):
+            if key in self:
                 state_dict[key] = self[key]
 
         client_state = {}
@@ -159,7 +159,7 @@ def volume_get_volume_id():
 # shell helper
 def volume_init_and_mount(volid):
     command = ("scripts/volume-common.sh call " +
-              "volume_init_and_mount %s" % volid)
+               "volume_init_and_mount %s" % volid)
     output = run(command)
     if output.find("ERROR") >= 0:
         return False
@@ -232,9 +232,8 @@ def install_file(contents, dest, owner="root", group="root", mode=0600):
 # install_dir: create a directory
 #------------------------------------------------------------------------------
 def install_dir(dirname, owner="root", group="root", mode=0700):
-    command = \
-    '/usr/bin/install -o {} -g {} -m {} -d {}'.format(owner, group, oct(mode),
-        dirname)
+    command = '/usr/bin/install -o {} -g {} -m {} -d {}'.format(
+        owner, group, oct(mode), dirname)
     return run(command)
 
 
@@ -296,7 +295,7 @@ def postgresql_restart():
 
     # Store a copy of our known live configuration so
     # postgresql_reload_or_restart() can make good choices.
-    if local_state.has_key('saved_config'):
+    if 'saved_config' in local_state:
         local_state['live_config'] = local_state['saved_config']
         local_state.save()
 
@@ -356,7 +355,7 @@ def postgresql_reload_or_restart():
             MSG_DEBUG, "PostgreSQL reload, config changes taking effect.")
         rc = postgresql_reload()  # No pending need to bounce, just reload.
 
-    if rc == 0 and local_state.has_key('saved_config'):
+    if rc == 0 and 'saved_config' in local_state:
         local_state['live_config'] = local_state['saved_config']
         local_state.save()
 
@@ -508,7 +507,7 @@ def relation_get_all(*args, **kwargs):
             for unit in json.loads(json_units):
                 unit_data = \
                     json.loads(relation_json(relation_id=relid,
-                        unit_name=unit))
+                                             unit_name=unit))
                 for key in unit_data:
                     if key.endswith('-list'):
                         unit_data[key] = unit_data[key].split()
@@ -553,9 +552,9 @@ def create_postgresql_config(postgresql_config):
         conf_file = open("/etc/sysctl.d/50-postgresql.conf", "w")
         conf_file.write("kernel.sem = 250 32000 100 1024\n")
         conf_file.write("kernel.shmall = %s\n" %
-            ((int(total_ram) * 1024 * 1024) + 1024),)
+                        ((int(total_ram) * 1024 * 1024) + 1024),)
         conf_file.write("kernel.shmmax = %s\n" %
-            ((int(total_ram) * 1024 * 1024) + 1024),)
+                        ((int(total_ram) * 1024 * 1024) + 1024),)
         conf_file.close()
         run("sysctl -p /etc/sysctl.d/50-postgresql.conf")
 
@@ -578,7 +577,7 @@ def create_postgresql_config(postgresql_config):
     # Send config data to the template
     # Return it as pg_config
     pg_config = Template(
-            open("templates/postgresql.conf.tmpl").read()).render(config_data)
+        open("templates/postgresql.conf.tmpl").read()).render(config_data)
     install_file(pg_config, postgresql_config)
 
     local_state['saved_config'] = config_data
@@ -600,7 +599,8 @@ def create_postgresql_ident(postgresql_ident):
 #------------------------------------------------------------------------------
 # generate_postgresql_hba:  Creates the pg_hba.conf file
 #------------------------------------------------------------------------------
-def generate_postgresql_hba(postgresql_hba):
+def generate_postgresql_hba(postgresql_hba, user=None,
+                            schema_user=None, database=None):
 
     # Per Bug #1117542, when generating the postgresql_hba file we
     # need to cope with private-address being either an IP address
@@ -620,19 +620,26 @@ def generate_postgresql_hba(postgresql_hba):
             unit_name=os.environ['JUJU_UNIT_NAME'], relation_id=relid)
         for unit in relation_list(relid):
             relation = relation_get(unit_name=unit, relation_id=relid)
-            relation['relation-id']  = relid
+            relation['relation-id'] = relid
             relation['unit'] = unit
 
             if relid.startswith('db-admin:'):
                 relation['user'] = 'all'
                 relation['database'] = 'all'
             elif relid.startswith('db:'):
-                relation['user'] = local_relation['user']
-                relation['schema_user'] = local_relation['schema_user']
-                relation['database'] = local_relation['database']
+                relation['user'] = local_relation.get('user', user)
+                relation['schema_user'] = local_relation.get('schema_user',
+                                                             schema_user)
+                relation['database'] = local_relation.get('database', database)
+
+                if ((relation['user'] is None
+                     or relation['schema_user'] is None
+                     or relation['database'] is None)):
+                    # Missing info in relation for this unit, so skip it.
+                    continue
             else:
                 raise RuntimeError(
-                    'Unknown relation type {}'.format(repr(relation_id)))
+                    'Unknown relation type {}'.format(repr(relid)))
 
             relation['private-address'] = munge_address(
                 relation['private-address'])
@@ -646,32 +653,31 @@ def generate_postgresql_hba(postgresql_hba):
     # database.
     for relid in relation_ids(relation_types=replication_relation_types):
         for unit in relation_list(relid):
-            replicated = True
             relation = relation_get(unit_name=unit, relation_id=relid)
             remote_addr = munge_address(relation['private-address'])
-            remote_replication = {
-                'database': 'replication', 'user': 'juju_replication',
-                'private-address': remote_addr,
-                'relation-id': relid,
-                'unit': unit,
-                }
+            remote_replication = {'database': 'replication',
+                                  'user': 'juju_replication',
+                                  'private-address': remote_addr,
+                                  'relation-id': relid,
+                                  'unit': unit,
+                                  }
             relation_data.append(remote_replication)
-            remote_pgdb = {
-                'database': 'postgres', 'user': 'juju_replication',
-                'private-address': remote_addr,
-                'relation-id': relid,
-                'unit': unit,
-                }
+            remote_pgdb = {'database': 'postgres',
+                           'user': 'juju_replication',
+                           'private-address': remote_addr,
+                           'relation-id': relid,
+                           'unit': unit,
+                           }
             relation_data.append(remote_pgdb)
 
     # Hooks need permissions too to setup replication.
     for relid in relation_ids(relation_types=['replication']):
-        local_replication = {
-            'database': 'postgres', 'user': 'juju_replication',
-            'private-address': munge_address(get_unit_host()),
-            'relation-id': relid,
-            'unit': os.environ['JUJU_UNIT_NAME'],
-            }
+        local_replication = {'database': 'postgres',
+                             'user': 'juju_replication',
+                             'private-address': munge_address(get_unit_host()),
+                             'relation-id': relid,
+                             'unit': os.environ['JUJU_UNIT_NAME'],
+                             }
         relation_data.append(local_replication)
 
     pg_hba_template = Template(
@@ -680,7 +686,6 @@ def generate_postgresql_hba(postgresql_hba):
     with open(postgresql_hba, 'w') as hba_file:
         hba_file.write(str(pg_hba_template))
     postgresql_reload()
-
 
 
 #------------------------------------------------------------------------------
@@ -718,7 +723,7 @@ def open_port(port=None, protocol="TCP"):
     if port is None:
         return(None)
     return(subprocess.call(['open-port', "%d/%s" %
-        (int(port), protocol)]))
+                            (int(port), protocol)]))
 
 
 #------------------------------------------------------------------------------
@@ -729,7 +734,7 @@ def close_port(port=None, protocol="TCP"):
     if port is None:
         return(None)
     return(subprocess.call(['close-port', "%d/%s" %
-        (int(port), protocol)]))
+                            (int(port), protocol)]))
 
 
 #------------------------------------------------------------------------------
@@ -754,9 +759,9 @@ def pwgen(pwd_length=None):
     if pwd_length is None:
         pwd_length = random.choice(range(20, 30))
     alphanumeric_chars = [l for l in (string.letters + string.digits)
-        if l not in 'Iil0oO1']
+                          if l not in 'Iil0oO1']
     random_chars = [random.choice(alphanumeric_chars)
-        for i in range(pwd_length)]
+                    for i in range(pwd_length)]
     return(''.join(random_chars))
 
 
@@ -779,8 +784,8 @@ def get_password(user):
         return None
 
 
-def db_cursor(
-    autocommit=False, db='template1', user='postgres', host=None, timeout=120):
+def db_cursor(autocommit=False, db='template1', user='postgres',
+              host=None, timeout=120):
     import psycopg2
     if host:
         conn_str = "dbname={} host={} user={}".format(db, host, user)
@@ -844,34 +849,38 @@ def config_changed_volume_apply():
     if volid:
         if volume_is_permanent(volid):
             if not volume_init_and_mount(volid):
-                juju_log(MSG_ERROR, "volume_init_and_mount failed, " +
-                     "not applying changes")
+                juju_log(MSG_ERROR,
+                         "volume_init_and_mount failed, "
+                         "not applying changes")
                 return False
 
         if not os.path.exists(data_directory_path):
-            juju_log(MSG_CRITICAL, ("postgresql data dir = %s not found, " +
-                     "not applying changes.") % data_directory_path)
+            juju_log(MSG_CRITICAL,
+                     "postgresql data dir = %s not found, "
+                     "not applying changes." % data_directory_path)
             return False
 
         mount_point = volume_mount_point_from_volid(volid)
         new_pg_dir = os.path.join(mount_point, "postgresql")
-        new_pg_version_cluster_dir = os.path.join(new_pg_dir,
-            config_data["version"], config_data["cluster_name"])
+        new_pg_version_cluster_dir = os.path.join(
+            new_pg_dir, config_data["version"], config_data["cluster_name"])
         if not mount_point:
-            juju_log(MSG_ERROR, "invalid mount point from volid = \"%s\", " +
+            juju_log(MSG_ERROR,
+                     "invalid mount point from volid = \"%s\", "
                      "not applying changes." % mount_point)
             return False
 
-        if (os.path.islink(data_directory_path) and
-            os.readlink(data_directory_path) == new_pg_version_cluster_dir and
-            os.path.isdir(new_pg_version_cluster_dir)):
+        if ((os.path.islink(data_directory_path) and
+             os.readlink(data_directory_path) == new_pg_version_cluster_dir and
+             os.path.isdir(new_pg_version_cluster_dir))):
             juju_log(MSG_INFO,
-                "NOTICE: postgresql data dir '%s' already points to '%s', \
-                skipping storage changes." %
-                (data_directory_path, new_pg_version_cluster_dir))
+                     "NOTICE: postgresql data dir '%s' already points "
+                     "to '%s', skipping storage changes." %
+                     (data_directory_path, new_pg_version_cluster_dir))
             juju_log(MSG_INFO,
-                "existing-symlink: to fix/avoid UID changes from previous "
-                "units, doing: chown -R postgres:postgres %s" % new_pg_dir)
+                     "existing-symlink: to fix/avoid UID changes from "
+                     "previous units, doing: "
+                     "chown -R postgres:postgres %s" % new_pg_dir)
             run("chown -R postgres:postgres %s" % new_pg_dir)
             return True
 
@@ -880,8 +889,8 @@ def config_changed_volume_apply():
         #   /var/lib/postgresql/9.1/main
         curr_dir_stat = os.stat(data_directory_path)
         for new_dir in [new_pg_dir,
-                    os.path.join(new_pg_dir, config_data["version"]),
-                    new_pg_version_cluster_dir]:
+                        os.path.join(new_pg_dir, config_data["version"]),
+                        new_pg_version_cluster_dir]:
             if not os.path.isdir(new_dir):
                 juju_log(MSG_INFO, "mkdir %s" % new_dir)
                 os.mkdir(new_dir)
@@ -895,10 +904,10 @@ def config_changed_volume_apply():
         # main-$TIMESTAMP
         if not postgresql_stop():
             juju_log(MSG_ERROR,
-                "postgresql_stop() returned False - can't migrate data.")
+                     "postgresql_stop() returned False - can't migrate data.")
             return False
         if not os.path.exists(os.path.join(new_pg_version_cluster_dir,
-            "PG_VERSION")):
+                                           "PG_VERSION")):
             juju_log(MSG_WARNING, "migrating PG data %s/ -> %s/" % (
                      data_directory_path, new_pg_version_cluster_dir))
             # void copying PID file to perm storage (shouldn't be any...)
@@ -909,18 +918,19 @@ def config_changed_volume_apply():
             run(command)
         try:
             os.rename(data_directory_path, "%s-%d" % (
-                          data_directory_path, int(time.time())))
+                data_directory_path, int(time.time())))
             juju_log(MSG_INFO, "NOTICE: symlinking %s -> %s" %
-                (new_pg_version_cluster_dir, data_directory_path))
+                     (new_pg_version_cluster_dir, data_directory_path))
             os.symlink(new_pg_version_cluster_dir, data_directory_path)
             juju_log(MSG_INFO,
-                "after-symlink: to fix/avoid UID changes from previous "
-                "units, doing: chown -R postgres:postgres %s" % new_pg_dir)
+                     "after-symlink: to fix/avoid UID changes from "
+                     "previous units, doing: "
+                     "chown -R postgres:postgres %s" % new_pg_dir)
             run("chown -R postgres:postgres %s" % new_pg_dir)
             return True
         except OSError:
             juju_log(MSG_CRITICAL, "failed to symlink \"%s\" -> \"%s\"" % (
-                          data_directory_path, mount_point))
+                data_directory_path, mount_point))
             return False
     else:
         juju_log(MSG_ERROR, "ERROR: Invalid volume storage configuration, " +
@@ -945,9 +955,9 @@ def config_changed(postgresql_config, force_restart=False):
         if mounts:
             juju_log(MSG_INFO, "FYI current mounted volumes: %s" % mounts)
         juju_log(MSG_ERROR,
-            "Disabled and stopped postgresql service, \
-            because of broken volume configuration - check \
-            'volume-ephermeral-storage' and 'volume-map'")
+                 "Disabled and stopped postgresql service, "
+                 "because of broken volume configuration - check "
+                 "'volume-ephemeral-storage' and 'volume-map'")
         sys.exit(1)
 
     if volume_is_permanent(volid):
@@ -963,8 +973,8 @@ def config_changed(postgresql_config, force_restart=False):
             if mounts:
                 juju_log(MSG_INFO, "FYI current mounted volumes: %s" % mounts)
             juju_log(MSG_ERROR,
-                "Disabled and stopped postgresql service \
-                (config_changed_volume_apply failure)")
+                     "Disabled and stopped postgresql service "
+                     "(config_changed_volume_apply failure)")
             sys.exit(1)
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
@@ -1000,7 +1010,7 @@ def install(run_pre=True):
     packages.extend(config_data["extra-packages"].split())
     apt_get_install(packages)
 
-    if not local_state.has_key('state'):
+    if not 'state' in local_state:
         # Fresh installation. Because this function is invoked by both
         # the install hook and the upgrade-charm hook, we need to guard
         # any non-idempotent setup. We should probably fix this; it
@@ -1028,9 +1038,9 @@ def install(run_pre=True):
     backup_job = Template(
         open("templates/pg_backup_job.tmpl").read()).render(paths)
     install_file(dump_script, '{}/dump-pg-db'.format(postgresql_scripts_dir),
-        mode=0755)
+                 mode=0755)
     install_file(backup_job, '{}/pg_backup_job'.format(postgresql_scripts_dir),
-        mode=0755)
+                 mode=0755)
     install_postgresql_crontab(postgresql_crontab)
     open_port(5432)
 
@@ -1043,7 +1053,7 @@ def install(run_pre=True):
 def upgrade_charm():
     # Detect if we are upgrading from the old charm that used repmgr for
     # replication.
-    from_repmgr = not local_state.has_key('juju_replication')
+    from_repmgr = not 'juju_replication' in local_state
 
     # Handle renaming of the repmgr user to juju_replication.
     if from_repmgr and local_state['state'] == 'master':
@@ -1073,16 +1083,61 @@ def upgrade_charm():
                     break
 
 
+def quote_identifier(identifier):
+    r'''Quote an identifier, such as a table or role name.
+
+    In SQL, identifiers are quoted using " rather than ' (which is reserved
+    for strings).
+
+    >>> print(quote_identifier('hello'))
+    "hello"
+
+    Quotes and Unicode are handled if you make use of them in your
+    identifiers.
+
+    >>> print(quote_identifier("'"))
+    "'"
+    >>> print(quote_identifier('"'))
+    """"
+    >>> print(quote_identifier("\\"))
+    "\"
+    >>> print(quote_identifier('\\"'))
+    "\"""
+    >>> print(quote_identifier('\\ aargh \u0441\u043b\u043e\u043d'))
+    U&"\\ aargh \0441\043b\043e\043d"
+    '''
+    try:
+        return '"%s"' % identifier.encode('US-ASCII').replace('"', '""')
+    except UnicodeEncodeError:
+        escaped = []
+        for c in identifier:
+            if c == '\\':
+                escaped.append('\\\\')
+            elif c == '"':
+                escaped.append('""')
+            else:
+                c = c.encode('US-ASCII', 'backslashreplace')
+                # Note Python only supports 32 bit unicode, so we use
+                # the 4 hexdigit PostgreSQL syntax (\1234) rather than
+                # the 6 hexdigit format (\+123456).
+                if c.startswith('\\u'):
+                    c = '\\' + c[2:]
+                escaped.append(c)
+        return 'U&"%s"' % ''.join(escaped)
+
+
+def sanitize(s):
+    s = s.replace(':', '_')
+    s = s.replace('-', '_')
+    s = s.replace('/', '_')
+    s = s.replace('"', '_')
+    s = s.replace("'", '_')
+    return s
+
+
 def user_name(relid, remote_unit, admin=False, schema=False):
-    def sanitize(s):
-        s = s.replace(':', '_')
-        s = s.replace('-', '_')
-        s = s.replace('/', '_')
-        s = s.replace('"', '_')
-        s = s.replace("'", '_')
-        return s
     # Per Bug #1160530, don't append the remote unit number to the user name.
-    components = [sanitize(relid), sanitize(re.split("/",remote_unit)[0])]
+    components = [sanitize(relid), sanitize(re.split("/", remote_unit)[0])]
     if admin:
         components.append("admin")
     elif schema:
@@ -1099,6 +1154,8 @@ def user_exists(user):
 
 
 def create_user(user, admin=False, replication=False):
+    from psycopg2.extensions import AsIs
+
     password = get_password(user)
     if password is None:
         password = pwgen()
@@ -1107,8 +1164,7 @@ def create_user(user, admin=False, replication=False):
         action = ["ALTER ROLE"]
     else:
         action = ["CREATE ROLE"]
-    action.append('"{}"'.format(user))
-    action.append('WITH LOGIN')
+    action.append('%s WITH LOGIN')
     if admin:
         action.append('SUPERUSER')
     else:
@@ -1119,11 +1175,13 @@ def create_user(user, admin=False, replication=False):
         action.append('NOREPLICATION')
     action.append('PASSWORD %s')
     sql = ' '.join(action)
-    run_sql_as_postgres(sql, password)
+    run_sql_as_postgres(sql, AsIs(quote_identifier(user)), password)
     return password
 
 
 def grant_roles(user, roles):
+    from psycopg2.extensions import AsIs
+
     # Delete previous roles
     sql = ("DELETE FROM pg_auth_members WHERE member IN ("
            "SELECT oid FROM pg_roles WHERE rolname = %s)")
@@ -1131,33 +1189,39 @@ def grant_roles(user, roles):
 
     for role in roles:
         ensure_role(role)
-        sql = "GRANT {} to {}".format(role, user)
-        run_sql_as_postgres(sql)
+        sql = "GRANT %s to %s"
+        run_sql_as_postgres(sql, AsIs(quote_identifier(role)),
+                            AsIs(quote_identifier(user)))
 
 
 def ensure_role(role):
+    from psycopg2.extensions import AsIs
+
     sql = "SELECT oid FROM pg_roles WHERE rolname = %s"
     if run_select_as_postgres(sql, role)[0] != 0:
         # role already exists
         pass
     else:
-        sql = "CREATE ROLE {} INHERIT NOLOGIN".format(role)
-        run_sql_as_postgres(sql)
+        sql = "CREATE ROLE %s INHERIT NOLOGIN"
+        run_sql_as_postgres(sql, AsIs(quote_identifier(role)))
 
 
 def ensure_database(user, schema_user, database):
+    from psycopg2.extensions import AsIs
+
     sql = "SELECT datname FROM pg_database WHERE datname = %s"
     if run_select_as_postgres(sql, database)[0] != 0:
         # DB already exists
         pass
     else:
-        sql = "CREATE DATABASE {}".format(database)
-        run_sql_as_postgres(sql)
-    sql = "GRANT ALL PRIVILEGES ON DATABASE {} TO {}".format(database,
-        schema_user)
-    run_sql_as_postgres(sql)
-    sql = "GRANT CONNECT ON DATABASE {} TO {}".format(database, user)
-    run_sql_as_postgres(sql)
+        sql = "CREATE DATABASE %s"
+        run_sql_as_postgres(sql, AsIs(quote_identifier(database)))
+    sql = "GRANT ALL PRIVILEGES ON DATABASE %s TO %s"
+    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                        AsIs(quote_identifier(schema_user)))
+    sql = "GRANT CONNECT ON DATABASE %s TO %s"
+    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                        AsIs(quote_identifier(user)))
 
 
 def get_relation_host():
@@ -1189,7 +1253,9 @@ def db_relation_joined_changed(user, database, roles):
     host = get_unit_host()
     run("relation-set host='%s' database='%s' port='%s'" % (
         host, database, config_data["listen_port"]))
-    generate_postgresql_hba(postgresql_hba)
+    generate_postgresql_hba(postgresql_hba, user=user,
+                            schema_user=schema_user,
+                            database=database)
 
 
 def db_admin_relation_joined_changed(user, database='all'):
@@ -1204,15 +1270,20 @@ def db_admin_relation_joined_changed(user, database='all'):
 
 
 def db_relation_broken(user, database):
-    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}".format(database, user)
-    run_sql_as_postgres(sql)
-    sql = "REVOKE ALL PRIVILEGES ON {} FROM {}_schema".format(database, user)
-    run_sql_as_postgres(sql)
+    from psycopg2.extensions import AsIs
+
+    sql = "REVOKE ALL PRIVILEGES ON %s FROM %s"
+    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                        AsIs(quote_identifier(user)))
+    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                        AsIs(quote_identifier(user + "_schema")))
 
 
 def db_admin_relation_broken(user):
-    sql = "ALTER USER {} NOSUPERUSER".format(user)
-    run_sql_as_postgres(sql)
+    from psycopg2.extensions import AsIs
+
+    sql = "ALTER USER %s NOSUPERUSER"
+    run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
     generate_postgresql_hba(postgresql_hba)
 
 
@@ -1301,7 +1372,7 @@ def generate_pgpass():
     if passwords:
         pgpass = '\n'.join(
             "*:*:*:{}:{}".format(username, password)
-                for username, password in passwords.items())
+            for username, password in passwords.items())
         install_file(
             pgpass, charm_pgpass,
             owner="postgres", group="postgres", mode=0o400)
@@ -1528,8 +1599,8 @@ def replication_relation_changed():
 
         if remote_is_master and remote_has_authorized:
             replication_password = relation['replication_password']
-            if local_state.get(
-                'replication_password', None) != replication_password:
+            if ((local_state.get('replication_password', None) !=
+                 replication_password)):
                 local_state['replication_password'] = replication_password
                 generate_pgpass()
 
@@ -1601,12 +1672,10 @@ def clone(master_unit, master_host):
     postgresql_stop()
     juju_log(MSG_INFO, "Cloning master {}".format(master_unit))
 
-    cmd = [
-        'sudo', '-E', '-u', 'postgres',  # -E needed to locate pgpass file.
-        'pg_basebackup', '-D', postgresql_cluster_dir,
-        '--xlog', '--checkpoint=fast', '--no-password',
-        '-h', master_host, '-p', '5432', '--username=juju_replication',
-        ]
+    cmd = ['sudo', '-E', '-u', 'postgres',  # -E needed to locate pgpass file.
+           'pg_basebackup', '-D', postgresql_cluster_dir,
+           '--xlog', '--checkpoint=fast', '--no-password',
+           '-h', master_host, '-p', '5432', '--username=juju_replication']
     juju_log(MSG_DEBUG, ' '.join(cmd))
     if os.path.isdir(postgresql_cluster_dir):
         shutil.rmtree(postgresql_cluster_dir)
@@ -1667,8 +1736,8 @@ def postgresql_is_in_backup_mode():
         os.path.join(postgresql_cluster_dir, 'backup_label'))
 
 
-def postgresql_wal_received_offset(
-    host, db='postgres', user='juju_replication'):
+def postgresql_wal_received_offset(host, db='postgres',
+                                   user='juju_replication'):
     cur = db_cursor(autocommit=True, db=db, user=user, host=host)
     cur.execute('SELECT pg_is_in_recovery(), pg_last_xlog_receive_location()')
     is_in_recovery, xlog_received = cur.fetchone()
@@ -1713,8 +1782,8 @@ def update_nrpe_checks():
     # --- exported service configuration file
     from jinja2 import Environment, FileSystemLoader
     template_env = Environment(
-        loader=FileSystemLoader(os.path.join(os.environ['CHARM_DIR'],
-        'templates')))
+        loader=FileSystemLoader(
+            os.path.join(os.environ['CHARM_DIR'], 'templates')))
     templ_vars = {
         'nagios_hostname': nagios_hostname,
         'nagios_servicegroup': config_data['nagios_context'],
@@ -1730,11 +1799,11 @@ def update_nrpe_checks():
     with open(nrpe_check_file, 'w') as nrpe_check_config:
         nrpe_check_config.write("# check pgsql\n")
         nrpe_check_config.write(
-            "command[check_pgsql]=/usr/lib/nagios/plugins/check_pgsql -p {}"
+            "command[check_pgsql]=/usr/lib/nagios/plugins/check_pgsql -P {}"
             .format(config_data['listen_port']))
     # pgsql backups
     nrpe_check_file = '/etc/nagios/nrpe.d/check_pgsql_backups.cfg'
-    backup_log = "%s/backups.log".format(postgresql_logs_dir)
+    backup_log = "{}/backups.log".format(postgresql_logs_dir)
     # XXX: these values _should_ be calculated from the backup schedule
     #      perhaps warn = backup_frequency * 1.5, crit = backup_frequency * 2
     warn_age = 172800
@@ -1765,12 +1834,15 @@ postgresql_hba = os.path.join(postgresql_config_dir, "pg_hba.conf")
 postgresql_crontab = "/etc/cron.d/postgresql"
 postgresql_service_config_dir = "/var/run/postgresql"
 postgresql_scripts_dir = os.path.join(postgresql_data_dir, 'scripts')
-postgresql_backups_dir = os.path.join(postgresql_data_dir, 'backups')
+postgresql_backups_dir = (
+    config_data['backup_dir'].strip() or
+    os.path.join(postgresql_data_dir, 'backups'))
 postgresql_logs_dir = os.path.join(postgresql_data_dir, 'logs')
 postgres_ssh_dir = os.path.expanduser('~postgres/.ssh')
 postgres_ssh_public_key = os.path.join(postgres_ssh_dir, 'id_rsa.pub')
 postgres_ssh_private_key = os.path.join(postgres_ssh_dir, 'id_rsa')
-postgres_ssh_authorized_keys = os.path.join(postgres_ssh_dir, 'authorized_keys')
+postgres_ssh_authorized_keys = os.path.join(postgres_ssh_dir,
+                                            'authorized_keys')
 postgres_ssh_known_hosts = os.path.join(postgres_ssh_dir, 'known_hosts')
 hook_name = os.path.basename(sys.argv[0])
 replication_relation_types = ['master', 'slave', 'replication']
@@ -1829,7 +1901,9 @@ def main():
             database = relation_get('database', os.environ['JUJU_UNIT_NAME'])
 
         user = relation_get('user', os.environ['JUJU_UNIT_NAME'])
-        assert user, 'user not set'
+        if not user:
+            user = user_name(
+                os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
         db_relation_joined_changed(user, database, roles)
 
     elif hook_name == "db-relation-broken":
@@ -1838,31 +1912,31 @@ def main():
             os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
         db_relation_broken(user, database)
 
-    elif hook_name in [
-        "db-admin-relation-joined", "db-admin-relation-changed"]:
+    elif hook_name in ("db-admin-relation-joined",
+                       "db-admin-relation-changed"):
         user = user_name(os.environ['JUJU_RELATION_ID'],
-            os.environ['JUJU_REMOTE_UNIT'], admin=True)
+                         os.environ['JUJU_REMOTE_UNIT'], admin=True)
         db_admin_relation_joined_changed(user, 'all')
 
     elif hook_name == "db-admin-relation-broken":
         # XXX: Fix: relation is not set when it is already broken
         # cannot determine the user name
         user = user_name(os.environ['JUJU_RELATION_ID'],
-            os.environ['JUJU_REMOTE_UNIT'], admin=True)
+                         os.environ['JUJU_REMOTE_UNIT'], admin=True)
         db_admin_relation_broken(user)
 
     elif hook_name == "nrpe-external-master-relation-changed":
         update_nrpe_checks()
 
-    elif hook_name in (
-        'master-relation-joined', 'master-relation-changed',
-        'slave-relation-joined', 'slave-relation-changed',
-        'replication-relation-joined', 'replication-relation-changed'):
+    elif hook_name in ('master-relation-joined', 'master-relation-changed',
+                       'slave-relation-joined', 'slave-relation-changed',
+                       'replication-relation-joined',
+                       'replication-relation-changed'):
         replication_relation_changed()
 
-    elif hook_name in (
-        'master-relation-broken', 'slave-relation-broken',
-        'replication-relation-broken', 'replication-relation-departed'):
+    elif hook_name in ('master-relation-broken', 'slave-relation-broken',
+                       'replication-relation-broken',
+                       'replication-relation-departed'):
         replication_relation_broken()
 
     #-------- persistent-storage-relation-joined,
