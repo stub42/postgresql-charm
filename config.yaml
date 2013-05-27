@@ -286,6 +286,10 @@ options:
     description: >
       Block device for attached volumes as seen by the VM, will be "scanned"
       for an unused device when "volume-map" is valid for the unit.
+  backup_dir:
+    default: "/var/lib/postgresql/backups"
+    type: string
+    description: Directory to place backups in
   backup_schedule:
     default: "13 4 * * *"
     type: string
