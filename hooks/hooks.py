@@ -620,6 +620,11 @@ def generate_postgresql_hba(postgresql_hba):
             unit_name=os.environ['JUJU_UNIT_NAME'], relation_id=relid)
         for unit in relation_list(relid):
             relation = relation_get(unit_name=unit, relation_id=relid)
+
+            # If a relation is not yet completely setup, skip it.
+            if 'user' not in relation:
+                continue
+
             relation['relation-id']  = relid
             relation['unit'] = unit
 
