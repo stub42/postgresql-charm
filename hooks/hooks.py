@@ -972,7 +972,6 @@ def config_changed(postgresql_config, force_restart=False):
         ## it necessary, ie: new volume setup
         if config_changed_volume_apply():
             enable_service_start("postgresql")
-            force_restart = True
         else:
             disable_service_start("postgresql")
             postgresql_stop()
