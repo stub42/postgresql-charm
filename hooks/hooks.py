@@ -1559,6 +1559,10 @@ def replication_relation_changed():
     juju_log(MSG_INFO, "Current state is {}".format(local_state['state']))
 
     if is_master():
+        if 'following' in local_state:
+            del local_state['following']
+            local_state.publish()
+
         if local_state['state'] == 'standalone':  # Initial setup of a master.
             juju_log(MSG_INFO, "I am standalone and becoming the master")
             # The juju_replication user connects as both a streaming
