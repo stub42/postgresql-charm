@@ -9,19 +9,21 @@ description: |
   concurrency control.  Graphical user interfaces and bindings for many
   programming languages are available as well.
 maintainer: Tom Haddon <tom.haddon@canonical.com>
+categories:
+    - databases
 provides:
   db:
     interface: pgsql
   db-admin:
     interface: pgsql
   master:
-    interface: repmgr
+    interface: pgreplication
 requires:
   persistent-storage:
     interface: directory-path
   slave:
-    interface: repmgr
+    interface: pgreplication
     limit: 1
 peers:
   replication:
-    interface: repmgr-peer
+    interface: pgreplication
