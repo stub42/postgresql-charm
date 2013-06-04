@@ -701,7 +701,7 @@ def generate_postgresql_hba(postgresql_hba, user=None,
     # Loop through all db relations, making sure each knows what are the list
     # of allowed hosts that were just added. lp:#1187508
     for relid in relation_ids(relation_types=['db', 'db-admin']):
-        relation_set({"allowed-hosts", " ".join(allowed_hosts)}, relid)
+        relation_set({"allowed-hosts": " ".join(allowed_hosts)}, relid)
 
 
 #------------------------------------------------------------------------------
