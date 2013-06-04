@@ -19,6 +19,7 @@ from yaml.constructor import ConstructorError
 import commands
 from pwd import getpwnam
 from grp import getgrnam
+from sets import Set
 
 
 # jinja2 may not be importable until the install hook has installed the
@@ -438,6 +439,12 @@ def relation_get(scope=None, unit_name=None, relation_id=None):
 
 
 def relation_set(keyvalues, relation_id=None):
+    """
+    Set key/values in the implied relation, or the specified relation
+
+    @param keyvalues Dict containing key/values to set
+    @param relation_id Optional relation id to use when setting the key/value
+    """
     args = []
     if relation_id:
         args.extend(['-r', relation_id])
@@ -616,7 +623,7 @@ def generate_postgresql_hba(postgresql_hba, user=None,
             # It's not an IP address.
             return addr
 
-    allowed_hosts = []
+    allowed_hosts = Set([])
     relation_data = []
     for relid in relation_ids(relation_types=['db', 'db-admin']):
         local_relation = relation_get(
@@ -644,7 +651,7 @@ def generate_postgresql_hba(postgresql_hba, user=None,
                 raise RuntimeError(
                     'Unknown relation type {}'.format(repr(relid)))
 
-            allowed_hosts.append(relation['private-address'])
+            allowed_hosts.add(relation['private-address'])
             relation['private-address'] = munge_address(
                 relation['private-address'])
             relation_data.append(relation)
@@ -694,7 +701,7 @@ def generate_postgresql_hba(postgresql_hba, user=None,
     # Loop through all db relations, making sure each knows what are the list
     # of allowed hosts that were just added. lp:#1187508
     for relid in relation_ids(relation_types=['db', 'db-admin']):
-        relation_set("allowed-hosts", " ".join(allowed_hosts), relid)
+        relation_set({"allowed-hosts", " ".join(allowed_hosts)}, relid)
 
 
 #------------------------------------------------------------------------------
