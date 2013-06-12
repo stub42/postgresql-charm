@@ -16,7 +16,7 @@ import unittest
 
 SERIES = 'precise'
 TEST_CHARM = 'local:postgresql'
-PSQL_CHARM = 'local:postgresql-psql'
+PSQL_CHARM = 'cs:postgresql-psql'
 
 
 def DEBUG(msg):
@@ -79,10 +79,11 @@ class JujuFixture(fixtures.Fixture):
             self.refresh_status()
             ready = True
             for service in self.status['services']:
-                for unit in self.status['services'][service]['units']:
-                    agent_state = (
-                        self.status['services'][service][
-                            'units'][unit]['agent-state'])
+                if self.status['services'][service].get('life', '') == 'dying':
+                    ready = False
+                units = self.status['services'][service].get('units', {})
+                for unit in units.keys():
+                    agent_state = units[unit].get('agent-state', '')
                     if agent_state != 'started':
                         ready = False
 
@@ -97,15 +98,19 @@ class JujuFixture(fixtures.Fixture):
         # Tear down any services left running.
         self.refresh_status()
         for service in self.status['services']:
-            self.do(['destroy-service', service])
+            # It is an error to destroy a dying service.
+            if self.status['services'][service].get('life', '') != 'dying':
+                self.do(['destroy-service', service])
+
+        self.wait_until_ready()  # Required due to Bug #1190250
+
         # We unfortunately cannot reuse machines, as we have no
         # guarantee they are still in a usable state. Tear them down
         # too.
-        ## But it is sloooow... so lets see what happens for now.
-        ## dirty_machines = [
-        ##     m for m in self.status['machines'].keys() if m != '0']
-        ## if dirty_machines:
-        ##     self.do(['terminate-machine'] + dirty_machines)
+        dirty_machines = [
+            m for m in self.status['machines'].keys() if m != '0']
+        if dirty_machines:
+            self.do(['destroy-machine'] + dirty_machines)
 
 
 class LocalCharmRepositoryFixture(fixtures.Fixture):
@@ -147,6 +152,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # trying to test.
         cls.juju.do(['deploy', '--upgrade', TEST_CHARM, 'postgresql'])
         cls.juju.do(['destroy-service', 'postgresql'])
+
+        cls.juju.wait_until_ready()  # Required due to Bug #1190250
 
     @classmethod
     def tearDownClass(cls):
