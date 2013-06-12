@@ -622,7 +622,12 @@ def generate_postgresql_hba(postgresql_hba, user=None,
             unit_name=os.environ['JUJU_UNIT_NAME'], relation_id=relid)
         for unit in relation_list(relid):
             relation = relation_get(unit_name=unit, relation_id=relid)
-            relation['relation-id'] = relid
+
+            # If a relation is not yet completely setup, skip it.
+            if 'user' not in relation:
+                continue
+
+            relation['relation-id']  = relid
             relation['unit'] = unit
 
             if relid.startswith('db-admin:'):
@@ -967,7 +972,6 @@ def config_changed(postgresql_config, force_restart=False):
         ## it necessary, ie: new volume setup
         if config_changed_volume_apply():
             enable_service_start("postgresql")
-            force_restart = True
         else:
             disable_service_start("postgresql")
             postgresql_stop()
