@@ -1671,7 +1671,6 @@ def replication_relation_changed():
 
 def replication_relation_broken():
     config_changed(postgresql_config)
-    authorize_remote_ssh()
 
 
 def clone(master_unit, master_host):
@@ -1898,7 +1897,7 @@ def main():
         db_relation_joined_changed(user, database, [])  # No roles yet.
 
     elif hook_name == "db-relation-changed":
-        roles = filter(None, relation_get('roles').split(","))
+        roles = filter(None, (relation_get('roles') or '').split(","))
 
         # If the remote service has requested we use a particular database
         # name, honour that request.
