@@ -104,9 +104,10 @@ class JujuFixture(fixtures.Fixture):
 
         self.wait_until_ready()  # Required due to Bug #1190250
 
-        # We unfortunately cannot reuse machines, as we have no
-        # guarantee they are still in a usable state. Tear them down
-        # too.
+        # We shouldn't reuse machines, as we have no guarantee they are
+        # still in a usable state, so tear them down too. It would be a
+        # nice to make this optional, but Bug #1190492 prevents this
+        # optimization.
         dirty_machines = [
             m for m in self.status['machines'].keys() if m != '0']
         if dirty_machines:
