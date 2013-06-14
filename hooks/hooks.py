@@ -4,7 +4,6 @@
 import cPickle as pickle
 import json
 import yaml
-import os
 import glob
 import random
 import re
@@ -12,13 +11,17 @@ import shutil
 import string
 import socket
 import subprocess
-import sys
 from textwrap import dedent
 import time
 from yaml.constructor import ConstructorError
 import commands
 from pwd import getpwnam
 from grp import getgrnam
+
+import os.path
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'charm-helpers'))
+from charmhelpers.core import hookenv
 
 
 # jinja2 may not be importable until the install hook has installed the
@@ -1088,6 +1091,8 @@ def upgrade_charm():
                     postgresql_restart()
                     break
 
+    snapshot_relations()
+
 
 def quote_identifier(identifier):
     r'''Quote an identifier, such as a table or role name.
@@ -1244,6 +1249,16 @@ def get_unit_host():
     return this_host.strip()
 
 
+def snapshot_relations():
+    '''Snapshot our relation information into local state.
+
+    We need this information to be available in -broken
+    hooks letting us actually clean up properly. Bug #1190996.
+    '''
+    local_state['relations'] = hookenv.relations()
+    local_state.save()
+
+
 def db_relation_joined_changed(user, database, roles):
     if not user_exists(user):
         password = create_user(user)
@@ -1263,6 +1278,8 @@ def db_relation_joined_changed(user, database, roles):
                             schema_user=schema_user,
                             database=database)
 
+    snapshot_relations()
+
 
 def db_admin_relation_joined_changed(user, database='all'):
     if not user_exists(user):
@@ -1274,22 +1291,37 @@ def db_admin_relation_joined_changed(user, database='all'):
         host, config_data["listen_port"]))
     generate_postgresql_hba(postgresql_hba)
 
+    snapshot_relations()
 
-def db_relation_broken(user, database):
+
+def db_relation_broken():
     from psycopg2.extensions import AsIs
 
-    sql = "REVOKE ALL PRIVILEGES ON %s FROM %s"
+    # The relation no longer exists, so we can't pull the database name
+    # we used from there. Instead, we have to persist this information
+    # ourselves.
+    relation = local_state['relations']['db'][os.environ['JUJU_RELATION_ID']]
+    unit_relation_data = relation[os.environ['JUJU_UNIT_NAME']]
+
+    user = unit_relation_data['user']
+    database = unit_relation_data['database']
+
+    sql = "REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s"
     run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
                         AsIs(quote_identifier(user)))
     run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
                         AsIs(quote_identifier(user + "_schema")))
 
+    # Cleanup our local state.
+    snapshot_relations()
+
 
 def db_admin_relation_broken(user):
     from psycopg2.extensions import AsIs
 
-    sql = "ALTER USER %s NOSUPERUSER"
-    run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
+    if user_exists(user):
+        sql = "ALTER USER %s NOSUPERUSER"
+        run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
     generate_postgresql_hba(postgresql_hba)
 
 
@@ -1916,10 +1948,7 @@ def main():
         db_relation_joined_changed(user, database, roles)
 
     elif hook_name == "db-relation-broken":
-        database = relation_get('database')
-        user = user_name(
-            os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
-        db_relation_broken(user, database)
+        db_relation_broken()
 
     elif hook_name in ("db-admin-relation-joined",
                        "db-admin-relation-changed"):
