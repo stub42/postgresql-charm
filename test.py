@@ -74,7 +74,7 @@ class JujuFixture(fixtures.Fixture):
         # revision of the charm. Subsequent deploys we do not use
         # --update to avoid overhead and needless incrementing of the
         # revision number.
-        if charm in self._deployed_charms:
+        if charm not in self._deployed_charms:
             cmd = ['deploy', '-u']
             self._deployed_charms.add(charm)
         else:
@@ -82,6 +82,8 @@ class JujuFixture(fixtures.Fixture):
 
         if num_units > 1:
             cmd.extend(['-n', str(num_units)])
+
+        cmd.append(charm)
 
         if name:
             cmd.append(name)
