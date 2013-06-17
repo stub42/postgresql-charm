@@ -55,6 +55,8 @@ def _run(detail_collector, cmd, input=''):
 
 class JujuFixture(fixtures.Fixture):
     """Interact with juju. Assumes juju environment is bootstrapped."""
+    _deployed_charms = set()
+
     def do(self, cmd):
         cmd = ['juju'] + cmd
         _run(self, cmd)
@@ -65,6 +67,26 @@ class JujuFixture(fixtures.Fixture):
         if out:
             return json.loads(out)
         return None
+
+    def deploy(self, charm, name=None, num_units=1):
+        # The first time we deploy a charm in the test run, it needs to
+        # deploy with --update to ensure we are testing the desired
+        # revision of the charm. Subsequent deploys we do not use
+        # --update to avoid overhead and needless incrementing of the
+        # revision number.
+        if charm in self._deployed_charms:
+            cmd = ['deploy', '-u']
+            self._deployed_charms.add(charm)
+        else:
+            cmd = ['deploy']
+
+        if num_units > 1:
+            cmd.extend(['-n', str(num_units)])
+
+        if name:
+            cmd.append(name)
+
+        self.do(cmd)
 
     # The most recent environment status, updated by refresh_status()
     status = None
@@ -96,15 +118,18 @@ class JujuFixture(fixtures.Fixture):
     def reset(self):
         DEBUG("JujuFixture.reset()")
         # Tear down any services left running.
+        found_services = False
         self.refresh_status()
         for service in self.status['services']:
+            found_services = True
             # It is an error to destroy a dying service.
             if self.status['services'][service].get('life', '') != 'dying':
                 self.do(['destroy-service', service])
 
         # Per Bug #1190250 (WONTFIX), we need to wait for dying services
         # to die before we can continue.
-        self.wait_until_ready()
+        if found_services:
+            self.wait_until_ready()
 
         # We shouldn't reuse machines, as we have no guarantee they are
         # still in a usable state, so tear them down too. Per
@@ -144,30 +169,10 @@ class LocalCharmRepositoryFixture(fixtures.Fixture):
 
 class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
-    @classmethod
-    def setUpClass(cls):
-        # Should we bootstrap an environment here if it isn't already
-        # setup? How do we do this? We would also need to tear it down
-        # if we bootstrapped it.
-        cls.juju = JujuFixture()
-        cls.juju.setUp()
-
-        # Ensure the charm cached in the environment is the charm we are
-        # trying to test.
-        cls.juju.do(['deploy', '--upgrade', TEST_CHARM, 'postgresql'])
-        cls.juju.do(['destroy-service', 'postgresql'])
-
-        cls.juju.reset()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.juju.cleanUp()
-
     def setUp(self):
         super(PostgreSQLCharmTestCase, self).setUp()
 
-        # Reset juju environment between tests.
-        self.addCleanup(self.juju.reset)
+        self.juju = self.useFixture(JujuFixture())
 
         ## Disabled until postgresql-psql is in the charm store.
         ## Otherwise, we need to make the local:postgresql-psql charm
@@ -224,8 +229,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
     def test_basic(self):
         '''Set up a single unit service'''
-        self.juju.do(['deploy', TEST_CHARM, 'postgresql'])
-        self.juju.do(['deploy', PSQL_CHARM, 'psql'])
+        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
 
