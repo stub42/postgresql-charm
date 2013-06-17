@@ -16,7 +16,7 @@ import unittest
 
 SERIES = 'precise'
 TEST_CHARM = 'local:postgresql'
-PSQL_CHARM = 'cs:postgresql-psql'
+PSQL_CHARM = 'local:postgresql-psql'
 
 
 def DEBUG(msg):
@@ -185,12 +185,9 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         A db-admin relation is used if dbname is specified. Otherwise,
         a standard db relation is used.
         '''
-        # Machine we are going to run the SQL from.
         if psql_unit is None:
             psql_unit = (
                 self.juju.status['services']['psql']['units'].keys()[0])
-        machine = self.juju.status[
-            'services']['psql']['units'][psql_unit]['machine']
 
         # The psql statements we are going to execute.
         sql = sql.strip()
@@ -204,15 +201,19 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
                 self.juju.status['services']['postgresql']['units'].keys()[0])
         if dbname is None:
             psql_cmd = [
-                'bin/psql-db-{}'.format(postgres_unit.replace('/', '-'))]
+                'psql-db-{}'.format(postgres_unit.replace('/', '-'))]
         else:
             psql_cmd = [
-                'bin/psql-db-admin-{}'.format(
+                'psql-db-admin-{}'.format(
                     postgres_unit.replace('/', '-')), '-d', dbname]
         psql_args = [
             '--quiet', '--tuples-only', '--no-align', '--no-password',
             '--field-separator=,', '--file=-']
-        cmd = ['juju', 'ssh', str(machine)] + psql_cmd + psql_args
+        cmd = [
+            'juju', 'ssh', psql_unit,
+            # Due to Bug #1191079, we need to send the whole remote command
+            # as a single argument.
+            ' '.join(psql_cmd + psql_args)]
         out = _run(self, cmd, input=sql)
         result = [line.split(',') for line in out.splitlines()]
         self.addDetail('sql', text_content(repr((sql, result))))
