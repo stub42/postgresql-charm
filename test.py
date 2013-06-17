@@ -16,7 +16,7 @@ import unittest
 
 SERIES = 'precise'
 TEST_CHARM = 'local:postgresql'
-PSQL_CHARM = 'cs:postgresql-psql'
+PSQL_CHARM = 'local:postgresql-psql'
 
 
 def DEBUG(msg):
@@ -55,6 +55,8 @@ def _run(detail_collector, cmd, input=''):
 
 class JujuFixture(fixtures.Fixture):
     """Interact with juju. Assumes juju environment is bootstrapped."""
+    _deployed_charms = set()
+
     def do(self, cmd):
         cmd = ['juju'] + cmd
         _run(self, cmd)
@@ -65,6 +67,28 @@ class JujuFixture(fixtures.Fixture):
         if out:
             return json.loads(out)
         return None
+
+    def deploy(self, charm, name=None, num_units=1):
+        # The first time we deploy a charm in the test run, it needs to
+        # deploy with --update to ensure we are testing the desired
+        # revision of the charm. Subsequent deploys we do not use
+        # --update to avoid overhead and needless incrementing of the
+        # revision number.
+        if charm not in self._deployed_charms:
+            cmd = ['deploy', '-u']
+            self._deployed_charms.add(charm)
+        else:
+            cmd = ['deploy']
+
+        if num_units > 1:
+            cmd.extend(['-n', str(num_units)])
+
+        cmd.append(charm)
+
+        if name:
+            cmd.append(name)
+
+        self.do(cmd)
 
     # The most recent environment status, updated by refresh_status()
     status = None
@@ -96,18 +120,24 @@ class JujuFixture(fixtures.Fixture):
     def reset(self):
         DEBUG("JujuFixture.reset()")
         # Tear down any services left running.
+        found_services = False
         self.refresh_status()
         for service in self.status['services']:
+            found_services = True
             # It is an error to destroy a dying service.
             if self.status['services'][service].get('life', '') != 'dying':
                 self.do(['destroy-service', service])
 
-        self.wait_until_ready()  # Required due to Bug #1190250
+        # Per Bug #1190250 (WONTFIX), we need to wait for dying services
+        # to die before we can continue.
+        if found_services:
+            self.wait_until_ready()
 
         # We shouldn't reuse machines, as we have no guarantee they are
-        # still in a usable state, so tear them down too. It would be a
-        # nice to make this optional, but Bug #1190492 prevents this
-        # optimization.
+        # still in a usable state, so tear them down too. Per
+        # Bug #1190492 (INVALID), in the future this will be much nicer
+        # when we can use containers for isolation and can happily reuse
+        # machines.
         dirty_machines = [
             m for m in self.status['machines'].keys() if m != '0']
         if dirty_machines:
@@ -141,30 +171,10 @@ class LocalCharmRepositoryFixture(fixtures.Fixture):
 
 class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
-    @classmethod
-    def setUpClass(cls):
-        # Should we bootstrap an environment here if it isn't already
-        # setup? How do we do this? We would also need to tear it down
-        # if we bootstrapped it.
-        cls.juju = JujuFixture()
-        cls.juju.setUp()
-
-        # Ensure the charm cached in the environment is the charm we are
-        # trying to test.
-        cls.juju.do(['deploy', '--upgrade', TEST_CHARM, 'postgresql'])
-        cls.juju.do(['destroy-service', 'postgresql'])
-
-        cls.juju.wait_until_ready()  # Required due to Bug #1190250
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.juju.cleanUp()
-
     def setUp(self):
         super(PostgreSQLCharmTestCase, self).setUp()
 
-        # Reset juju environment between tests.
-        self.addCleanup(self.juju.reset)
+        self.juju = self.useFixture(JujuFixture())
 
         ## Disabled until postgresql-psql is in the charm store.
         ## Otherwise, we need to make the local:postgresql-psql charm
@@ -185,12 +195,9 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         A db-admin relation is used if dbname is specified. Otherwise,
         a standard db relation is used.
         '''
-        # Machine we are going to run the SQL from.
         if psql_unit is None:
             psql_unit = (
                 self.juju.status['services']['psql']['units'].keys()[0])
-        machine = self.juju.status[
-            'services']['psql']['units'][psql_unit]['machine']
 
         # The psql statements we are going to execute.
         sql = sql.strip()
@@ -204,15 +211,19 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
                 self.juju.status['services']['postgresql']['units'].keys()[0])
         if dbname is None:
             psql_cmd = [
-                'bin/psql-db-{}'.format(postgres_unit.replace('/', '-'))]
+                'psql-db-{}'.format(postgres_unit.replace('/', '-'))]
         else:
             psql_cmd = [
-                'bin/psql-db-admin-{}'.format(
+                'psql-db-admin-{}'.format(
                     postgres_unit.replace('/', '-')), '-d', dbname]
         psql_args = [
             '--quiet', '--tuples-only', '--no-align', '--no-password',
             '--field-separator=,', '--file=-']
-        cmd = ['juju', 'ssh', str(machine)] + psql_cmd + psql_args
+        cmd = [
+            'juju', 'ssh', psql_unit,
+            # Due to Bug #1191079, we need to send the whole remote command
+            # as a single argument.
+            ' '.join(psql_cmd + psql_args)]
         out = _run(self, cmd, input=sql)
         result = [line.split(',') for line in out.splitlines()]
         self.addDetail('sql', text_content(repr((sql, result))))
@@ -220,8 +231,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
     def test_basic(self):
         '''Set up a single unit service'''
-        self.juju.do(['deploy', TEST_CHARM, 'postgresql'])
-        self.juju.do(['deploy', PSQL_CHARM, 'psql'])
+        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
 
