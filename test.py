@@ -102,12 +102,15 @@ class JujuFixture(fixtures.Fixture):
             if self.status['services'][service].get('life', '') != 'dying':
                 self.do(['destroy-service', service])
 
-        self.wait_until_ready()  # Required due to Bug #1190250
+        # Per Bug #1190250 (WONTFIX), we need to wait for dying services
+        # to die before we can continue.
+        self.wait_until_ready()
 
         # We shouldn't reuse machines, as we have no guarantee they are
-        # still in a usable state, so tear them down too. It would be a
-        # nice to make this optional, but Bug #1190492 prevents this
-        # optimization.
+        # still in a usable state, so tear them down too. Per
+        # Bug #1190492 (INVALID), in the future this will be much nicer
+        # when we can use containers for isolation and can happily reuse
+        # machines.
         dirty_machines = [
             m for m in self.status['machines'].keys() if m != '0']
         if dirty_machines:
@@ -154,7 +157,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         cls.juju.do(['deploy', '--upgrade', TEST_CHARM, 'postgresql'])
         cls.juju.do(['destroy-service', 'postgresql'])
 
-        cls.juju.wait_until_ready()  # Required due to Bug #1190250
+        cls.juju.reset()
 
     @classmethod
     def tearDownClass(cls):
