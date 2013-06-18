@@ -816,13 +816,14 @@ def db_cursor(autocommit=False, db='template1', user='postgres',
         try:
             conn = psycopg2.connect(conn_str)
             break
-        except psycopg2.Error:
+        except psycopg2.Error, x:
             if time.time() > start + timeout:
                 juju_log(
                     MSG_CRITICAL, "Database connection {!r} failed".format(
                         conn_str))
                 raise
-        time.sleep(0.3)
+            hookenv.log("Unable to open connection ({}), retrying.".format(x))
+            time.sleep(1)
     conn.autocommit = autocommit
     return conn.cursor()
 
@@ -1259,25 +1260,55 @@ def snapshot_relations():
     We need this information to be available in -broken
     hooks letting us actually clean up properly. Bug #1190996.
     '''
+    hookenv.log("Snapshotting relations", hookenv.DEBUG)
     local_state['relations'] = hookenv.relations()
     local_state.save()
 
 
 def db_relation_joined_changed(user, database, roles):
-    if not user_exists(user):
+    if local_state['state'] in ('master', 'standalone'):
+        hookenv.log('Master unit publishing credentials')
+        # We are the master, so need to create users and databases and
+        # grant relevant database permissions.
         password = create_user(user)
-        run("relation-set user='%s' password='%s'" % (user, password))
-    grant_roles(user, roles)
-    schema_user = "{}_schema".format(user)
-    if not user_exists(schema_user):
+
+        grant_roles(user, roles)
+
+        schema_user = "{}_schema".format(user)
         schema_password = create_user(schema_user)
-        run("relation-set schema_user='%s' schema_password='%s'" % (
-            schema_user, schema_password))
-    ensure_database(user, schema_user, database)
-    config_data = config_get()
+
+        ensure_database(user, schema_user, database)
+
+    else:
+        # We are a hot standby, so need to pull credentials from the
+        # master. We republish them for convenience of clients and
+        # because one day we might failover to being the master.
+        master = local_state['following']
+        master_relation = hookenv.relation_get(unit=master)
+
+        if 'user' not in master_relation:
+            hookenv.log('Hot standby waiting for credentials from {}'.format(
+                master))
+            return
+
+        hookenv.log('Hot standby republishing credentials from {}'.format(
+            master))
+
+        user = master_relation['user']
+        password = master_relation['password']
+        schema_user = master_relation['schema_user']
+        schema_password = master_relation['schema_password']
+
     host = get_unit_host()
-    run("relation-set host='%s' database='%s' port='%s'" % (
-        host, database, config_data["listen_port"]))
+    port = config_get()["listen_port"]
+    state = local_state['state']  # master, hot standby, standalone
+
+    # Publish connection details.
+    hookenv.relation_set(
+        user=user, password=password,
+        schema_user=schema_user, schema_password=schema_password,
+        host=host, database=database, port=port, state=state)
+
     generate_postgresql_hba(postgresql_hba, user=user,
                             schema_user=schema_user,
                             database=database)
@@ -1285,14 +1316,40 @@ def db_relation_joined_changed(user, database, roles):
     snapshot_relations()
 
 
-def db_admin_relation_joined_changed(user, database='all'):
-    if not user_exists(user):
+def db_admin_relation_joined_changed(user):
+    if local_state['state'] in ('master', 'standalone'):
+        hookenv.log('Master or standalone unit publishing credentials')
+        # We are the master, so need to create users and databases and
+        # grant relevant database permissions.
         password = create_user(user, admin=True)
-        run("relation-set user='%s' password='%s'" % (user, password))
+
+    else:
+        # We are a hot standby, so need to pull credentials from the
+        # master. We republish them for convenience of clients and
+        # because one day we might failover to being the master.
+        master = local_state['following']
+        master_relation = hookenv.relation_get(unit=master)
+
+        if 'user' not in master_relation:
+            hookenv.log('Hot standby waiting for credentials from {}'.format(
+                master))
+            return
+
+        hookenv.log('Hot standby republishing credentials from {}'.format(
+            master))
+
+        user = master_relation['user']
+        password = master_relation['password']
+
     host = get_unit_host()
-    config_data = config_get()
-    run("relation-set host='%s' port='%s'" % (
-        host, config_data["listen_port"]))
+    port = config_get()["listen_port"]
+    state = local_state['state']  # master, hot standby, standalone
+
+    # Publish connection details.
+    hookenv.relation_set(
+        user=user, password=password,
+        host=host, database='all', port=port, state=state)
+
     generate_postgresql_hba(postgresql_hba)
 
     snapshot_relations()
@@ -1307,14 +1364,17 @@ def db_relation_broken():
     relation = local_state['relations']['db'][os.environ['JUJU_RELATION_ID']]
     unit_relation_data = relation[os.environ['JUJU_UNIT_NAME']]
 
-    user = unit_relation_data['user']
-    database = unit_relation_data['database']
+    if local_state['state'] in ('master', 'standalone'):
+        user = unit_relation_data.get('user', None)
+        database = unit_relation_data['database']
 
-    sql = "REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s"
-    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
-                        AsIs(quote_identifier(user)))
-    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
-                        AsIs(quote_identifier(user + "_schema")))
+        sql = "REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s"
+        run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                            AsIs(quote_identifier(user)))
+        run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                            AsIs(quote_identifier(user + "_schema")))
+
+    generate_postgresql_hba(postgresql_hba)
 
     # Cleanup our local state.
     snapshot_relations()
@@ -1323,10 +1383,14 @@ def db_relation_broken():
 def db_admin_relation_broken(user):
     from psycopg2.extensions import AsIs
 
-    if user_exists(user):
+    if local_state['state'] in ('master', 'standalone'):
         sql = "ALTER USER %s NOSUPERUSER"
         run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
+
     generate_postgresql_hba(postgresql_hba)
+
+    # Cleanup our local state.
+    snapshot_relations()
 
 
 def TODO(msg):
@@ -1441,23 +1505,26 @@ def drop_database(dbname, warn=True):
 
 
 def replication_gc():
-    """Remove old nodes from the repmgr database, tear down if no slaves"""
-    wanted_units = []
-    for relid in relation_ids(replication_relation_types):
-        wanted_units.extend(relation_list(relid))
+    """Cleanup replication.
 
-    # If there are replication relationships, trash the local repmgr setup.
-    if not wanted_units:
-        # Restore a hot standby to a standalone configuration.
-        if postgresql_is_in_recovery():
-            pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
-            run("sudo -u postgres {} promote -D '{}'".format(
-                pg_ctl, postgresql_cluster_dir))
+    Revert to standalone mode if there are no other units in replication
+    relationships. Cleanup charm state.
+    """
+    if not relation_ids(replication_relation_types):
+        promote_to_standalone()
 
-        if os.path.exists(charm_pgpass):
-            os.unlink(charm_pgpass)
 
-        local_state['state'] = 'standalone'
+def promote_to_standalone():
+    if postgresql_is_in_recovery():
+        hookenv.log('Promoting to standalone')
+        pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
+        run("sudo -u postgres {} promote -D '{}'".format(
+            pg_ctl, postgresql_cluster_dir))
+
+    if os.path.exists(charm_pgpass):
+        os.unlink(charm_pgpass)
+
+    local_state['state'] = 'standalone'
 
 
 def is_master():
@@ -1465,6 +1532,8 @@ def is_master():
 
     Return True if I am the active master, or if neither myself nor
     the remote unit is and I win an election.
+
+    Return False otherwise, including when this is a standalone unit.
     '''
     master_relation_ids = relation_ids(relation_types=['master'])
     slave_relation_ids = relation_ids(relation_types=['slave'])
@@ -1710,6 +1779,7 @@ def replication_relation_changed():
 
 
 def replication_relation_broken():
+    promote_to_standalone()
     config_changed(postgresql_config)
 
 
@@ -1808,7 +1878,7 @@ def update_nrpe_checks():
         nagios_uid = getpwnam('nagios').pw_uid
         nagios_gid = getgrnam('nagios').gr_gid
     except:
-        juju_log(MSG_DEBUG, "Nagios user not set up. Exiting.")
+        hookenv.log("Nagios user not set up.", hookenv.DEBUG)
         return
 
     unit_name = os.environ['JUJU_UNIT_NAME'].replace('/', '-')
@@ -1958,7 +2028,7 @@ def main():
                        "db-admin-relation-changed"):
         user = user_name(os.environ['JUJU_RELATION_ID'],
                          os.environ['JUJU_REMOTE_UNIT'], admin=True)
-        db_admin_relation_joined_changed(user, 'all')
+        db_admin_relation_joined_changed(user)
 
     elif hook_name == "db-admin-relation-broken":
         # XXX: Fix: relation is not set when it is already broken

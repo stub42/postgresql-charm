@@ -213,7 +213,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
             postgres_unit = (
                 self.juju.status['services']['postgresql']['units'].keys()[0])
         elif postgres_unit == 'hot standby':
-            postgres_unit = 'hot-standby'
+            postgres_unit = 'hot-standby'  # Munge for generating script name.
         if dbname is None:
             psql_cmd = [
                 'psql-db-{}'.format(postgres_unit.replace('/', '-'))]
@@ -256,9 +256,9 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
          return (is_master == 't')
 
     def test_failover(self):
-        """Set up a three unit service and perform a failover."""
-        self.juju.do(['deploy', '--num-units', '4', TEST_CHARM, 'postgresql'])
-        self.juju.do(['deploy', PSQL_CHARM, 'psql'])
+        """Set up a multi-unit service and perform failovers."""
+        self.juju.deploy(TEST_CHARM, 'postgresql', num_units=4)
+        self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
 
@@ -316,6 +316,7 @@ def unit_sorted(units):
     return sorted(
         units, lambda a,b:
             cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
+
 
 if __name__ == '__main__':
     raise SystemExit(unittest.main())
