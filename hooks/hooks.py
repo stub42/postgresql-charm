@@ -623,12 +623,16 @@ def generate_postgresql_hba(postgresql_hba, user=None,
     for relid in relation_ids(relation_types=['db', 'db-admin']):
         local_relation = relation_get(
             unit_name=os.environ['JUJU_UNIT_NAME'], relation_id=relid)
+
+        # We might see relations that have not yet been setup enough.
+        # At a minimum, the relation-joined hook needs to have been run
+        # on the server so we have information about the usernames and
+        # databases to allow in.
+        if 'user' not in local_relation:
+            continue
+
         for unit in relation_list(relid):
             relation = relation_get(unit_name=unit, relation_id=relid)
-
-            # If a relation is not yet completely setup, skip it.
-            if 'user' not in relation:
-                continue
 
             relation['relation-id']  = relid
             relation['unit'] = unit
