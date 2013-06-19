@@ -141,7 +141,7 @@ class JujuFixture(fixtures.Fixture):
         dirty_machines = [
             m for m in self.status['machines'].keys() if m != '0']
         if dirty_machines:
-            self.do(['destroy-machine'] + dirty_machines)
+            self.do(['terminate-machine'] + dirty_machines)
 
 
 class LocalCharmRepositoryFixture(fixtures.Fixture):
