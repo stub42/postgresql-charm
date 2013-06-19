@@ -1,26 +1,25 @@
 #!/usr/bin/env python
 # vim: et ai ts=4 sw=4:
 
+import commands
 import cPickle as pickle
-import json
-import yaml
 import glob
+from grp import getgrnam
+import json
+import os.path
+from pwd import getpwnam
 import random
 import re
 import shutil
-import string
 import socket
+import string
 import subprocess
+import sys
 from textwrap import dedent
 import time
+import yaml
 from yaml.constructor import ConstructorError
-import commands
-from pwd import getpwnam
-from grp import getgrnam
 
-import os.path
-import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'charm-helpers'))
 from charmhelpers.core import hookenv
 
 from charmhelpers.core.hookenv import (
