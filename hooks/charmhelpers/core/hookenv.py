@@ -206,7 +206,7 @@ def relations():
     for reltype in relation_types():
         relids = {}
         for relid in relation_ids(reltype):
-            units = {local_unit(): relation_get(unit=local_unit(), rid=relid)}
+            units = {}
             for unit in related_units(relid):
                 reldata = relation_get(unit=unit, rid=relid)
                 units[unit] = reldata
