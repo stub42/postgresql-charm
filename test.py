@@ -108,6 +108,9 @@ class JujuFixture(fixtures.Fixture):
                 units = self.status['services'][service].get('units', {})
                 for unit in units.keys():
                     agent_state = units[unit].get('agent-state', '')
+                    if agent_state == 'error':
+                        raise RuntimeError('{} error: {}'.format(
+                            unit, units[unit].get('agent-state-info','')))
                     if agent_state != 'started':
                         ready = False
 
@@ -309,6 +312,17 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.sql('SELECT pg_xlog_replay_resume()', standby_unit_2)
         result_2 = self.sql('SELECT COUNT(*) FROM Foo', standby_unit_2)
         self.assertEqual(result_2, [['1']])
+
+        # Remove the master (standby_unit_3). The last remaining standby
+        # will endup standalone.
+        self.juju.do(['remove-unit', standby_unit_3])
+        self.juju.wait_until_ready()
+
+        self.assertIs(True, self.is_master(standby_unit_2))
+
+        # TODO: We need to extend the postgresql-psql charm to allow us
+        # to inspect the status attribute on the relation. It should no
+        # longer be 'master', but instead 'standalone'.
 
 
 def unit_sorted(units):

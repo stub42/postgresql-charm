@@ -23,6 +23,9 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'charm-helpers'))
 from charmhelpers.core import hookenv
 
+from charmhelpers.core.hookenv import (
+    log, CRITICAL, ERROR, WARNING, INFO, DEBUG)
+
 
 # jinja2 may not be importable until the install hook has installed the
 # required packages.
@@ -822,7 +825,7 @@ def db_cursor(autocommit=False, db='template1', user='postgres',
                     MSG_CRITICAL, "Database connection {!r} failed".format(
                         conn_str))
                 raise
-            hookenv.log("Unable to open connection ({}), retrying.".format(x))
+            log("Unable to open connection ({}), retrying.".format(x))
             time.sleep(1)
     conn.autocommit = autocommit
     return conn.cursor()
@@ -1063,6 +1066,8 @@ def install(run_pre=True):
     # when we installed the PostgreSQL packages.
     config_changed(postgresql_config, force_restart=True)
 
+    snapshot_relations()
+
 
 def upgrade_charm():
     # Detect if we are upgrading from the old charm that used repmgr for
@@ -1260,14 +1265,14 @@ def snapshot_relations():
     We need this information to be available in -broken
     hooks letting us actually clean up properly. Bug #1190996.
     '''
-    hookenv.log("Snapshotting relations", hookenv.DEBUG)
+    log("Snapshotting relations", DEBUG)
     local_state['relations'] = hookenv.relations()
     local_state.save()
 
 
 def db_relation_joined_changed(user, database, roles):
     if local_state['state'] in ('master', 'standalone'):
-        hookenv.log('Master unit publishing credentials')
+        log('Master unit publishing credentials')
         # We are the master, so need to create users and databases and
         # grant relevant database permissions.
         password = create_user(user)
@@ -1287,11 +1292,11 @@ def db_relation_joined_changed(user, database, roles):
         master_relation = hookenv.relation_get(unit=master)
 
         if 'user' not in master_relation:
-            hookenv.log('Hot standby waiting for credentials from {}'.format(
+            log('Hot standby waiting for credentials from {}'.format(
                 master))
             return
 
-        hookenv.log('Hot standby republishing credentials from {}'.format(
+        log('Hot standby republishing credentials from {}'.format(
             master))
 
         user = master_relation['user']
@@ -1304,6 +1309,7 @@ def db_relation_joined_changed(user, database, roles):
     state = local_state['state']  # master, hot standby, standalone
 
     # Publish connection details.
+    assert database is not None
     hookenv.relation_set(
         user=user, password=password,
         schema_user=schema_user, schema_password=schema_password,
@@ -1318,7 +1324,7 @@ def db_relation_joined_changed(user, database, roles):
 
 def db_admin_relation_joined_changed(user):
     if local_state['state'] in ('master', 'standalone'):
-        hookenv.log('Master or standalone unit publishing credentials')
+        log('Master or standalone unit publishing credentials')
         # We are the master, so need to create users and databases and
         # grant relevant database permissions.
         password = create_user(user, admin=True)
@@ -1331,11 +1337,11 @@ def db_admin_relation_joined_changed(user):
         master_relation = hookenv.relation_get(unit=master)
 
         if 'user' not in master_relation:
-            hookenv.log('Hot standby waiting for credentials from {}'.format(
+            log('Hot standby waiting for credentials from {}'.format(
                 master))
             return
 
-        hookenv.log('Hot standby republishing credentials from {}'.format(
+        log('Hot standby republishing credentials from {}'.format(
             master))
 
         user = master_relation['user']
@@ -1358,10 +1364,17 @@ def db_admin_relation_joined_changed(user):
 def db_relation_broken():
     from psycopg2.extensions import AsIs
 
+    relid = os.environ['JUJU_RELATION_ID']
+    if relid not in local_state['relations']['db']:
+        # This was to be a hot standby, but it had not yet got as far as
+        # receiving and handling credentials from the master.
+        log("db-relation-broken called before relation finished setup", DEBUG)
+        return
+
     # The relation no longer exists, so we can't pull the database name
     # we used from there. Instead, we have to persist this information
     # ourselves.
-    relation = local_state['relations']['db'][os.environ['JUJU_RELATION_ID']]
+    relation = local_state['relations']['db'][relid]
     unit_relation_data = relation[os.environ['JUJU_UNIT_NAME']]
 
     if local_state['state'] in ('master', 'standalone'):
@@ -1516,7 +1529,7 @@ def replication_gc():
 
 def promote_to_standalone():
     if postgresql_is_in_recovery():
-        hookenv.log('Promoting to standalone')
+        log('Promoting to standalone')
         pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
         run("sudo -u postgres {} promote -D '{}'".format(
             pg_ctl, postgresql_cluster_dir))
@@ -1543,21 +1556,20 @@ def is_master():
         # PostgreSQL, so we cannot support it either. Unfortunately,
         # there is no way yet to inform juju about this so we just have
         # to leave the impossible relation in a broken state.
-        juju_log(
-            MSG_CRITICAL,
+        log(
             "Unable to create relationship. "
-            "Cascading replication not supported.")
+            "Cascading replication not supported.", CRITICAL)
         raise SystemExit(1)
 
     if slave_relation_ids:
         # I'm explicitly the slave in a master/slave relationship.
         # No units in my service can be a master.
-        juju_log(MSG_DEBUG, "In a slave relation, so I'm a slave")
+        log("In a slave relation, so I'm a slave", DEBUG)
         return False
 
     # Do I think I'm the master?
     if local_state['state'] == 'master':
-        juju_log(MSG_DEBUG, "I already believe I am the master")
+        log("I already believe I am the master", DEBUG)
         return True
 
     # Lets see what out peer group thinks.
@@ -1577,7 +1589,9 @@ def is_master():
                     peer_authorized[unit] = True
                     break
             if relation.get('state', None) == 'master':
-                juju_log(MSG_DEBUG, "Found a master in peers, so I'm a slave")
+                log(
+                    "Found {} is master in peers, so I'm a slave".format(unit),
+                    DEBUG)
                 return False
 
     # Are there other units? Maybe we are the only one left in the
@@ -1588,11 +1602,13 @@ def is_master():
             alone = False
             break
     if alone:
-        juju_log(MSG_DEBUG, "I am alone, no point being a master")
+        log("I am alone, no point being a master", DEBUG)
         return False
 
     # If the peer group has lost a master, the hot standby with the
     # least lag should be the new master. Perhaps that is me?
+    log("Electing master from peers ({})".format(
+        ' '.join(sorted(peer_units))), DEBUG)
     my_offset = postgresql_wal_received_offset(
         host=None, db='postgres', user='postgres')
     if my_offset is not None:
@@ -1609,22 +1625,21 @@ def is_master():
                 offset = postgresql_wal_received_offset(host)
                 if offset is not None:
                     if offset < my_offset:
-                        juju_log(
-                            MSG_DEBUG,
-                            "A peer is less lagged than me, so I'm a slave")
+                        log(
+                            "A peer is less lagged than me, so I'm a slave",
+                            DEBUG)
                         return False  # Short circuit.
                     offsets.add((offset, int(unit.split('/')[1]), unit))
             else:
-                juju_log(
-                    MSG_DEBUG,
+                log(
                     "Unable to check {} wal offset - unauthorized".format(
-                        unit))
+                        unit), DEBUG)
         best_unit = sorted(offsets)[0][2]  # Lowest number wins a tie.
         if best_unit == my_unit:
-            juju_log(MSG_DEBUG, "I won the lag tie breaker and am the master")
+            log("I won the lag tie breaker and am the master", DEBUG)
             return True
         else:
-            juju_log(MSG_DEBUG, "I lost the lag tie breaker and am a slave")
+            log("I lost the lag tie breaker and am a slave", DEBUG)
             return False
 
     # There are no masters, so we need an election within this peer
@@ -1634,10 +1649,10 @@ def is_master():
         return True  # Only unit in a service in a master relationship.
     my_num = int(os.environ['JUJU_UNIT_NAME'].split('/')[1])
     if my_num < remote_nums[0]:
-        juju_log(MSG_DEBUG, "Lowest unit so I'm the master")
+        log("Lowest numbered unit so I'm the master", DEBUG)
         return True
     else:
-        juju_log(MSG_DEBUG, "Not the lowest unit so I'm a slave")
+        log("Not the lowest numbered unit so I'm a slave", DEBUG)
         return False
 
 
@@ -1795,7 +1810,7 @@ def clone(master_unit, master_host):
     if os.path.isdir(postgresql_cluster_dir):
         shutil.rmtree(postgresql_cluster_dir)
     try:
-        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        output = subprocess.check_output(cmd)
         juju_log(MSG_DEBUG, output)
         # Debian by default expects SSL certificates in the datadir.
         os.symlink(
@@ -1973,7 +1988,20 @@ os.environ['PGPASSFILE'] = charm_pgpass
 # Main section
 ###############################################################################
 def main():
-    juju_log(MSG_INFO, "Running {} hook".format(hook_name))
+    # Hook and context overview. The various replication and client
+    # hooks interact in complex ways.
+    log("Running {} hook".format(hook_name), INFO)
+    if 'JUJU_RELATION_NAME' in os.environ:
+        log("Relation {} with {}".format(
+            os.environ['JUJU_RELATION_NAME'],
+            ' '.join(hookenv.related_units)), INFO)
+        if os.environ.get('JUJU_REMOTE_UNIT', None):
+            log(
+                "Remote unit is {}".format(os.environ['JUJU_REMOTE_UNIT']),
+                INFO)
+        else:
+            log("There is no remote unit")
+
     if hook_name == "install":
         install()
 
@@ -1998,9 +2026,7 @@ def main():
         # the database property on the relation.
         database = os.environ['JUJU_REMOTE_UNIT'].split('/')[0]
 
-        # Generate a unique username for this relation to use. We should
-        # probably change this to share the username between all units
-        # in the remote service, as it makes connection pooling better.
+        # Generate a unique username for this relation to use.
         user = user_name(
             os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
 
@@ -2047,9 +2073,13 @@ def main():
         replication_relation_changed()
 
     elif hook_name in ('master-relation-broken', 'slave-relation-broken',
-                       'replication-relation-broken',
-                       'replication-relation-departed'):
+        'replication-relation-broken'):
         replication_relation_broken()
+
+    elif hook_name == 'replication-relation-departed':
+        # Handling this in broken. I am leaving the noop hook in place
+        # because the logging above lets me trace the hook call sequence.
+        pass
 
     #-------- persistent-storage-relation-joined,
     #         persistent-storage-relation-changed
