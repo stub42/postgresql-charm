@@ -1,4 +1,4 @@
 destination: hooks/charmhelpers
-branch: lp:charm-helpers
+branch: lp:~stub/charm-helpers/bug-1191002-local-unit-relation-data
 include:
     - core
