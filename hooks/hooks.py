@@ -44,7 +44,7 @@ MSG_WARNING = "WARNING"
 
 
 def juju_log(level, msg):
-    subprocess.call(['juju-log', '-l', level, msg])
+    log(msg, level)
 
 
 class State(dict):
@@ -85,6 +85,8 @@ class State(dict):
         add(replication_state, 'public_ssh_key')
         add(replication_state, 'ssh_host_key')
         add(replication_state, 'replication_password')
+        add(replication_state, 'wal_received_offset')
+        add(replication_state, 'following')
 
         authorized = self.get('authorized', None)
         if authorized:
@@ -1077,8 +1079,8 @@ def upgrade_charm():
     if from_repmgr and local_state['state'] == 'master':
         replication_password = create_user(
             'juju_replication', admin=True, replication=True)
-        generate_pgpass()
         local_state['replication_password'] = replication_password
+        generate_pgpass()
         juju_log(MSG_INFO, "Updating replication connection details")
         local_state.publish()
         drop_database('repmgr')
@@ -1285,34 +1287,31 @@ def db_relation_joined_changed(user, database, roles):
 
     else:
         # We are a hot standby, so need to pull credentials from the
-        # master. We republish them for convenience of clients and
-        # because one day we might failover to being the master.
+        # master and republish them.
         master = local_state['following']
-        master_relation = hookenv.relation_get(unit=master)
 
-        if 'user' not in master_relation:
-            log('Hot standby waiting for credentials from {}'.format(
-                master))
-            return
+        master_relation = hookenv.relation_get(
+            unit=master, rid=hookenv.relation_id())
 
         log('Hot standby republishing credentials from {}'.format(
             master))
 
-        user = master_relation['user']
-        password = master_relation['password']
-        schema_user = master_relation['schema_user']
-        schema_password = master_relation['schema_password']
+        user = master_relation.get('user', None)
+        password = master_relation.get('password', None)
+        schema_user = master_relation.get('schema_user', None)
+        schema_password = master_relation.get('schema_password', None)
 
     host = get_unit_host()
     port = config_get()["listen_port"]
     state = local_state['state']  # master, hot standby, standalone
 
     # Publish connection details.
-    assert database is not None
-    hookenv.relation_set(
+    connection_settings = dict(
         user=user, password=password,
         schema_user=schema_user, schema_password=schema_password,
         host=host, database=database, port=port, state=state)
+    log("Connection settings {!r}".format(connection_settings), DEBUG)
+    hookenv.relation_set(relation_settings=connection_settings)
 
     generate_postgresql_hba(postgresql_hba, user=user,
                             schema_user=schema_user,
@@ -1539,129 +1538,101 @@ def promote_to_standalone():
     local_state['state'] = 'standalone'
 
 
-def is_master():
-    '''True if we are, or should be, the master.
+def authorized_by(unit):
+    relation = hookenv.relation_get(unit=unit)
+    authorized = relation.get('authorized', '').split()
+    return hookenv.local_unit() in authorized
 
-    Return True if I am the active master, or if neither myself nor
-    the remote unit is and I win an election.
 
-    Return False otherwise, including when this is a standalone unit.
-    '''
-    master_relation_ids = relation_ids(relation_types=['master'])
-    slave_relation_ids = relation_ids(relation_types=['slave'])
-    if master_relation_ids and slave_relation_ids:
-        # Both master and slave relations, so an attempt has been made
-        # to set up cascading replication. This is not yet supported in
-        # PostgreSQL, so we cannot support it either. Unfortunately,
-        # there is no way yet to inform juju about this so we just have
-        # to leave the impossible relation in a broken state.
-        log(
-            "Unable to create relationship. "
-            "Cascading replication not supported.", CRITICAL)
-        raise SystemExit(1)
+def promote_database():
+    '''Take the database out of recovery mode.'''
+    recovery_conf = os.path.join(postgresql_cluster_dir, 'recovery.conf')
+    if os.path.exists(recovery_conf):
+        # Rather than using 'pg_ctl promote', we do the promotion
+        # this way to avoid creating a timeline change. Switch this
+        # to using 'pg_ctl promote' once PostgreSQL propagates
+        # timeline changes via streaming replication.
+        os.unlink(os.path.join(postgresql_cluster_dir, 'recovery.conf'))
+        postgresql_restart()
 
-    if slave_relation_ids:
-        # I'm explicitly the slave in a master/slave relationship.
-        # No units in my service can be a master.
-        log("In a slave relation, so I'm a slave", DEBUG)
-        return False
 
-    # Do I think I'm the master?
+def follow_database(master):
+    '''Connect the database as a streaming replica of the master.'''
+    master_relation = hookenv.relation_get(unit=master)
+
+    recovery_conf = dedent("""\
+        standby_mode = on
+        primary_conninfo = 'host={} user=juju_replication'
+        """.format(master_relation['private-address']))
+    log(recovery_conf, DEBUG)
+    install_file(
+        recovery_conf,
+        os.path.join(postgresql_cluster_dir, 'recovery.conf'),
+        owner="postgres", group="postgres")
+    postgresql_restart()
+
+
+def elected_master():
+    """Return the unit that should be master, or None if we don't yet know."""
     if local_state['state'] == 'master':
-        log("I already believe I am the master", DEBUG)
-        return True
+        log("I am already the master", DEBUG)
+        return hookenv.local_unit()
 
-    # Lets see what out peer group thinks.
-    peer_units = set()
-    peer_host = {}  # Cache of addresses for peer units.
-    peer_authorized = {}  # True if the peer unit has authorized us.
-    for relid in relation_ids(relation_types=['replication']):
-        # If there are any other peers claiming to be the master, then I am
-        # not the master.
-        for unit in relation_list(relid):
-            relation = relation_get(unit_name=unit, relation_id=relid)
-            peer_units.add(unit)
-            peer_host[unit] = relation['private-address']
-            peer_authorized[unit] = False
-            for a in relation.get('authorized', '').split():
-                if a == os.environ['JUJU_UNIT_NAME']:
-                    peer_authorized[unit] = True
-                    break
-            if relation.get('state', None) == 'master':
-                log(
-                    "Found {} is master in peers, so I'm a slave".format(unit),
-                    DEBUG)
-                return False
+    if local_state['state'] == 'failover':
+        former_master = local_state['following']
+        log("Failover from {}".format(former_master))
 
-    # Are there other units? Maybe we are the only one left in the
-    # various master/slave/replication relationships.
-    alone = True
-    for relid in relation_ids(relation_types=replication_relation_types):
-        if relation_list(relid):
-            alone = False
-            break
-    if alone:
-        log("I am alone, no point being a master", DEBUG)
-        return False
+        units_not_in_failover = set()
+        for relid in hookenv.relation_ids(reltype='replication'):
+            for unit in hookenv.related_units(relid):
+                if unit == former_master:
+                    log("Found dying master {}".format(unit), DEBUG)
+                    continue
 
-    # If the peer group has lost a master, the hot standby with the
-    # least lag should be the new master. Perhaps that is me?
-    log("Electing master from peers ({})".format(
-        ' '.join(sorted(peer_units))), DEBUG)
-    my_offset = postgresql_wal_received_offset(
-        host=None, db='postgres', user='postgres')
-    if my_offset is not None:
-        # Store the offset, unit number & unit in a tuple for easy
-        # sorting.
-        my_unit = os.environ['JUJU_UNIT_NAME']
-        offsets = set([(my_offset, int(my_unit.split('/')[1]), my_unit)])
-        for unit in peer_units:
-            if peer_authorized[unit]:
-                # If the peer has not yet got as far as authorizing us,
-                # it will not be further in sync with the master than
-                # us.
-                host = peer_host[unit]
-                offset = postgresql_wal_received_offset(host)
-                if offset is not None:
-                    if offset < my_offset:
-                        log(
-                            "A peer is less lagged than me, so I'm a slave",
-                            DEBUG)
-                        return False  # Short circuit.
-                    offsets.add((offset, int(unit.split('/')[1]), unit))
-            else:
-                log(
-                    "Unable to check {} wal offset - unauthorized".format(
-                        unit), DEBUG)
-        best_unit = sorted(offsets)[0][2]  # Lowest number wins a tie.
-        if best_unit == my_unit:
-            log("I won the lag tie breaker and am the master", DEBUG)
-            return True
-        else:
-            log("I lost the lag tie breaker and am a slave", DEBUG)
-            return False
+                relation = hookenv.relation_get(unit=unit, rid=relid)
 
-    # There are no masters, so we need an election within this peer
-    # relation. Lowest unit number wins and gets to be the master.
-    remote_nums = sorted(int(unit.split('/')[1]) for unit in peer_units)
-    if not remote_nums:
-        return True  # Only unit in a service in a master relationship.
-    my_num = int(os.environ['JUJU_UNIT_NAME'].split('/')[1])
-    if my_num < remote_nums[0]:
-        log("Lowest numbered unit so I'm the master", DEBUG)
-        return True
-    else:
-        log("Not the lowest numbered unit so I'm a slave", DEBUG)
-        return False
+                if relation['state'] == 'master':
+                    log(
+                        "{} says it already won the election".format(unit),
+                        INFO)
+                    return unit
+
+                if relation['state'] != 'failover':
+                    units_not_in_failover.add(unit)
+
+        if units_not_in_failover:
+            log("{} unaware of impending election. Deferring result.".format(
+                " ".join(unit_sorted(units_not_in_failover))))
+            return None
+
+        log("Election in progress")
+        winner = hookenv.local_unit()
+        winning_offset = local_state['wal_received_offset']
+        for relid in hookenv.relation_ids(reltype='replication'):
+            # Sort the unit lists so we get consistent results in a tie
+            # and lowest unit number wins.
+            for unit in unit_sorted(hookenv.related_units(relid)):
+                if unit == former_master:
+                    continue
+                relation = hookenv.relation_get(unit=unit, rid=relid)
+                if int(relation['wal_received_offset']) > winning_offset:
+                    winner = unit
+                    winning_offset = int(relation['wal_received_offset'])
+
+        # All remaining hot standbys are in failover mode and have
+        # reported their wal_received_offset. We can declare victory.
+        log("{} won the election as is the new master".format(winner))
+        return winner
+
+    # New peer group. Lowest numbered unit will be the master.
+    for relid in hookenv.relation_ids(reltype='replication'):
+        units = hookenv.related_units(relid) + [hookenv.local_unit()]
+        master = unit_sorted(units)[0]
+        log("New peer group. {} is the master".format(master))
+        return master
 
 
-def replication_relation_changed():
-    ## Without repmgr, we no longer need SSH authorization
-    ## Leaving the code around for now in case we want it as the log
-    ## shipping transport.
-    ##
-    ## ensure_local_ssh()  # Generate SSH key and publish details
-    ## authorize_remote_ssh()  # Authorize relationship SSH keys.
+def replication_relation_joined_changed():
     config_changed(postgresql_config)  # Ensure minimal replication settings.
 
     # Now that pg_hba.conf has been regenerated and loaded, inform related
@@ -1671,125 +1642,98 @@ def replication_relation_changed():
         for unit in relation_list(relid):
             authorized_units.add(unit)
     local_state['authorized'] = authorized_units
-    local_state.publish()
 
-    relation = relation_get()
+    master = elected_master()
 
-    juju_log(MSG_INFO, "Current state is {}".format(local_state['state']))
+    # Handle state changes:
+    #  - Fresh install becoming the master
+    #  - Fresh install becoming a hot standby
+    #  - Hot standby being promoted to master
 
-    if is_master():
-        if 'following' in local_state:
-            del local_state['following']
-            local_state.publish()
+    if master is None:
+        log("Master is not yet elected. Deferring.")
 
-        if local_state['state'] == 'standalone':  # Initial setup of a master.
-            juju_log(MSG_INFO, "I am standalone and becoming the master")
-            # The juju_replication user connects as both a streaming
-            # replication connection and as a superuser to check
-            # replication status.
-            # TODO: Does it? We can use explicit grants to remove the
-            # superuser requirement now.
+    elif master == hookenv.local_unit():
+        if local_state['state'] != 'master':
+            log("I have been elected master")
+            promote_database()
+            if 'following' in local_state:
+                del local_state['following']
+            local_state['state'] = 'master'
+
+            # Publish credentials to hot standbys so they can connect.
             replication_password = create_user(
-                'juju_replication', admin=True, replication=True)
-            local_state['state'] = 'master'
+                'juju_replication', replication=True)
             local_state['replication_password'] = replication_password
-            juju_log(
-                MSG_INFO,
-                "Publishing replication connection details to hot standbys")
-            local_state.publish()
-
-        elif local_state['state'] == 'master':  # Already the master.
-            juju_log(MSG_INFO, "I am the master")
-            replication_gc()
-
-        elif local_state['state'] == 'hot standby':  # I've been promoted
-            juju_log(MSG_INFO, "I am a hot standby being promoted to master")
-            # Rather than using 'pg_ctl promote', we do the promotion
-            # this way to avoid creating a timeline change. Switch this
-            # to using 'pg_ctl promote' once PostgreSQL propagates
-            # timeline changes via streaming replication.
-            os.unlink(os.path.join(postgresql_cluster_dir, 'recovery.conf'))
-            postgresql_restart()
-            local_state['state'] = 'master'
-            local_state.publish()
-            replication_gc()
 
         else:
-            raise AssertionError(
-                "Unknown state {}".format(local_state['state']))
+            log("I am master and remain master")
 
-    else:  # A hot standby, now or soon.
-        remote_is_master = (relation.get('state', '') == 'master')
+    elif not authorized_by(master):
+        log("I need to follow {} but am not yet authorized".format(master))
 
-        remote_has_authorized = False
-        for unit in relation.get('authorized', '').split():
-            if unit == os.environ['JUJU_UNIT_NAME']:
-                remote_has_authorized = True
+    elif 'following' not in local_state:
+        # Fresh node in the peer group needs to 
+        log("I will clone {} and become a hot standby".format(master))
 
-        if remote_is_master and remote_has_authorized:
-            replication_password = relation['replication_password']
-            if ((local_state.get('replication_password', None) !=
-                 replication_password)):
-                local_state['replication_password'] = replication_password
-                generate_pgpass()
+        local_state['replication_password'] = hookenv.relation_get(
+            'replication_password', master)
+        generate_pgpass()
 
-            slave_relation_ids = relation_ids(relation_types=['slave'])
-            if local_state['state'] == 'standalone' or slave_relation_ids:
-                # Building a fresh hot standby. Either a new node
-                # ('standalone'), or a unit in a service that is being
-                # attached as a slave.
-                juju_log(MSG_INFO, "I am becoming a hot standby")
-                # Republish the replication password in case we failover to
-                # being the master in the future. Bug #806098.
-                local_state[
-                    'replication_password'] = relation['replication_password']
-                local_state.publish()
+        # Before we start destroying anything, ensure that the
+        # master is contactable.
+        master_ip = hookenv.relation_get('private-address', master)
+        wait_for_db(db='postgres', user='juju_replication', host=master_ip)
 
-                # We are just joining replication, and have found a
-                # master. Clone and follow it.
-                generate_pgpass()
+        clone(master, master_ip)
 
-                # Before we start destroying anything, ensure that the
-                # master is contactable.
-                wait_for_db(
-                    db='postgres', user='juju_replication',
-                    host=relation['private-address'])
+        local_state['state'] = 'hot standby'
+        local_state['following'] = master
 
-                clone(
-                    os.environ['JUJU_REMOTE_UNIT'],
-                    relation['private-address'])
+    elif local_state['following'] == master:
+        log("I am a hot standby already following {}".format(master))
 
-                local_state['state'] = 'hot standby'
-                local_state['following'] = os.environ['JUJU_REMOTE_UNIT']
-                local_state.publish()
+    else:
+        log("I am a hot standby following new master {}".format(master))
+        local_state['replication_password'] = hookenv.relation_get(
+            'replication_password', master)
+        generate_pgpass()
+        follow_database(master)
+        run_sql_as_postgres("SELECT pg_xlog_replay_resume()")
+        local_state['following'] = master
+        del local_state['wal_received_offset']
 
-            elif local_state['state'] == 'hot standby':
-                juju_log(MSG_INFO, "I am a hot standby")
-                if local_state['following'] != os.environ['JUJU_REMOTE_UNIT']:
-                    juju_log(
-                        MSG_INFO, "New master {} found. Following".format(
-                            os.environ['JUJU_REMOTE_UNIT']))
-                    recovery_conf = dedent("""\
-                        standby_mode = on
-                        primary_conninfo = 'host={} user=juju_replication'
-                        """.format(relation['private-address']))
-                    juju_log(MSG_DEBUG, recovery_conf)
-                    install_file(
-                        recovery_conf,
-                        os.path.join(postgresql_cluster_dir, 'recovery.conf'),
-                        owner="postgres", group="postgres")
-                    postgresql_restart()
-                    local_state['following'] = os.environ['JUJU_REMOTE_UNIT']
-                    local_state.save()
+    local_state.publish()
 
-            else:
-                raise AssertionError(
-                    "Unknown state {}".format(local_state['state']))
 
-        elif remote_is_master:
-            juju_log(
-                MSG_INFO,
-                "I am waiting for a master to authorize me")
+def replication_relation_departed():
+    '''A unit has left the replication peer group.'''
+    remote_unit = hookenv.remote_unit()
+    remote_relation = hookenv.relation_get()
+    remote_state = remote_relation['state']
+
+    log("{} {} has left the peer group".format(remote_state, remote_unit))
+
+    # If the unit being removed was our master, we need to failover.
+    if local_state.get('following', None) == remote_unit:
+
+        # Prepare for failover. We need to suspend replication to ensure
+        # that the replay point remains consistent throughout the
+        # election, and publish that replay point. By comparing these
+        # replay points, the most up to date hot standby can be
+        # identified and promoted to the new master.
+        run_sql_as_postgres("SELECT pg_xlog_replay_pause()")
+        local_state['state'] = 'failover'
+        local_state['wal_received_offset'] = postgresql_wal_received_offset()
+
+        # Now do nothing. We can't elect a new master until all the
+        # remaining peers are in a steady state and have published their
+        # wal_received_offset. Only then can we select a node to be
+        # master.
+        pass
+
+    config_changed(postgresql_config)
+    local_state.publish()
 
 
 def replication_relation_broken():
@@ -1865,9 +1809,8 @@ def postgresql_is_in_backup_mode():
         os.path.join(postgresql_cluster_dir, 'backup_label'))
 
 
-def postgresql_wal_received_offset(host, db='postgres',
-                                   user='juju_replication'):
-    cur = db_cursor(autocommit=True, db=db, user=user, host=host)
+def postgresql_wal_received_offset():
+    cur = db_cursor(autocommit=True)
     cur.execute('SELECT pg_is_in_recovery(), pg_last_xlog_receive_location()')
     is_in_recovery, xlog_received = cur.fetchone()
     if is_in_recovery:
@@ -1884,6 +1827,11 @@ def wal_location_to_bytes(wal_location):
 def wait_for_db(timeout=120, db='template1', user='postgres', host=None):
     '''Wait until the db is fully up.'''
     db_cursor(db=db, user=user, host=host, timeout=timeout)
+
+
+def unit_sorted(units):
+    return sorted(
+        units, lambda a,b: cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
 
 
 def update_nrpe_checks():
@@ -2065,20 +2013,20 @@ def main():
     elif hook_name == "nrpe-external-master-relation-changed":
         update_nrpe_checks()
 
-    elif hook_name in ('master-relation-joined', 'master-relation-changed',
-                       'slave-relation-joined', 'slave-relation-changed',
-                       'replication-relation-joined',
-                       'replication-relation-changed'):
-        replication_relation_changed()
+    elif hook_name.startswith('master') or hook_name.startswith('slave'):
+        raise NotImplementedError(hook_name)
 
-    elif hook_name in ('master-relation-broken', 'slave-relation-broken',
-        'replication-relation-broken'):
-        replication_relation_broken()
+    elif hook_name == 'replication-relation-joined':
+        replication_relation_joined_changed()
+
+    elif hook_name == 'replication-relation-changed':
+        replication_relation_joined_changed()
 
     elif hook_name == 'replication-relation-departed':
-        # Handling this in broken. I am leaving the noop hook in place
-        # because the logging above lets me trace the hook call sequence.
-        pass
+        replication_relation_departed()
+
+    elif hook_name == 'replication-relation-broken':
+        replication_relation_broken()
 
     #-------- persistent-storage-relation-joined,
     #         persistent-storage-relation-changed
