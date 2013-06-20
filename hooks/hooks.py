@@ -638,7 +638,7 @@ def generate_postgresql_hba(postgresql_hba, user=None,
         for unit in relation_list(relid):
             relation = relation_get(unit_name=unit, relation_id=relid)
 
-            relation['relation-id']  = relid
+            relation['relation-id'] = relid
             relation['unit'] = unit
 
             if relid.startswith('db-admin:'):
@@ -1272,6 +1272,8 @@ def snapshot_relations():
 
 
 def db_relation_joined_changed(user, database, roles):
+    schema_user = "{}_schema".format(user)
+
     if local_state['state'] in ('master', 'standalone'):
         log('Master unit publishing credentials')
         # We are the master, so need to create users and databases and
@@ -1280,38 +1282,38 @@ def db_relation_joined_changed(user, database, roles):
 
         grant_roles(user, roles)
 
-        schema_user = "{}_schema".format(user)
         schema_password = create_user(schema_user)
 
         ensure_database(user, schema_user, database)
 
+        host = get_unit_host()
+        port = config_get()["listen_port"]
+        state = local_state['state']  # master, hot standby, standalone
+
+        # Publish connection details.
+        connection_settings = dict(
+            user=user, password=password,
+            schema_user=schema_user, schema_password=schema_password,
+            host=host, database=database, port=port, state=state)
+        log("Connection settings {!r}".format(connection_settings), DEBUG)
+        hookenv.relation_set(relation_settings=connection_settings)
+
+        # If slave units have run their hooks before the master has,
+        # they were unable to publish the connection details (because
+        # they didn't yet exist). In addition, their hooks will not be
+        # reinvoked unless signalled by a change at the client end. We
+        # don't want clients to be complex, so instead we use the peer
+        # relationship to signal the slave unit that the master has now
+        # joined this client relation and the slave will be able to
+        # access the connection details and republish them.
+        client_relations = ' '.join(
+            hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
+        log("Client relations {}".format(client_relations))
+        for relid in hookenv.relation_ids('replication'):
+            hookenv.relation_set(relid, client_relations=client_relations)
+
     else:
-        # We are a hot standby, so need to pull credentials from the
-        # master and republish them.
-        master = local_state['following']
-
-        master_relation = hookenv.relation_get(
-            unit=master, rid=hookenv.relation_id())
-
-        log('Hot standby republishing credentials from {}'.format(
-            master))
-
-        user = master_relation.get('user', None)
-        password = master_relation.get('password', None)
-        schema_user = master_relation.get('schema_user', None)
-        schema_password = master_relation.get('schema_password', None)
-
-    host = get_unit_host()
-    port = config_get()["listen_port"]
-    state = local_state['state']  # master, hot standby, standalone
-
-    # Publish connection details.
-    connection_settings = dict(
-        user=user, password=password,
-        schema_user=schema_user, schema_password=schema_password,
-        host=host, database=database, port=port, state=state)
-    log("Connection settings {!r}".format(connection_settings), DEBUG)
-    hookenv.relation_set(relation_settings=connection_settings)
+        publish_hot_standby_credentials()
 
     generate_postgresql_hba(postgresql_hba, user=user,
                             schema_user=schema_user,
@@ -1515,30 +1517,8 @@ def drop_database(dbname, warn=True):
             break
 
 
-def replication_gc():
-    """Cleanup replication.
-
-    Revert to standalone mode if there are no other units in replication
-    relationships. Cleanup charm state.
-    """
-    if not relation_ids(replication_relation_types):
-        promote_to_standalone()
-
-
-def promote_to_standalone():
-    if postgresql_is_in_recovery():
-        log('Promoting to standalone')
-        pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
-        run("sudo -u postgres {} promote -D '{}'".format(
-            pg_ctl, postgresql_cluster_dir))
-
-    if os.path.exists(charm_pgpass):
-        os.unlink(charm_pgpass)
-
-    local_state['state'] = 'standalone'
-
-
 def authorized_by(unit):
+    '''Return True if the peer has authorized our database connections.'''
     relation = hookenv.relation_get(unit=unit)
     authorized = relation.get('authorized', '').split()
     return hookenv.local_unit() in authorized
@@ -1583,7 +1563,7 @@ def elected_master():
         log("Failover from {}".format(former_master))
 
         units_not_in_failover = set()
-        for relid in hookenv.relation_ids(reltype='replication'):
+        for relid in hookenv.relation_ids('replication'):
             for unit in hookenv.related_units(relid):
                 if unit == former_master:
                     log("Found dying master {}".format(unit), DEBUG)
@@ -1608,7 +1588,7 @@ def elected_master():
         log("Election in progress")
         winner = hookenv.local_unit()
         winning_offset = local_state['wal_received_offset']
-        for relid in hookenv.relation_ids(reltype='replication'):
+        for relid in hookenv.relation_ids('replication'):
             # Sort the unit lists so we get consistent results in a tie
             # and lowest unit number wins.
             for unit in unit_sorted(hookenv.related_units(relid)):
@@ -1624,8 +1604,14 @@ def elected_master():
         log("{} won the election as is the new master".format(winner))
         return winner
 
+    # Maybe another peer thinks it is the master?
+    for relid in hookenv.relation_ids('replication'):
+        for unit in hookenv.related_units(relid):
+            if hookenv.relation_get('state', unit, relid) == 'master':
+                return unit
+
     # New peer group. Lowest numbered unit will be the master.
-    for relid in hookenv.relation_ids(reltype='replication'):
+    for relid in hookenv.relation_ids('replication'):
         units = hookenv.related_units(relid) + [hookenv.local_unit()]
         master = unit_sorted(units)[0]
         log("New peer group. {} is the master".format(master))
@@ -1673,8 +1659,8 @@ def replication_relation_joined_changed():
         log("I need to follow {} but am not yet authorized".format(master))
 
     elif 'following' not in local_state:
-        # Fresh node in the peer group needs to 
-        log("I will clone {} and become a hot standby".format(master))
+        log("Fresh unit. I will clone {} and become a hot standby".format(
+            master))
 
         local_state['replication_password'] = hookenv.relation_get(
             'replication_password', master)
@@ -1703,7 +1689,68 @@ def replication_relation_joined_changed():
         local_state['following'] = master
         del local_state['wal_received_offset']
 
+    if local_state['state'] == 'hot standby':
+        publish_hot_standby_credentials()
+
     local_state.publish()
+
+
+def publish_hot_standby_credentials():
+    '''
+    If a hot standby joins a client relation before the master
+    unit, it was unable to publish connection details. However,
+    when the master does join it updates the client_relations
+    value in the peer relation causing the
+    replication-relation-changed hook to be invoked. This gives us
+    a second opertunity to publish connection details.
+
+    This function is invoked from both the client and peer
+    relation-changed hook. One of these will work depending on the order
+    the master and hot standby joined the client relation.
+    '''
+    master = local_state['following']
+
+    client_relations = hookenv.relation_get(
+        'client_relations', master, relation_ids('replication')[0])
+
+    if client_relations is None:
+        log("Master {} has not yet joined any client relations".format(
+            master), DEBUG)
+        return
+
+    for client_relation in client_relations.split():
+        # We need to pull the credentials from the master unit's
+        # end of the client relation. This is problematic as we
+        # have no way of knowing if the master unit has joined
+        # the relation yet. We use the exception handler to detect
+        # this case per Bug #1192803.
+        try:
+            master_relation = hookenv.relation_get(
+                unit=master, rid=client_relation)
+        except subprocess.CalledProcessError:
+            log("Not yet joined {}. Skipping.".format(client_relation))
+            continue
+
+        log('Hot standby republishing credentials from {} to {}'.format(
+            master, client_relation))
+
+        user = master_relation['user']
+        password = master_relation['password']
+        schema_user = master_relation['schema_user']
+        schema_password = master_relation['schema_password']
+        database = master_relation['database']
+
+        host = get_unit_host()
+        port = config_get()["listen_port"]
+        state = local_state['state']
+
+        connection_settings = dict(
+            user=user, password=password,
+            schema_user=schema_user, schema_password=schema_password,
+            host=host, database=database, port=port, state=state)
+        log("Connection settings {!r}".format(connection_settings), DEBUG)
+        hookenv.relation_set(
+            client_relation, relation_settings=connection_settings)
 
 
 def replication_relation_departed():
@@ -1711,6 +1758,8 @@ def replication_relation_departed():
     remote_unit = hookenv.remote_unit()
     remote_relation = hookenv.relation_get()
     remote_state = remote_relation['state']
+
+    assert remote_unit is not None
 
     log("{} {} has left the peer group".format(remote_state, remote_unit))
 
@@ -1737,7 +1786,11 @@ def replication_relation_departed():
 
 
 def replication_relation_broken():
-    promote_to_standalone()
+    promote_database()
+    local_state['state'] = 'standalone'
+    local_state.save()
+    if os.path.exists(charm_pgpass):
+        os.unlink(charm_pgpass)
     config_changed(postgresql_config)
 
 
@@ -1798,18 +1851,22 @@ def slave_count():
     return num_slaves
 
 
-def postgresql_is_in_recovery():
-    cur = db_cursor(autocommit=True)
-    cur.execute("SELECT pg_is_in_recovery()")
-    return cur.fetchone()[0]
-
-
 def postgresql_is_in_backup_mode():
     return os.path.exists(
         os.path.join(postgresql_cluster_dir, 'backup_label'))
 
 
 def postgresql_wal_received_offset():
+    """How much WAL we have.
+
+    WAL is replicated asynchronously from the master to hot standbys.
+    The more WAL a hot standby has received, the better a candidate it
+    makes for master during failover.
+
+    Note that this is not quite the same as how in sync the hot standby is.
+    That depends on how much WAL has been replayed. WAL is replayed after
+    it is received.
+    """
     cur = db_cursor(autocommit=True)
     cur.execute('SELECT pg_is_in_recovery(), pg_last_xlog_receive_location()')
     is_in_recovery, xlog_received = cur.fetchone()
@@ -1830,8 +1887,9 @@ def wait_for_db(timeout=120, db='template1', user='postgres', host=None):
 
 
 def unit_sorted(units):
+    """Return a sorted list of unit names."""
     return sorted(
-        units, lambda a,b: cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
+        units, lambda a, b: cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
 
 
 def update_nrpe_checks():
