@@ -1,4 +1,4 @@
 destination: hooks/charmhelpers
-branch: lp:charm-helpers
+branch: lp:~stub/charm-helpers/bug-1192837-relation-unset
 include:
     - core
