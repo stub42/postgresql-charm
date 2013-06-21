@@ -113,6 +113,9 @@ class JujuFixture(fixtures.Fixture):
                             unit, units[unit].get('agent-state-info','')))
                     if agent_state != 'started':
                         ready = False
+        # Wait a little longer, as we have no way of telling
+        # if relationship hooks have finished running.
+        time.sleep(10)
 
     def setUp(self):
         DEBUG("JujuFixture.setUp()")
@@ -254,44 +257,44 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         result = self.sql('SELECT TRUE')
         self.assertEqual(result, [['t']])
 
-    def is_master(self, postgres_unit):
+    def is_master(self, postgres_unit, dbname=None):
          is_master = self.sql(
-             'SELECT NOT pg_is_in_recovery()', postgres_unit)[0][0]
+             'SELECT NOT pg_is_in_recovery()', postgres_unit,
+             dbname=dbname)[0][0]
          return (is_master == 't')
 
     def test_failover(self):
         """Set up a multi-unit service and perform failovers."""
         self.juju.deploy(TEST_CHARM, 'postgresql', num_units=4)
         self.juju.deploy(PSQL_CHARM, 'psql')
-        self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
+        self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
         self.juju.wait_until_ready()
 
         units = unit_sorted(
             self.juju.status['services']['postgresql']['units'].keys())
         master_unit, standby_unit_1, standby_unit_2, standby_unit_3 = units
 
-        time.sleep(30)
-
         # Confirm units agree on their roles. On a freshly setup
         # service, lowest numbered unit is always the master.
-        self.assertIs(True, self.is_master(master_unit))
-        self.assertIs(False, self.is_master(standby_unit_1))
-        self.assertIs(False, self.is_master(standby_unit_2))
-        self.assertIs(False, self.is_master(standby_unit_3))
+        self.assertIs(True, self.is_master(master_unit, 'postgres'))
+        self.assertIs(False, self.is_master(standby_unit_1, 'postgres'))
+        self.assertIs(False, self.is_master(standby_unit_2, 'postgres'))
+        self.assertIs(False, self.is_master(standby_unit_3, 'postgres'))
 
-        self.sql('CREATE TABLE Token (x int)', master_unit)
+        self.sql('CREATE TABLE Token (x int)', master_unit, dbname='postgres')
 
         _counter = [0]
 
         def send_token(unit):
             _counter[0] += 1
-            DEBUG('Sent {}'.format(_counter[0]))
-            self.sql("INSERT INTO Token VALUES (%d)" % _counter[0], unit)
+            self.sql(
+                "INSERT INTO Token VALUES (%d)" % _counter[0],
+                unit, dbname='postgres')
 
         def token_received(unit):
             r = self.sql(
-                "SELECT TRUE FROM Token WHERE x=%d" % _counter[0], unit)
-            DEBUG('**** {} {!r} ***'.format(_counter[0], r))
+                "SELECT TRUE FROM Token WHERE x=%d" % _counter[0],
+                unit, dbname='postgres')
             return (r == [['t']])
 
         # Confirm that replication is actually happening.
@@ -304,8 +307,10 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # elected the new master. Disable replication on standby_unit_1
         # and standby_unit_3 to ensure that standby_unit_2 is the best
         # candidate for master.
-        self.sql('SELECT pg_xlog_replay_pause()', standby_unit_1)
-        self.sql('SELECT pg_xlog_replay_pause()', standby_unit_3)
+        self.sql(
+            'SELECT pg_xlog_replay_pause()', standby_unit_1, dbname='postgres')
+        self.sql(
+            'SELECT pg_xlog_replay_pause()', standby_unit_3, dbname='postgres')
 
         send_token(master_unit)
         self.assertIs(False, token_received(standby_unit_1))
@@ -315,12 +320,11 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # Remove the master unit.
         self.juju.do(['remove-unit', master_unit])
         self.juju.wait_until_ready()
-        time.sleep(30)
 
         # Confirm the failover worked as expected.
-        self.assertIs(False, self.is_master(standby_unit_1))
-        self.assertIs(True, self.is_master(standby_unit_2))
-        self.assertIs(False, self.is_master(standby_unit_3))
+        self.assertIs(False, self.is_master(standby_unit_1, 'postgres'))
+        self.assertIs(True, self.is_master(standby_unit_2, 'postgres'))
+        self.assertIs(False, self.is_master(standby_unit_3, 'postgres'))
 
         master_unit = standby_unit_2
 
@@ -328,8 +332,12 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         send_token(master_unit)
         self.assertIs(False, token_received(standby_unit_1))
         self.assertIs(False, token_received(standby_unit_3))
-        self.sql('select pg_xlog_replay_resume()', standby_unit_1)
-        self.sql('select pg_xlog_replay_resume()', standby_unit_3)
+        self.sql(
+            'select pg_xlog_replay_resume()',
+            standby_unit_1, dbname='postgres')
+        self.sql(
+            'select pg_xlog_replay_resume()',
+            standby_unit_3, dbname='postgres')
 
         # Now replication is happening again
         self.assertIs(True, token_received(standby_unit_1))
@@ -338,13 +346,12 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # Remove the master again
         self.juju.do(['remove-unit', master_unit])
         self.juju.wait_until_ready()
-        time.sleep(30)
 
         # Now we have a new master, and we can't be sure which of the
         # remaining two units was elected because we don't know if one
         # happened to be more in sync than the other.
-        standby_unit_1_is_master = is_master(standby_unit_1)
-        standby_unit_3_is_master = is_master(standby_unit_3)
+        standby_unit_1_is_master = is_master(standby_unit_1, 'postgres')
+        standby_unit_3_is_master = is_master(standby_unit_3, 'postgres')
         self.assertNotEqual(standby_unit_1_is_master, standby_unit_3_is_master)
 
         if standby_unit_1_is_master:
@@ -362,9 +369,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # functioning standalone database.
         self.juju.do(['remove-unit', master_unit])
         self.juju.wait_until_ready()
-        time.sleep(30)
 
-        self.is_master(standby_unit)
+        self.is_master(standby_unit, 'postgres')
 
         # TODO: We need to extend the postgresql-psql charm to allow us
         # to inspect the status attribute on the relation. It should no
