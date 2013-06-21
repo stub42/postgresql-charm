@@ -1270,50 +1270,91 @@ def snapshot_relations():
     local_state['relations'] = hookenv.relations()
     local_state.save()
 
+# Each database unit needs to publish connection details to the
+# client. This is problematic, because 1) the user and database are
+# only created on the master unit and this is replicated to the
+# slave units outside of juju and 2) we have no control over the
+# order that units join the relation.
+#
+# The simplest approach of generating usernames and passwords in
+# the master units db-relation-joined hook fails because slave
+# units may well have already run their hooks and found no
+# connection details to republish. When the master unit publishes
+# the connection details it only triggers relation-changed hooks
+# on the client units, not the relation-changed hook on other peer
+# units.
+#
+# A more complex approach is for the first database unit that joins
+# the relation to generate the usernames and passwords and publish
+# this to the relation. Subsequent units can retrieve this
+# information and republish it. Of course, the master unit also 
+# creates the database and users when it joins the relation.
+# This approach should work reliably on the server side. However,
+# there is a window from when a slave unit joins a client relation
+# until the master unit has joined that relation when the
+# credentials published by the slave unit are invalid. These
+# credentials will only become valid after the master unit has
+# actually created the user and database.
+#
+# The implemented approach is for the master unit's
+# db-relation-joined hook to create the user and database and
+# publish the connection details, and in addition update a list
+# of active relations to the service's peer 'replication' relation.
+# After the master unit has updated the peer relationship, the
+# slave unit's peer replication-relation-changed hook will
+# be triggered and it will have an opportunity to republish the
+# connection details. Of course, it may not be able to do so if the
+# slave unit's db-relation-joined hook has yet been run, so we must
+# also attempt to to republish the connection settings there.
+# This way we are guaranteed at least one chance to republish the
+# connection details after the database and user have actually been
+# created and both the master and slave units have joined the
+# relation.
+#
+# The order of relevant hooks firing may be:
+#
+# master db-relation-joined (publish)
+# slave db-relation-joined (republish)
+# slave replication-relation-changed (noop)
+#
+# slave db-relation-joined (noop)
+# master db-relation-joined (publish)
+# slave replication-relation-changed (republish)
+#
+# master db-relation-joined (publish)
+# slave replication-relation-changed (noop; slave not yet joined db rel)
+# slave db-relation-joined (republish)
 
 def db_relation_joined_changed(user, database, roles):
+    if local_state['state'] not in ('master', 'standalone'):
+        return
+
+    log('{} unit publishing credentials'.format(local_state['state']))
+
+    password = create_user(user)
+    grant_roles(user, roles)
     schema_user = "{}_schema".format(user)
+    schema_password = create_user(schema_user)
+    ensure_database(user, schema_user, database)
+    host = get_unit_host()
+    port = config_get()["listen_port"]
+    state = local_state['state']  # master, hot standby, standalone
 
-    if local_state['state'] in ('master', 'standalone'):
-        log('Master unit publishing credentials')
-        # We are the master, so need to create users and databases and
-        # grant relevant database permissions.
-        password = create_user(user)
+    # Publish connection details.
+    connection_settings = dict(
+        user=user, password=password,
+        schema_user=schema_user, schema_password=schema_password,
+        host=host, database=database, port=port, state=state)
+    log("Connection settings {!r}".format(connection_settings), DEBUG)
+    hookenv.relation_set(relation_settings=connection_settings)
 
-        grant_roles(user, roles)
-
-        schema_password = create_user(schema_user)
-
-        ensure_database(user, schema_user, database)
-
-        host = get_unit_host()
-        port = config_get()["listen_port"]
-        state = local_state['state']  # master, hot standby, standalone
-
-        # Publish connection details.
-        connection_settings = dict(
-            user=user, password=password,
-            schema_user=schema_user, schema_password=schema_password,
-            host=host, database=database, port=port, state=state)
-        log("Connection settings {!r}".format(connection_settings), DEBUG)
-        hookenv.relation_set(relation_settings=connection_settings)
-
-        # If slave units have run their hooks before the master has,
-        # they were unable to publish the connection details (because
-        # they didn't yet exist). In addition, their hooks will not be
-        # reinvoked unless signalled by a change at the client end. We
-        # don't want clients to be complex, so instead we use the peer
-        # relationship to signal the slave unit that the master has now
-        # joined this client relation and the slave will be able to
-        # access the connection details and republish them.
-        client_relations = ' '.join(
-            hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
-        log("Client relations {}".format(client_relations))
-        for relid in hookenv.relation_ids('replication'):
-            hookenv.relation_set(relid, client_relations=client_relations)
-
-    else:
-        publish_hot_standby_credentials()
+    # Update the peer relation, notifying any hot standby units
+    # to republish connection details to the client relation.
+    client_relations = ' '.join(
+        hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
+    log("Client relations {}".format(client_relations))
+    for relid in hookenv.relation_ids('replication'):
+        hookenv.relation_set(relid, client_relations=client_relations)
 
     generate_postgresql_hba(postgresql_hba, user=user,
                             schema_user=schema_user,
@@ -1323,38 +1364,30 @@ def db_relation_joined_changed(user, database, roles):
 
 
 def db_admin_relation_joined_changed(user):
-    if local_state['state'] in ('master', 'standalone'):
-        log('Master or standalone unit publishing credentials')
-        # We are the master, so need to create users and databases and
-        # grant relevant database permissions.
-        password = create_user(user, admin=True)
+    if local_state['state'] not in ('master', 'standalone'):
+        return
 
-    else:
-        # We are a hot standby, so need to pull credentials from the
-        # master. We republish them for convenience of clients and
-        # because one day we might failover to being the master.
-        master = local_state['following']
-        master_relation = hookenv.relation_get(unit=master)
+    log('{} unit publishing credentials'.format(local_state['state']))
 
-        if 'user' not in master_relation:
-            log('Hot standby waiting for credentials from {}'.format(
-                master))
-            return
-
-        log('Hot standby republishing credentials from {}'.format(
-            master))
-
-        user = master_relation['user']
-        password = master_relation['password']
-
+    password = create_user(user, admin=True)
     host = get_unit_host()
     port = config_get()["listen_port"]
     state = local_state['state']  # master, hot standby, standalone
 
     # Publish connection details.
-    hookenv.relation_set(
+    connection_settings = dict(
         user=user, password=password,
         host=host, database='all', port=port, state=state)
+    log("Connection settings {!r}".format(connection_settings), DEBUG)
+    hookenv.relation_set(relation_settings=connection_settings)
+
+    # Update the peer relation, notifying any hot standby units
+    # to republish connection details to the client relation.
+    client_relations = ' '.join(
+        hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
+    log("Client relations {}".format(client_relations))
+    for relid in hookenv.relation_ids('replication'):
+        hookenv.relation_set(relid, client_relations=client_relations)
 
     generate_postgresql_hba(postgresql_hba)
 
@@ -1393,12 +1426,14 @@ def db_relation_broken():
     snapshot_relations()
 
 
-def db_admin_relation_broken(user):
+def db_admin_relation_broken():
     from psycopg2.extensions import AsIs
 
     if local_state['state'] in ('master', 'standalone'):
-        sql = "ALTER USER %s NOSUPERUSER"
-        run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
+        user = hookenv.relation_get('user', unit=hookenv.local_unit())
+        if user:
+            sql = "ALTER USER %s NOSUPERUSER"
+            run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
 
     generate_postgresql_hba(postgresql_hba)
 
@@ -1691,6 +1726,7 @@ def replication_relation_joined_changed():
 
     if local_state['state'] == 'hot standby':
         publish_hot_standby_credentials()
+        generate_postgresql_hba(postgresql_hba)
 
     local_state.publish()
 
@@ -1718,36 +1754,44 @@ def publish_hot_standby_credentials():
             master), DEBUG)
         return
 
-    for client_relation in client_relations.split():
+    # Build the set of client relations that both the master and this
+    # unit have joined.
+    active_client_relations = set(
+        hookenv.relation_ids('db') + hookenv.relation_ids('db-admin')
+        ).intersection(set(client_relations.split()))
+
+    for client_relation in active_client_relations:
         # We need to pull the credentials from the master unit's
         # end of the client relation. This is problematic as we
         # have no way of knowing if the master unit has joined
         # the relation yet. We use the exception handler to detect
         # this case per Bug #1192803.
-        try:
-            master_relation = hookenv.relation_get(
-                unit=master, rid=client_relation)
-        except subprocess.CalledProcessError:
-            log("Not yet joined {}. Skipping.".format(client_relation))
-            continue
-
         log('Hot standby republishing credentials from {} to {}'.format(
             master, client_relation))
 
-        user = master_relation['user']
-        password = master_relation['password']
-        schema_user = master_relation['schema_user']
-        schema_password = master_relation['schema_password']
-        database = master_relation['database']
+        connection_settings = hookenv.relation_get(
+            unit=master, rid=client_relation)
 
-        host = get_unit_host()
-        port = config_get()["listen_port"]
-        state = local_state['state']
+        # Override unit specific connection details
+        connection_settings['host'] = get_unit_host()
+        connection_settings['port'] = config_get()["listen_port"]
+        connection_settings['state'] = local_state['state']
 
-        connection_settings = dict(
-            user=user, password=password,
-            schema_user=schema_user, schema_password=schema_password,
-            host=host, database=database, port=port, state=state)
+        # Block until users and database has replicated, so we know the
+        # connection details we publish are actually valid. This will
+        # normally be pretty much instantaneous.
+        timeout = 900
+        start = time.time()
+        while time.time() < start + timeout:
+            cur = db_cursor(autocommit=True)
+            cur.execute('select datname from pg_database')
+            if cur.fetchone() is not None:
+                break
+            del cur
+            log('Waiting for database {} to be replicated'.format(
+                connection_settings['database']))
+            time.sleep(10)
+
         log("Connection settings {!r}".format(connection_settings), DEBUG)
         hookenv.relation_set(
             client_relation, relation_settings=connection_settings)
@@ -2062,11 +2106,7 @@ def main():
         db_admin_relation_joined_changed(user)
 
     elif hook_name == "db-admin-relation-broken":
-        # XXX: Fix: relation is not set when it is already broken
-        # cannot determine the user name
-        user = user_name(os.environ['JUJU_RELATION_ID'],
-                         os.environ['JUJU_REMOTE_UNIT'], admin=True)
-        db_admin_relation_broken(user)
+        db_admin_relation_broken()
 
     elif hook_name == "nrpe-external-master-relation-changed":
         update_nrpe_checks()
