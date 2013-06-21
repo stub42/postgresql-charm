@@ -16,7 +16,7 @@ import unittest
 
 SERIES = 'precise'
 TEST_CHARM = 'local:postgresql'
-PSQL_CHARM = 'local:postgresql-psql'
+PSQL_CHARM = 'cs:postgresql-psql'
 
 
 def DEBUG(msg):
@@ -74,11 +74,11 @@ class JujuFixture(fixtures.Fixture):
         # revision of the charm. Subsequent deploys we do not use
         # --update to avoid overhead and needless incrementing of the
         # revision number.
-        if charm not in self._deployed_charms:
+        if charm.startswith('cs:') or charm in self._deployed_charms:
+            cmd = ['deploy']
+        else:
             cmd = ['deploy', '-u']
             self._deployed_charms.add(charm)
-        else:
-            cmd = ['deploy']
 
         if num_units > 1:
             cmd.extend(['-n', str(num_units)])
@@ -190,7 +190,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         timeout = int(os.environ.get('TEST_TIMEOUT', 900))
         self.useFixture(fixtures.Timeout(timeout, gentle=True))
 
-    def sql(self, sql, psql_unit=None, postgres_unit=None, dbname=None):
+    def sql(self, sql, postgres_unit=None, psql_unit=None, dbname=None):
         '''Run some SQL on postgres_unit from psql_unit.
 
         Uses a random psql_unit and postgres_unit if not specified.
@@ -232,7 +232,9 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
             # Due to Bug #1191079, we need to send the whole remote command
             # as a single argument.
             ' '.join(psql_cmd + psql_args)]
+        DEBUG("SQL {}".format(sql))
         out = _run(self, cmd, input=sql)
+        DEBUG("OUT {}".format(out))
         result = [line.split(',') for line in out.splitlines()]
         self.addDetail('sql', text_content(repr((sql, result))))
         return result
@@ -254,8 +256,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
     def is_master(self, postgres_unit):
          is_master = self.sql(
-             'SELECT NOT pg_is_in_recovery()',
-             postgres_unit=postgres_unit)[0][0]
+             'SELECT NOT pg_is_in_recovery()', postgres_unit)[0][0]
          return (is_master == 't')
 
     def test_failover(self):
@@ -269,6 +270,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
             self.juju.status['services']['postgresql']['units'].keys())
         master_unit, standby_unit_1, standby_unit_2, standby_unit_3 = units
 
+        time.sleep(30)
+
         # Confirm units agree on their roles. On a freshly setup
         # service, lowest numbered unit is always the master.
         self.assertIs(True, self.is_master(master_unit))
@@ -276,49 +279,92 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.assertIs(False, self.is_master(standby_unit_2))
         self.assertIs(False, self.is_master(standby_unit_3))
 
+        self.sql('CREATE TABLE Token (x int)', master_unit)
+
+        _counter = [0]
+
+        def send_token(unit):
+            _counter[0] += 1
+            DEBUG('Sent {}'.format(_counter[0]))
+            self.sql("INSERT INTO Token VALUES (%d)" % _counter[0], unit)
+
+        def token_received(unit):
+            r = self.sql(
+                "SELECT TRUE FROM Token WHERE x=%d" % _counter[0], unit)
+            DEBUG('**** {} {!r} ***'.format(_counter[0], r))
+            return (r == [['t']])
+
+        # Confirm that replication is actually happening.
+        send_token(master_unit)
+        self.assertIs(True, token_received(standby_unit_1))
+        self.assertIs(True, token_received(standby_unit_2))
+        self.assertIs(True, token_received(standby_unit_3))
+
+        # When we failover, the unit most in sync with the old master is
+        # elected the new master. Disable replication on standby_unit_1
+        # and standby_unit_3 to ensure that standby_unit_2 is the best
+        # candidate for master.
+        self.sql('SELECT pg_xlog_replay_pause()', standby_unit_1)
+        self.sql('SELECT pg_xlog_replay_pause()', standby_unit_3)
+
+        send_token(master_unit)
+        self.assertIs(False, token_received(standby_unit_1))
+        self.assertIs(True, token_received(standby_unit_2))
+        self.assertIs(False, token_received(standby_unit_3))
+
         # Remove the master unit.
         self.juju.do(['remove-unit', master_unit])
         self.juju.wait_until_ready()
+        time.sleep(30)
 
-        # All hot standbys were fully in sync with the master, so the
-        # lowest numbered standby will be the new master.
-        self.assertIs(True, self.is_master(standby_unit_1))
-        self.assertIs(False, self.is_master(standby_unit_2))
+        # Confirm the failover worked as expected.
+        self.assertIs(False, self.is_master(standby_unit_1))
+        self.assertIs(True, self.is_master(standby_unit_2))
         self.assertIs(False, self.is_master(standby_unit_3))
 
-        self.sql('CREATE TABLE Foo (integer bar)', postgres_unit='master')
+        master_unit = standby_unit_2
 
-        # Pause replication on unit 2, to allow it to get out of sync
-        # with the master. Then make some DB changes.
-        self.sql('SELECT pg_xlog_replay_pause()', standby_unit_2)
-        self.sql('INSERT INTO Foo VALUES (1)', standby_unit_1)
+        # Replication was not reenabled by the failover.
+        send_token(master_unit)
+        self.assertIs(False, token_received(standby_unit_1))
+        self.assertIs(False, token_received(standby_unit_3))
+        self.sql('select pg_xlog_replay_resume()', standby_unit_1)
+        self.sql('select pg_xlog_replay_resume()', standby_unit_3)
 
-        # Remove the master unit. In this case, unit 3 will end up as
-        # the new master because it is more in sync.
-        self.juju.do(['remove-unit', standby_unit_1])
+        # Now replication is happening again
+        self.assertIs(True, token_received(standby_unit_1))
+        self.assertIs(True, token_received(standby_unit_3))
+
+        # Remove the master again
+        self.juju.do(['remove-unit', master_unit])
         self.juju.wait_until_ready()
+        time.sleep(30)
 
-        # Confirm unit 2 is a standby, and unit 3 is the master.
-        self.assertIs(False, self.is_master(standby_unit_2))
-        self.assertIs(True, self.is_master(standby_unit_3))
+        # Now we have a new master, and we can't be sure which of the
+        # remaining two units was elected because we don't know if one
+        # happened to be more in sync than the other.
+        standby_unit_1_is_master = is_master(standby_unit_1)
+        standby_unit_3_is_master = is_master(standby_unit_3)
+        self.assertNotEqual(standby_unit_1_is_master, standby_unit_3_is_master)
 
-        # Confirm sync status.
-        result_2 = self.sql('SELECT COUNT(*) FROM Foo', standby_unit_2)
-        self.assertEqual(result_2, [['0']])
-        result_3 = self.sql('SELECT COUNT(*) FROM Foo', standby_unit_3)
-        self.assertEqual(result_3, [['1']])
+        if standby_unit_1_is_master:
+            master_unit = standby_unit_1
+            standby_unit = standby_unit_3
+        else:
+            master_unit = standby_unit_3
+            standby_unit = standby_unit_1
 
-        # Reenable replication on unit 2, and confirm it works.
-        self.sql('SELECT pg_xlog_replay_resume()', standby_unit_2)
-        result_2 = self.sql('SELECT COUNT(*) FROM Foo', standby_unit_2)
-        self.assertEqual(result_2, [['1']])
+        # Replication is already flowing.
+        send_token(master_unit)
+        self.assertIs(True, token_received(standby_unit))
 
-        # Remove the master (standby_unit_3). The last remaining standby
-        # will endup standalone.
-        self.juju.do(['remove-unit', standby_unit_3])
+        # When we remove the last master, we end up with a single
+        # functioning standalone database.
+        self.juju.do(['remove-unit', master_unit])
         self.juju.wait_until_ready()
+        time.sleep(30)
 
-        self.assertIs(True, self.is_master(standby_unit_2))
+        self.is_master(standby_unit)
 
         # TODO: We need to extend the postgresql-psql charm to allow us
         # to inspect the status attribute on the relation. It should no

@@ -1621,14 +1621,15 @@ def elected_master():
             return None
 
         log("Election in progress")
-        winner = hookenv.local_unit()
-        winning_offset = local_state['wal_received_offset']
+        winner = None
+        winning_offset = -1
         for relid in hookenv.relation_ids('replication'):
+            candidates = set(hookenv.related_units(relid))
+            candidates.add(hookenv.local_unit())
+            candidates.discard(former_master)
             # Sort the unit lists so we get consistent results in a tie
             # and lowest unit number wins.
-            for unit in unit_sorted(hookenv.related_units(relid)):
-                if unit == former_master:
-                    continue
+            for unit in unit_sorted(candidates):
                 relation = hookenv.relation_get(unit=unit, rid=relid)
                 if int(relation['wal_received_offset']) > winning_offset:
                     winner = unit
@@ -1676,7 +1677,7 @@ def replication_relation_joined_changed():
 
     elif master == hookenv.local_unit():
         if local_state['state'] != 'master':
-            log("I have been elected master")
+            log("I have elected myself master")
             promote_database()
             if 'following' in local_state:
                 del local_state['following']
@@ -1706,10 +1707,12 @@ def replication_relation_joined_changed():
         master_ip = hookenv.relation_get('private-address', master)
         wait_for_db(db='postgres', user='juju_replication', host=master_ip)
 
-        clone(master, master_ip)
+        clone_database(master, master_ip)
 
         local_state['state'] = 'hot standby'
         local_state['following'] = master
+        if 'wal_received_offset' in local_state:
+            del local_state['wal_received_offset']
 
     elif local_state['following'] == master:
         log("I am a hot standby already following {}".format(master))
@@ -1720,9 +1723,12 @@ def replication_relation_joined_changed():
             'replication_password', master)
         generate_pgpass()
         follow_database(master)
-        run_sql_as_postgres("SELECT pg_xlog_replay_resume()")
+        if not local_state["paused_at_failover"]:
+            run_sql_as_postgres("SELECT pg_xlog_replay_resume()")
+        local_state['state'] = 'hot standby'
         local_state['following'] = master
         del local_state['wal_received_offset']
+        del local_state['paused_at_failover']
 
     if local_state['state'] == 'hot standby':
         publish_hot_standby_credentials()
@@ -1815,7 +1821,13 @@ def replication_relation_departed():
         # election, and publish that replay point. By comparing these
         # replay points, the most up to date hot standby can be
         # identified and promoted to the new master.
-        run_sql_as_postgres("SELECT pg_xlog_replay_pause()")
+        cur = db_cursor(autocommit=True)
+        cur.execute(
+            "SELECT pg_is_xlog_replay_paused()")
+        already_paused = cur.fetchone()[0]
+        local_state["paused_at_failover"] = already_paused
+        if not already_paused:
+            cur.execute("SELECT pg_xlog_replay_pause()")
         local_state['state'] = 'failover'
         local_state['wal_received_offset'] = postgresql_wal_received_offset()
 
@@ -1838,7 +1850,7 @@ def replication_relation_broken():
     config_changed(postgresql_config)
 
 
-def clone(master_unit, master_host):
+def clone_database(master_unit, master_host):
     postgresql_stop()
     juju_log(MSG_INFO, "Cloning master {}".format(master_unit))
 
