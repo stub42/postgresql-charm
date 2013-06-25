@@ -77,8 +77,11 @@ class State(dict):
         client_state = {}
         add(client_state, 'state')
 
-        for relid in relation_ids(relation_types=['db', 'db-admin']):
-            relation_set(client_state, relid)
+        for relid in hookenv.relation_ids('db'):
+            hookenv.relation_set(relid, client_state)
+
+        for relid in hookenv.relation_ids('db-admin'):
+            hookenv.relation_set(relid, client_state)
 
         replication_state = dict(client_state)
 
@@ -92,8 +95,8 @@ class State(dict):
         if authorized:
             replication_state['authorized'] = ' '.join(sorted(authorized))
 
-        for relid in relation_ids(relation_types=replication_relation_types):
-            relation_set(replication_state, relid)
+        for relid in hookenv.relation_ids('replication'):
+            hookenv.relation_set(relid, replication_state)
 
         self.save()
 
@@ -1575,15 +1578,16 @@ def follow_database(master):
     '''Connect the database as a streaming replica of the master.'''
     master_relation = hookenv.relation_get(unit=master)
 
-    recovery_conf = dedent("""\
-        standby_mode = on
-        primary_conninfo = 'host={} user=juju_replication'
-        """.format(master_relation['private-address']))
-    log(recovery_conf, DEBUG)
+    recovery_conf = Template(
+        open("templates/recovery.conf.tmpl").read()).render({
+            'host': master_relation['private-address'],
+            'password': local_state['replication_password']})
+    juju_log(MSG_DEBUG, recovery_conf)
     install_file(
         recovery_conf,
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
         owner="postgres", group="postgres")
+
     postgresql_restart()
 
 
@@ -1660,9 +1664,8 @@ def replication_relation_joined_changed():
     # Now that pg_hba.conf has been regenerated and loaded, inform related
     # units that they have been granted replication access.
     authorized_units = set()
-    for relid in relation_ids(relation_types=replication_relation_types):
-        for unit in relation_list(relid):
-            authorized_units.add(unit)
+    for unit in hookenv.related_units():
+        authorized_units.add(unit)
     local_state['authorized'] = authorized_units
 
     master = elected_master()
@@ -1681,6 +1684,10 @@ def replication_relation_joined_changed():
             promote_database()
             if 'following' in local_state:
                 del local_state['following']
+            if 'wal_received_offset' in local_state:
+                del local_state['wal_received_offset']
+            if 'paused_at_failover' in local_state:
+                del local_state['paused_at_failover']
             local_state['state'] = 'master'
 
             # Publish credentials to hot standbys so they can connect.
@@ -1811,40 +1818,57 @@ def replication_relation_departed():
 
     assert remote_unit is not None
 
-    log("{} {} has left the peer group".format(remote_state, remote_unit))
+    log("{} has left the peer group".format(remote_unit))
 
-    # If the unit being removed was our master, we need to failover.
-    if local_state.get('following', None) == remote_unit:
+    # If we are the last unit standing, we become standalone
+    remaining_peers = set(hookenv.related_units(hookenv.relation_id()))
+    remaining_peers.discard(remote_unit)  # Bug #1192433
 
-        # Prepare for failover. We need to suspend replication to ensure
-        # that the replay point remains consistent throughout the
-        # election, and publish that replay point. By comparing these
-        # replay points, the most up to date hot standby can be
-        # identified and promoted to the new master.
+    # True if we were following the departed unit.
+    following_departed = (local_state.get('following', None) == remote_unit)
+
+    if remaining_peers and not following_departed:
+        log("Remaining {}".format(local_state['state']))
+
+    elif remaining_peers and following_departed:
+        # If the unit being removed was our master, prepare for failover.
+        # We need to suspend replication to ensure that the replay point
+        # remains consistent throughout the election, and publish that
+        # replay point. Once all units have entered this steady state,
+        # we can identify the most up to date hot standby and promote it
+        # to be the new master.
+        log("Entering failover state")
         cur = db_cursor(autocommit=True)
-        cur.execute(
-            "SELECT pg_is_xlog_replay_paused()")
+        cur.execute("SELECT pg_is_xlog_replay_paused()")
         already_paused = cur.fetchone()[0]
         local_state["paused_at_failover"] = already_paused
         if not already_paused:
             cur.execute("SELECT pg_xlog_replay_pause()")
+        # Switch to failover state. Don't cleanup the 'following'
+        # setting because having access to the former master is still
+        # useful.
         local_state['state'] = 'failover'
         local_state['wal_received_offset'] = postgresql_wal_received_offset()
 
-        # Now do nothing. We can't elect a new master until all the
-        # remaining peers are in a steady state and have published their
-        # wal_received_offset. Only then can we select a node to be
-        # master.
-        pass
+    else:
+        log("Last unit standing. Switching from {} to standalone.".format(
+            local_state['state']))
+        promote_database()
+        local_state['state'] = 'standalone'
+        if 'following' in local_state:
+            del local_state['following']
+        if 'wal_received_offset' in local_state:
+            del local_state['wal_received_offset']
+        if 'paused_at_failover' in local_state:
+            del local_state['paused_at_failover']
 
     config_changed(postgresql_config)
     local_state.publish()
 
 
 def replication_relation_broken():
+    # This unit has been removed from the service.
     promote_database()
-    local_state['state'] = 'standalone'
-    local_state.save()
     if os.path.exists(charm_pgpass):
         os.unlink(charm_pgpass)
     config_changed(postgresql_config)
@@ -2122,9 +2146,6 @@ def main():
 
     elif hook_name == "nrpe-external-master-relation-changed":
         update_nrpe_checks()
-
-    elif hook_name.startswith('master') or hook_name.startswith('slave'):
-        raise NotImplementedError(hook_name)
 
     elif hook_name == 'replication-relation-joined':
         replication_relation_joined_changed()

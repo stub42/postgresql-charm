@@ -242,6 +242,13 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.addDetail('sql', text_content(repr((sql, result))))
         return result
 
+    def pg_ctlcluster(self, unit, command):
+        cmd = ['juju', 'ssh', unit,
+            # Due to Bug #1191079, we need to send the whole remote command
+            # as a single argument.
+            'sudo pg_ctlcluster 9.1 main -force {}'.format(command)]
+        _run(self, cmd)
+
     def test_basic(self):
         '''Set up a single unit service'''
         self.juju.deploy(TEST_CHARM, 'postgresql')
@@ -258,123 +265,128 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.assertEqual(result, [['t']])
 
     def is_master(self, postgres_unit, dbname=None):
-         is_master = self.sql(
-             'SELECT NOT pg_is_in_recovery()', postgres_unit,
-             dbname=dbname)[0][0]
-         return (is_master == 't')
+        is_master = self.sql(
+            'SELECT NOT pg_is_in_recovery()',
+            postgres_unit, dbname=dbname)[0][0]
+        return (is_master == 't')
 
     def test_failover(self):
         """Set up a multi-unit service and perform failovers."""
-        self.juju.deploy(TEST_CHARM, 'postgresql', num_units=4)
+        self.juju.deploy(TEST_CHARM, 'postgresql', num_units=3)
         self.juju.deploy(PSQL_CHARM, 'psql')
-        self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
+        self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
 
+        # On a freshly setup service, lowest numbered unit is always the
+        # master.
         units = unit_sorted(
             self.juju.status['services']['postgresql']['units'].keys())
-        master_unit, standby_unit_1, standby_unit_2, standby_unit_3 = units
+        master_unit, standby_unit_1, standby_unit_2 = units
 
-        # Confirm units agree on their roles. On a freshly setup
-        # service, lowest numbered unit is always the master.
-        self.assertIs(True, self.is_master(master_unit, 'postgres'))
-        self.assertIs(False, self.is_master(standby_unit_1, 'postgres'))
-        self.assertIs(False, self.is_master(standby_unit_2, 'postgres'))
-        self.assertIs(False, self.is_master(standby_unit_3, 'postgres'))
+        self.assertIs(True, self.is_master(master_unit))
+        self.assertIs(False, self.is_master(standby_unit_1))
+        self.assertIs(False, self.is_master(standby_unit_2))
 
-        self.sql('CREATE TABLE Token (x int)', master_unit, dbname='postgres')
+        self.sql('CREATE TABLE Token (x int)', master_unit)
 
+        # Some simple helper to send data via the master and check if it
+        # was replicated to the hot standbys.
         _counter = [0]
 
         def send_token(unit):
             _counter[0] += 1
-            self.sql(
-                "INSERT INTO Token VALUES (%d)" % _counter[0],
-                unit, dbname='postgres')
+            self.sql("INSERT INTO Token VALUES (%d)" % _counter[0], unit)
 
         def token_received(unit):
             r = self.sql(
-                "SELECT TRUE FROM Token WHERE x=%d" % _counter[0],
-                unit, dbname='postgres')
+                "SELECT TRUE FROM Token WHERE x=%d" % _counter[0], unit)
             return (r == [['t']])
 
         # Confirm that replication is actually happening.
         send_token(master_unit)
         self.assertIs(True, token_received(standby_unit_1))
         self.assertIs(True, token_received(standby_unit_2))
-        self.assertIs(True, token_received(standby_unit_3))
-
-        # When we failover, the unit most in sync with the old master is
-        # elected the new master. Disable replication on standby_unit_1
-        # and standby_unit_3 to ensure that standby_unit_2 is the best
-        # candidate for master.
-        self.sql(
-            'SELECT pg_xlog_replay_pause()', standby_unit_1, dbname='postgres')
-        self.sql(
-            'SELECT pg_xlog_replay_pause()', standby_unit_3, dbname='postgres')
-
-        send_token(master_unit)
-        self.assertIs(False, token_received(standby_unit_1))
-        self.assertIs(True, token_received(standby_unit_2))
-        self.assertIs(False, token_received(standby_unit_3))
 
         # Remove the master unit.
         self.juju.do(['remove-unit', master_unit])
         self.juju.wait_until_ready()
 
-        # Confirm the failover worked as expected.
-        self.assertIs(False, self.is_master(standby_unit_1, 'postgres'))
-        self.assertIs(True, self.is_master(standby_unit_2, 'postgres'))
-        self.assertIs(False, self.is_master(standby_unit_3, 'postgres'))
-
-        master_unit = standby_unit_2
-
-        # Replication was not reenabled by the failover.
-        send_token(master_unit)
-        self.assertIs(False, token_received(standby_unit_1))
-        self.assertIs(False, token_received(standby_unit_3))
-        self.sql(
-            'select pg_xlog_replay_resume()',
-            standby_unit_1, dbname='postgres')
-        self.sql(
-            'select pg_xlog_replay_resume()',
-            standby_unit_3, dbname='postgres')
-
-        # Now replication is happening again
-        self.assertIs(True, token_received(standby_unit_1))
-        self.assertIs(True, token_received(standby_unit_3))
-
-        # Remove the master again
-        self.juju.do(['remove-unit', master_unit])
-        self.juju.wait_until_ready()
-
-        # Now we have a new master, and we can't be sure which of the
-        # remaining two units was elected because we don't know if one
-        # happened to be more in sync than the other.
-        standby_unit_1_is_master = is_master(standby_unit_1, 'postgres')
-        standby_unit_3_is_master = is_master(standby_unit_3, 'postgres')
-        self.assertNotEqual(standby_unit_1_is_master, standby_unit_3_is_master)
+        # When we failover, the unit that has received the most WAL
+        # information from the old master (most in sync) is elected the
+        # new master.
+        standby_unit_1_is_master = self.is_master(standby_unit_1)
+        standby_unit_2_is_master = self.is_master(standby_unit_2)
+        self.assertNotEqual(
+            standby_unit_1_is_master, standby_unit_2_is_master)
 
         if standby_unit_1_is_master:
             master_unit = standby_unit_1
-            standby_unit = standby_unit_3
+            standby_unit = standby_unit_2
         else:
-            master_unit = standby_unit_3
+            master_unit = standby_unit_2
             standby_unit = standby_unit_1
 
-        # Replication is already flowing.
+        # Confirm replication is still working.
         send_token(master_unit)
         self.assertIs(True, token_received(standby_unit))
 
-        # When we remove the last master, we end up with a single
-        # functioning standalone database.
+        # Remove the master again, leaving a single unit.
         self.juju.do(['remove-unit', master_unit])
         self.juju.wait_until_ready()
 
-        self.is_master(standby_unit, 'postgres')
+        # Last unit is a working, standalone database.
+        self.is_master(standby_unit)
+        send_token(standby_unit)
 
-        # TODO: We need to extend the postgresql-psql charm to allow us
-        # to inspect the status attribute on the relation. It should no
-        # longer be 'master', but instead 'standalone'.
+        # We can tell it is correctly reporting that it is standalone by
+        # seeing if the -master and -hot-standby scripts no longer exist
+        # on the psql unit.
+        self.assertRaises(
+            subprocess.CalledProcessError,
+            self.sql, 'SELECT TRUE', 'master')
+        self.assertRaises(
+            subprocess.CalledProcessError,
+            self.sql, 'SELECT TRUE', 'hot standby')
+
+    def test_failover_election(self):
+        """Ensure master elected in a failover is the best choice"""
+        self.juju.deploy(TEST_CHARM, 'postgresql', num_units=3)
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
+        self.juju.wait_until_ready()
+
+        # On a freshly setup service, lowest numbered unit is always the
+        # master.
+        units = unit_sorted(
+            self.juju.status['services']['postgresql']['units'].keys())
+        master_unit, standby_unit_1, standby_unit_2 = units
+
+        # Shutdown PostgreSQL on standby_unit_1 and ensure
+        # standby_unit_2 will have received more WAL information from
+        # the master.
+        self.pg_ctlcluster(standby_unit_1, stop)
+        self.sql("SELECT pg_switch_xlog()", master_unit, dbname='postgres')
+
+        # Destroy the master database, just like this was a real
+        # disaster.
+        cmd = ['juju', 'ssh', unit,
+            # Due to Bug #1191079, we need to send the whole remote command
+            # as a single argument.
+            'sudo pg_dropcluster --stop 9.1 main']
+        _run(self, cmd)
+
+        # Restart standby_unit_1 now the master unit is dead and it has
+        # no way or resyncing.
+        self.pg_ctlcluster(standby_unit_1, start)
+
+        # Failover. Note that this also tests we can remove a unit that
+        # does not have a working database.
+        self.juju.do(['remove-unit', master_unit])
+        self.juju.wait_until_ready()
+
+        # Ensure the election went as predicted.
+        self.assertIs(False, self.is_master(standby_unit_1))
+        self.assertIs(True, self.is_master(standby_unit_2))
 
 
 def unit_sorted(units):
