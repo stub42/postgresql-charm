@@ -298,9 +298,16 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
             self.sql("INSERT INTO Token VALUES (%d)" % _counter[0], unit)
 
         def token_received(unit):
-            r = self.sql(
-                "SELECT TRUE FROM Token WHERE x=%d" % _counter[0], unit)
-            return (r == [['t']])
+            # async replocation can lag, so retry for a little while to
+            # give the databases a chance to get their act together.
+            start = time.time()
+            timeout = start + 60
+            while time.time() <= timeout:
+                r = self.sql(
+                    "SELECT TRUE FROM Token WHERE x=%d" % _counter[0], unit)
+                if r == [['t']]:
+                    return True
+            return False
 
         # Confirm that replication is actually happening.
         send_token(master_unit)
@@ -364,12 +371,12 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # Shutdown PostgreSQL on standby_unit_1 and ensure
         # standby_unit_2 will have received more WAL information from
         # the master.
-        self.pg_ctlcluster(standby_unit_1, stop)
+        self.pg_ctlcluster(standby_unit_1, 'stop')
         self.sql("SELECT pg_switch_xlog()", master_unit, dbname='postgres')
 
         # Destroy the master database, just like this was a real
         # disaster.
-        cmd = ['juju', 'ssh', unit,
+        cmd = ['juju', 'ssh', master_unit,
             # Due to Bug #1191079, we need to send the whole remote command
             # as a single argument.
             'sudo pg_dropcluster --stop 9.1 main']
@@ -377,7 +384,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
         # Restart standby_unit_1 now the master unit is dead and it has
         # no way or resyncing.
-        self.pg_ctlcluster(standby_unit_1, start)
+        self.pg_ctlcluster(standby_unit_1, 'start')
 
         # Failover. Note that this also tests we can remove a unit that
         # does not have a working database.
