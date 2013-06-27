@@ -1,0 +1,4 @@
+destination: hooks/charmhelpers
+branch: lp:~stub/charm-helpers/bug-1182959-no-implicit-serializable-magic
+include:
+    - core
