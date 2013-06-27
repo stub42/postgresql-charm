@@ -90,6 +90,7 @@ class State(dict):
         add(replication_state, 'replication_password')
         add(replication_state, 'wal_received_offset')
         add(replication_state, 'following')
+        add(replication_state, 'client_relations')
 
         authorized = self.get('authorized', None)
         if authorized:
@@ -575,8 +576,7 @@ def create_postgresql_config(postgresql_config):
     num_slaves = slave_count()
     if num_slaves > 0:
         juju_log(
-            MSG_INFO, 'Master replicated to {} hot standbys.'.format(
-                num_slaves))
+            MSG_INFO, '{} hot standbys in peer relation.'.format(num_slaves))
         juju_log(MSG_INFO, 'Ensuring minimal replication settings')
         config_data['hot_standby'] = 'on'
         config_data['wal_level'] = 'hot_standby'
@@ -1074,37 +1074,6 @@ def install(run_pre=True):
 
 
 def upgrade_charm():
-    # Detect if we are upgrading from the old charm that used repmgr for
-    # replication.
-    from_repmgr = not 'juju_replication' in local_state
-
-    # Handle renaming of the repmgr user to juju_replication.
-    if from_repmgr and local_state['state'] == 'master':
-        replication_password = create_user(
-            'juju_replication', admin=True, replication=True)
-        local_state['replication_password'] = replication_password
-        generate_pgpass()
-        juju_log(MSG_INFO, "Updating replication connection details")
-        local_state.publish()
-        drop_database('repmgr')
-
-    if from_repmgr and local_state['state'] == 'hot standby':
-        for relid in relation_ids(relation_types=['replication']):
-            for unit in relation_list(relid):
-                relation = relation_get(unit_name=unit, relation_id=relid)
-                if relation.get('state', None) == 'master':
-                    recovery_conf = Template(
-                        open("templates/recovery.conf.tmpl").read()).render({
-                            'host': relation['private-address'],
-                            'password': local_state['replication_password']})
-                    juju_log(MSG_DEBUG, recovery_conf)
-                    install_file(
-                        recovery_conf,
-                        os.path.join(postgresql_cluster_dir, 'recovery.conf'),
-                        owner="postgres", group="postgres")
-                    postgresql_restart()
-                    break
-
     snapshot_relations()
 
 
@@ -1186,8 +1155,10 @@ def create_user(user, admin=False, replication=False):
         password = pwgen()
         set_password(user, password)
     if user_exists(user):
+        log("Updating {} user".format(user))
         action = ["ALTER ROLE"]
     else:
+        log("Creating {} user".format(user))
         action = ["CREATE ROLE"]
     action.append('%s WITH LOGIN')
     if admin:
@@ -1353,11 +1324,10 @@ def db_relation_joined_changed(user, database, roles):
 
     # Update the peer relation, notifying any hot standby units
     # to republish connection details to the client relation.
-    client_relations = ' '.join(
+    local_state['client_relations'] = ' '.join(
         hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
-    log("Client relations {}".format(client_relations))
-    for relid in hookenv.relation_ids('replication'):
-        hookenv.relation_set(relid, client_relations=client_relations)
+    log("Client relations {}".format(local_state['client_relations']))
+    local_state.publish()
 
     generate_postgresql_hba(postgresql_hba, user=user,
                             schema_user=schema_user,
@@ -1386,11 +1356,10 @@ def db_admin_relation_joined_changed(user):
 
     # Update the peer relation, notifying any hot standby units
     # to republish connection details to the client relation.
-    client_relations = ' '.join(
+    local_state['client_relations'] = ' '.join(
         hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
-    log("Client relations {}".format(client_relations))
-    for relid in hookenv.relation_ids('replication'):
-        hookenv.relation_set(relid, client_relations=client_relations)
+    log("Client relations {}".format(local_state['client_relations']))
+    local_state.publish()
 
     generate_postgresql_hba(postgresql_hba)
 
@@ -1516,15 +1485,11 @@ def authorize_remote_ssh():
 def generate_pgpass():
     passwords = {}
 
-    # Replication
-    for relid in relation_ids(relation_types=['replication', 'master']):
-        for unit in relation_list(relid):
-            relation = relation_get(unit_name=unit, relation_id=relid)
-
-            if relation.get('state', None) == 'master':
-                replication_password = relation.get('replication_password', '')
-                if replication_password:
-                    passwords['juju_replication'] = replication_password
+    # Replication.
+    # pg_basebackup only works with the password in .pgpass, or entered
+    # at the command prompt.
+    if 'replication_password' in local_state:
+        passwords['juju_replication'] = local_state['replication_password']
 
     if passwords:
         pgpass = '\n'.join(
@@ -1578,6 +1543,12 @@ def follow_database(master):
     '''Connect the database as a streaming replica of the master.'''
     master_relation = hookenv.relation_get(unit=master)
 
+    recovery_conf_path = os.path.join(postgresql_cluster_dir, 'recovery.conf')
+    if os.path.exists(recovery_conf_path):
+        old_recovery_conf = open(recovery_conf_path, 'r').read()
+    else:
+        old_recovery_conf = None
+
     recovery_conf = Template(
         open("templates/recovery.conf.tmpl").read()).render({
             'host': master_relation['private-address'],
@@ -1588,7 +1559,9 @@ def follow_database(master):
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
         owner="postgres", group="postgres")
 
-    postgresql_restart()
+    if recovery_conf != old_recovery_conf:
+        log("recovery.conf updated. Restarting to take effect.")
+        postgresql_restart()
 
 
 def elected_master():
@@ -1654,7 +1627,7 @@ def elected_master():
     for relid in hookenv.relation_ids('replication'):
         units = hookenv.related_units(relid) + [hookenv.local_unit()]
         master = unit_sorted(units)[0]
-        log("New peer group. {} is the master".format(master))
+        log("New peer group. {} is elected master".format(master))
         return master
 
 
@@ -1694,6 +1667,8 @@ def replication_relation_joined_changed():
             replication_password = create_user(
                 'juju_replication', replication=True)
             local_state['replication_password'] = replication_password
+            local_state['client_relations'] = ' '.join(
+                hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
 
         else:
             log("I am master and remain master")
@@ -1701,43 +1676,45 @@ def replication_relation_joined_changed():
     elif not authorized_by(master):
         log("I need to follow {} but am not yet authorized".format(master))
 
-    elif 'following' not in local_state:
-        log("Fresh unit. I will clone {} and become a hot standby".format(
-            master))
-
-        local_state['replication_password'] = hookenv.relation_get(
-            'replication_password', master)
-        generate_pgpass()
-
-        # Before we start destroying anything, ensure that the
-        # master is contactable.
-        master_ip = hookenv.relation_get('private-address', master)
-        wait_for_db(db='postgres', user='juju_replication', host=master_ip)
-
-        clone_database(master, master_ip)
-
-        local_state['state'] = 'hot standby'
-        local_state['following'] = master
-        if 'wal_received_offset' in local_state:
-            del local_state['wal_received_offset']
-
-    elif local_state['following'] == master:
-        log("I am a hot standby already following {}".format(master))
-
     else:
-        log("I am a hot standby following new master {}".format(master))
+        log("Syncing replication_password from {}".format(master), DEBUG)
         local_state['replication_password'] = hookenv.relation_get(
             'replication_password', master)
         generate_pgpass()
-        follow_database(master)
-        if not local_state["paused_at_failover"]:
-            run_sql_as_postgres("SELECT pg_xlog_replay_resume()")
-        local_state['state'] = 'hot standby'
-        local_state['following'] = master
-        del local_state['wal_received_offset']
-        del local_state['paused_at_failover']
 
-    if local_state['state'] == 'hot standby':
+        if 'following' not in local_state:
+            log("Fresh unit. I will clone {} and become a hot standby".format(
+                master))
+
+            # Before we start destroying anything, ensure that the
+            # master is contactable.
+            master_ip = hookenv.relation_get('private-address', master)
+            wait_for_db(db='postgres', user='juju_replication', host=master_ip)
+
+            clone_database(master, master_ip)
+
+            local_state['state'] = 'hot standby'
+            local_state['following'] = master
+            if 'wal_received_offset' in local_state:
+                del local_state['wal_received_offset']
+
+        elif local_state['following'] == master:
+            log("I am a hot standby already following {}".format(master))
+
+            # Replication connection details may have changed, so
+            # ensure we are still following.
+            follow_database(master)
+
+        else:
+            log("I am a hot standby following new master {}".format(master))
+            follow_database(master)
+            if not local_state["paused_at_failover"]:
+                run_sql_as_postgres("SELECT pg_xlog_replay_resume()")
+            local_state['state'] = 'hot standby'
+            local_state['following'] = master
+            del local_state['wal_received_offset']
+            del local_state['paused_at_failover']
+
         publish_hot_standby_credentials()
         generate_postgresql_hba(postgresql_hba)
 
@@ -2075,17 +2052,10 @@ os.environ['PGPASSFILE'] = charm_pgpass
 def main():
     # Hook and context overview. The various replication and client
     # hooks interact in complex ways.
-    log("Running {} hook".format(hook_name), INFO)
-    if 'JUJU_RELATION_NAME' in os.environ:
+    log("Running {} hook".format(hook_name))
+    if hookenv.relation_id():
         log("Relation {} with {}".format(
-            os.environ['JUJU_RELATION_NAME'],
-            ' '.join(hookenv.related_units)), INFO)
-        if os.environ.get('JUJU_REMOTE_UNIT', None):
-            log(
-                "Remote unit is {}".format(os.environ['JUJU_REMOTE_UNIT']),
-                INFO)
-        else:
-            log("There is no remote unit")
+            hookenv.relation_id(), hookenv.remote_unit()))
 
     if hook_name == "install":
         install()
