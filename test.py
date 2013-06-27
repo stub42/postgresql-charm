@@ -1,7 +1,12 @@
 #!/usr/bin/python
 
 """
-TEST_DEBUG_FILE=test-debug.log TEST_TIMEOUT=600 ./test.py -vv
+Test the PostgreSQL charm.
+
+Usage:
+    juju bootstrap
+    TEST_DEBUG_FILE=test-debug.log TEST_TIMEOUT=900 ./test.py -v
+    juju destroy-environment
 """
 
 import fixtures
@@ -221,6 +226,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         elif postgres_unit == 'hot standby':
             postgres_unit = 'hot-standby'  # Munge for generating script name.
         if dbname is None:
+            import pdb; pdb.set_trace()
             psql_cmd = [
                 'psql-db-{}'.format(postgres_unit.replace('/', '-'))]
         else:
@@ -374,26 +380,28 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.pg_ctlcluster(standby_unit_1, 'stop')
         self.sql("SELECT pg_switch_xlog()", master_unit, dbname='postgres')
 
-        # Destroy the master database, just like this was a real
-        # disaster.
-        cmd = ['juju', 'ssh', master_unit,
-            # Due to Bug #1191079, we need to send the whole remote command
-            # as a single argument.
-            'sudo pg_dropcluster --stop 9.1 main']
-        _run(self, cmd)
+        # Break replication so when we bring standby_unit_1 up, it has
+        # no way of catching up.
+        self.sql(
+            "ALTER ROLE juju_replication NOREPLICATION",
+            master_unit, dbname='postgres')
+        self.pg_ctlcluster(master_unit, 'restart')
 
-        # Restart standby_unit_1 now the master unit is dead and it has
-        # no way or resyncing.
+        # Restart standby_unit_1 now it has no way or resyncing.
         self.pg_ctlcluster(standby_unit_1, 'start')
 
-        # Failover. Note that this also tests we can remove a unit that
-        # does not have a working database.
+        # Failover.
         self.juju.do(['remove-unit', master_unit])
         self.juju.wait_until_ready()
 
+        # Fix replication.
+        self.sql(
+            "ALTER ROLE juju_replication REPLICATION",
+            standby_unit_2, dbname='postgres')
+
         # Ensure the election went as predicted.
-        self.assertIs(False, self.is_master(standby_unit_1))
-        self.assertIs(True, self.is_master(standby_unit_2))
+        self.assertIs(True, self.is_master(standby_unit_2, 'postgres'))
+        self.assertIs(False, self.is_master(standby_unit_1, 'postgres'))
 
 
 def unit_sorted(units):
