@@ -226,7 +226,6 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         elif postgres_unit == 'hot standby':
             postgres_unit = 'hot-standby'  # Munge for generating script name.
         if dbname is None:
-            import pdb; pdb.set_trace()
             psql_cmd = [
                 'psql-db-{}'.format(postgres_unit.replace('/', '-'))]
         else:
