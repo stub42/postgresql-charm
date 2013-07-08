@@ -41,8 +41,8 @@ def write_file(path, contents, owner='root', group='root', perms=0o444):
     '''
     log("Writing file {} {}:{} {:o}".format(path, owner, group, perms))
     uid = getpwnam(owner).pw_uid
-    gid = getgrnam(group).pw_gid
-    dest_fd = os.open(dest, os.O_WRONLY | os.O_TRUNC | os.O_CREAT, mode)
+    gid = getgrnam(group).gr_gid
+    dest_fd = os.open(path, os.O_WRONLY | os.O_TRUNC | os.O_CREAT, perms)
     os.fchown(dest_fd, uid, gid)
     with os.fdopen(dest_fd, 'w') as destfile:
         destfile.write(str(contents))
@@ -870,7 +870,7 @@ def install(run_pre=True):
         dump_script, perms=0755)
     write_file(
         '{}/pg_backup_job'.format(postgresql_scripts_dir),
-        backup_job, mode=0755)
+        backup_job, perms=0755)
     install_postgresql_crontab(postgresql_crontab)
     hookenv.open_port(5432)
 
@@ -1109,8 +1109,9 @@ def snapshot_relations():
 # slave db-relation-joined (republish)
 
 @hooks.hook('db-relation-joined', 'db-relation-changed')
-def db_relation_joined_changed(user, database, roles):
-    if local_state['state'] not in ('master', 'standalone'):
+def db_relation_joined_changed():
+    if local_state['state'] == 'hot standby':
+        publish_hot_standby_credentials()
         return
 
     # By default, we create a database named after the remote
@@ -1159,8 +1160,9 @@ def db_relation_joined_changed(user, database, roles):
 
 
 @hooks.hook('db-admin-relation-joined', 'db-admin-relation-changed')
-def db_admin_relation_joined_changed(user):
-    if local_state['state'] not in ('master', 'standalone'):
+def db_admin_relation_joined_changed():
+    if local_state['state'] == 'hot standby':
+        publish_hot_standby_credentials()
         return
 
     user = user_name(
@@ -1531,11 +1533,11 @@ def replication_relation_joined_changed():
 def publish_hot_standby_credentials():
     '''
     If a hot standby joins a client relation before the master
-    unit, it was unable to publish connection details. However,
+    unit, it is unable to publish connection details. However,
     when the master does join it updates the client_relations
-    value in the peer relation causing the
-    replication-relation-changed hook to be invoked. This gives us
-    a second opertunity to publish connection details.
+    value in the peer relation causing the replication-relation-changed
+    hook to be invoked. This gives us a second opertunity to publish
+    connection details.
 
     This function is invoked from both the client and peer
     relation-changed hook. One of these will work depending on the order
@@ -1856,7 +1858,3 @@ if __name__ == '__main__':
             hookenv.relation_id(), hookenv.remote_unit()))
 
     hooks.execute(sys.argv)
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())
