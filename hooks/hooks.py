@@ -661,7 +661,7 @@ def generate_postgresql_hba(postgresql_hba, user=None,
                 raise RuntimeError(
                     'Unknown relation type {}'.format(repr(relid)))
 
-            allowed_hosts.add(relation['private-address'])
+            allowed_hosts.add(os.environ['JUJU_REMOTE_UNIT'])
             relation['private-address'] = munge_address(
                 relation['private-address'])
             relation_data.append(relation)

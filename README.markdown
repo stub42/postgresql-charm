@@ -118,7 +118,7 @@ manipulate all other aspects of the database.
 - `user`: a regular user authorized to read the database
 - `password`: the password for `user`
 - `state`: 'standalone', 'master' or 'hot standby'.
-- `allowed-hosts`: space separated list of allowed hosts (unit private-address).
+- `allowed-hosts`: space separated list of allowed clients (unit name).
   You should check this to determine if you can connect to the database yet.
 
 ## During db-admin-relation-changed
@@ -130,5 +130,5 @@ manipulate all other aspects of the database.
 - `user`: a created super user
 - `password`: the password for `user`
 - `state`: 'standalone', 'master' or 'hot standby'
-- `allowed-hosts`: space separated list of allowed hosts (unit private-address).
+- `allowed-hosts`: space separated list of allowed clients (unit name).
   You should check this to determine if you can connect to the database yet.
