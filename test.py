@@ -255,7 +255,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         _run(self, cmd)
 
     def test_basic(self):
-        '''Set up a single unit service'''
+        '''Connect to a a single unit service via the db relationship.'''
         self.juju.deploy(TEST_CHARM, 'postgresql')
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
@@ -265,9 +265,19 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # from adding the relation. I'm protected here as 'juju status'
         # takes about 25 seconds to run from here to my test cloud but
         # others might not be so 'lucky'.
-        self.addDetail('status', text_content(repr(self.juju.status)))
         result = self.sql('SELECT TRUE')
         self.assertEqual(result, [['t']])
+
+    def test_basic_admin(self):
+        '''Connect to a single unit service via the db-admin relationship.'''
+        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
+        self.juju.wait_until_ready()
+
+        result = self.sql('SELECT TRUE', dbname='postgres')
+        self.assertEqual(result, [['t']])
+
 
     def is_master(self, postgres_unit, dbname=None):
         is_master = self.sql(
