@@ -5,7 +5,6 @@ import commands
 import cPickle as pickle
 import glob
 from grp import getgrnam
-import json
 import os.path
 from pwd import getpwnam
 import random
@@ -15,13 +14,16 @@ import socket
 import string
 import subprocess
 import sys
-from textwrap import dedent
 import time
 import yaml
 from yaml.constructor import ConstructorError
 
-from charmhelpers.core import hookenv
+from charmhelpers.core import hookenv, host
+from charmhelpers.core.hookenv import (
+    CRITICAL, ERROR, WARNING, INFO, DEBUG, log,
+    )
 
+hooks = hookenv.Hooks()
 
 # jinja2 may not be importable until the install hook has installed the
 # required packages.
@@ -30,23 +32,26 @@ def Template(*args, **kw):
     return Template(*args, **kw)
 
 
-###############################################################################
-# Supporting functions
-###############################################################################
-MSG_CRITICAL = "CRITICAL"
-MSG_DEBUG = "DEBUG"
-MSG_INFO = "INFO"
-MSG_ERROR = "ERROR"
-MSG_WARNING = "WARNING"
+def write_file(path, contents, owner='root', group='root', perms=0o444):
+    '''Temporary alternative to charm-helpers write_file().
 
-
-def juju_log(level, msg):
-    subprocess.call(['juju-log', '-l', level, msg])
+    charm-helpers' write_file() magic makes it useless for any file
+    containing curly brackets, so work around for now until the feature
+    can be discussed.
+    '''
+    log("Writing file {} {}:{} {:o}".format(path, owner, group, perms))
+    uid = getpwnam(owner).pw_uid
+    gid = getgrnam(group).gr_gid
+    dest_fd = os.open(path, os.O_WRONLY | os.O_TRUNC | os.O_CREAT, perms)
+    os.fchown(dest_fd, uid, gid)
+    with os.fdopen(dest_fd, 'w') as destfile:
+        destfile.write(str(contents))
 
 
 class State(dict):
     """Encapsulate state common to the unit for republishing to relations."""
     def __init__(self, state_file):
+        super(State, self).__init__()
         self._state_file = state_file
         self.load()
 
@@ -74,27 +79,32 @@ class State(dict):
         client_state = {}
         add(client_state, 'state')
 
-        for relid in relation_ids(relation_types=['db', 'db-admin']):
-            relation_set(client_state, relid)
+        for relid in hookenv.relation_ids('db'):
+            hookenv.relation_set(relid, client_state)
+
+        for relid in hookenv.relation_ids('db-admin'):
+            hookenv.relation_set(relid, client_state)
 
         replication_state = dict(client_state)
 
         add(replication_state, 'public_ssh_key')
         add(replication_state, 'ssh_host_key')
         add(replication_state, 'replication_password')
+        add(replication_state, 'wal_received_offset')
+        add(replication_state, 'following')
+        add(replication_state, 'client_relations')
 
         authorized = self.get('authorized', None)
         if authorized:
             replication_state['authorized'] = ' '.join(sorted(authorized))
 
-        for relid in relation_ids(relation_types=replication_relation_types):
-            relation_set(replication_state, relid)
+        for relid in hookenv.relation_ids('replication'):
+            hookenv.relation_set(relid, replication_state)
 
         self.save()
 
 
 ###############################################################################
-
 # Volume managment
 ###############################################################################
 #------------------------------
@@ -110,7 +120,7 @@ def volume_get_volid_from_volume_map():
         if volume_map:
             return volume_map.get(os.environ['JUJU_UNIT_NAME'])
     except ConstructorError as e:
-        juju_log(MSG_WARNING, "invalid YAML in 'volume-map': %s", e)
+        log("invalid YAML in 'volume-map': {}".format(e), WARNING)
     return None
 
 
@@ -141,18 +151,21 @@ def volume_mount_point_from_volid(volid):
 def volume_get_volume_id():
     ephemeral_storage = config_data['volume-ephemeral-storage']
     volid = volume_get_volid_from_volume_map()
-    juju_unit_name = os.environ['JUJU_UNIT_NAME']
+    juju_unit_name = hookenv.local_unit()
     if ephemeral_storage in [True, 'yes', 'Yes', 'true', 'True']:
         if volid:
-            juju_log(MSG_ERROR, "volume-ephemeral-storage is True, but " +
-                     "volume-map['%s'] -> %s" % (juju_unit_name, volid))
+            log(
+                "volume-ephemeral-storage is True, but " +
+                "volume-map[{!r}] -> {}".format(juju_unit_name, volid), ERROR)
             return None
         else:
             return "--ephemeral"
     else:
         if not volid:
-            juju_log(MSG_ERROR, "volume-ephemeral-storage is False, but " +
-                     "no volid found for volume-map['%s']" % (juju_unit_name))
+            log(
+                "volume-ephemeral-storage is False, but "
+                "no volid found for volume-map[{!r}]".format(
+                    hookenv.local_unit()), ERROR)
             return None
     return volid
 
@@ -182,7 +195,7 @@ def volume_get_all_mounted():
 def enable_service_start(service):
     ### NOTE: doesn't implement per-service, this can be an issue
     ###       for colocated charms (subordinates)
-    juju_log(MSG_INFO, "NOTICE: enabling %s start by policy-rc.d" % service)
+    log("enabling {} start by policy-rc.d".format(service))
     if os.path.exists('/usr/sbin/policy-rc.d'):
         os.unlink('/usr/sbin/policy-rc.d')
         return True
@@ -190,10 +203,10 @@ def enable_service_start(service):
 
 
 def disable_service_start(service):
-    juju_log(MSG_INFO, "NOTICE: disabling %s start by policy-rc.d" % service)
+    log("disabling {} start by policy-rc.d".format(service))
     policy_rc = '/usr/sbin/policy-rc.d'
-    policy_rc_tmp = "%s.tmp" % policy_rc
-    open('%s' % policy_rc_tmp, 'w').write("""#!/bin/bash
+    policy_rc_tmp = "{}.tmp".format(policy_rc)
+    open(policy_rc_tmp, 'w').write("""#!/bin/bash
 [[ "$1"-"$2" == %s-start ]] && exit 101
 exit 0
 EOF
@@ -202,41 +215,18 @@ EOF
     os.rename(policy_rc_tmp, policy_rc)
 
 
-#------------------------------------------------------------------------------
-# run: Run a command, return the output
-#------------------------------------------------------------------------------
 def run(command, exit_on_error=True):
+    '''Run a command and return the output.'''
     try:
-        juju_log(MSG_DEBUG, command)
+        log(command, DEBUG)
         return subprocess.check_output(
             command, stderr=subprocess.STDOUT, shell=True)
     except subprocess.CalledProcessError, e:
-        juju_log(MSG_ERROR, "status=%d, output=%s" % (e.returncode, e.output))
+        log("status=%d, output=%s" % (e.returncode, e.output), ERROR)
         if exit_on_error:
             sys.exit(e.returncode)
         else:
             raise
-
-
-#------------------------------------------------------------------------------
-# install_file: install a file resource. overwites existing files.
-#------------------------------------------------------------------------------
-def install_file(contents, dest, owner="root", group="root", mode=0600):
-    uid = getpwnam(owner)[2]
-    gid = getgrnam(group)[2]
-    dest_fd = os.open(dest, os.O_WRONLY | os.O_TRUNC | os.O_CREAT, mode)
-    os.fchown(dest_fd, uid, gid)
-    with os.fdopen(dest_fd, 'w') as destfile:
-        destfile.write(str(contents))
-
-
-#------------------------------------------------------------------------------
-# install_dir: create a directory
-#------------------------------------------------------------------------------
-def install_dir(dirname, owner="root", group="root", mode=0700):
-    command = '/usr/bin/install -o {} -g {} -m {} -d {}'.format(
-        owner, group, oct(mode), dirname)
-    return run(command)
 
 
 #------------------------------------------------------------------------------
@@ -263,7 +253,7 @@ def postgresql_stop():
 def postgresql_start():
     status, output = commands.getstatusoutput("invoke-rc.d postgresql start")
     if status != 0:
-        juju_log(MSG_CRITICAL, output)
+        log(output, CRITICAL)
         return False
     return postgresql_is_running()
 
@@ -278,11 +268,8 @@ def postgresql_restart():
         last_warning = time.time()
         while postgresql_is_in_backup_mode():
             if time.time() + 120 > last_warning:
-                juju_log(
-                    MSG_WARNING,
-                    "In backup mode. PostgreSQL restart blocked.")
-                juju_log(
-                    MSG_INFO,
+                log("In backup mode. PostgreSQL restart blocked.", WARNING)
+                log(
                     "Run \"psql -U postgres -c 'SELECT pg_stop_backup()'\""
                     "to cancel backup mode and forcefully unblock this hook.")
                 last_warning = time.time()
@@ -337,9 +324,8 @@ def postgresql_reload_or_restart():
 
         if new_value != live_value:
             if live_config:
-                juju_log(
-                    MSG_DEBUG, "Changed {} from {} to {}".format(
-                        name, repr(live_value), repr(new_value)))
+                log("Changed {} from {!r} to {!r}".format(
+                    name, live_value, new_value), DEBUG)
             if context == 'postmaster':
                 # A setting has changed that requires PostgreSQL to be
                 # restarted before it will take effect.
@@ -347,14 +333,12 @@ def postgresql_reload_or_restart():
 
     if requires_restart:
         # A change has been requested that requires a restart.
-        juju_log(
-            MSG_WARNING,
-            "Configuration change requires PostgreSQL restart. "
-            "Restarting.")
+        log(
+            "Configuration change requires PostgreSQL restart. Restarting.",
+            WARNING)
         rc = postgresql_restart()
     else:
-        juju_log(
-            MSG_DEBUG, "PostgreSQL reload, config changes taking effect.")
+        log("PostgreSQL reload, config changes taking effect.", DEBUG)
         rc = postgresql_reload()  # No pending need to bounce, just reload.
 
     if rc == 0 and 'saved_config' in local_state:
@@ -364,178 +348,20 @@ def postgresql_reload_or_restart():
     return rc
 
 
-#------------------------------------------------------------------------------
-# config_get:  Returns a dictionary containing all of the config information
-#              Optional parameter: scope
-#              scope: limits the scope of the returned configuration to the
-#                     desired config item.
-#------------------------------------------------------------------------------
-def config_get(scope=None):
-    try:
-        config_cmd_line = ['config-get']
-        if scope is not None:
-            config_cmd_line.append(scope)
-        config_cmd_line.append('--format=json')
-        config_data = json.loads(subprocess.check_output(config_cmd_line))
-    except:
-        config_data = None
-    finally:
-        return(config_data)
-
-
-#------------------------------------------------------------------------------
-# get_service_port:   Convenience function that scans the existing postgresql
-#                     configuration file and returns a the existing port
-#                     being used.  This is necessary to know which port(s)
-#                     to open and close when exposing/unexposing a service
-#------------------------------------------------------------------------------
 def get_service_port(postgresql_config):
-    postgresql_config = load_postgresql_config(postgresql_config)
-    if postgresql_config is None:
-        return(None)
+    '''Return the port PostgreSQL is listening on.'''
+    if not os.path.exists(postgresql_config):
+        return None
+    postgresql_config = open(postgresql_config, 'r').read()
     port = re.search("port.*=(.*)", postgresql_config).group(1).strip()
     try:
         return int(port)
-    except:
+    except (ValueError, TypeError):
         return None
 
 
-#------------------------------------------------------------------------------
-# relation_json:  Returns json-formatted relation data
-#                Optional parameters: scope, relation_id
-#                scope:        limits the scope of the returned data to the
-#                              desired item.
-#                unit_name:    limits the data ( and optionally the scope )
-#                              to the specified unit
-#                relation_id:  specify relation id for out of context usage.
-#------------------------------------------------------------------------------
-def relation_json(scope=None, unit_name=None, relation_id=None):
-    command = ['relation-get', '--format=json']
-    if relation_id is not None:
-        command.extend(('-r', relation_id))
-    if scope is not None:
-        command.append(scope)
-    else:
-        command.append('-')
-    if unit_name is not None:
-        command.append(unit_name)
-    output = subprocess.check_output(command, stderr=subprocess.STDOUT)
-    return output or None
-
-
-#------------------------------------------------------------------------------
-# relation_get:  Returns a dictionary containing the relation information
-#                Optional parameters: scope, relation_id
-#                scope:        limits the scope of the returned data to the
-#                              desired item.
-#                unit_name:    limits the data ( and optionally the scope )
-#                              to the specified unit
-#------------------------------------------------------------------------------
-def relation_get(scope=None, unit_name=None, relation_id=None):
-    j = relation_json(scope, unit_name, relation_id)
-    if j:
-        return json.loads(j)
-    else:
-        return None
-
-
-def relation_set(keyvalues, relation_id=None):
-    args = []
-    if relation_id:
-        args.extend(['-r', relation_id])
-    args.extend(["{}='{}'".format(k, v or '') for k, v in keyvalues.items()])
-    run("relation-set {}".format(' '.join(args)))
-
-    ## Posting json to relation-set doesn't seem to work as documented?
-    ## Bug #1116179
-    ##
-    ## cmd = ['relation-set']
-    ## if relation_id:
-    ##     cmd.extend(['-r', relation_id])
-    ## p = Popen(
-    ##     cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-    ##     stderr=subprocess.PIPE)
-    ## (out, err) = p.communicate(json.dumps(keyvalues))
-    ## if p.returncode:
-    ##     juju_log(MSG_ERROR, err)
-    ##     sys.exit(1)
-    ## juju_log(MSG_DEBUG, "relation-set {}".format(repr(keyvalues)))
-
-
-def relation_list(relation_id=None):
-    """Return the list of units participating in the relation."""
-    if relation_id is None:
-        relation_id = os.environ['JUJU_RELATION_ID']
-    cmd = ['relation-list', '--format=json', '-r', relation_id]
-    json_units = subprocess.check_output(cmd).strip()
-    if json_units:
-        data = json.loads(json_units)
-        if data is not None:
-            return data
-    return []
-
-
-#------------------------------------------------------------------------------
-# relation_ids:  Returns a list of relation ids
-#                optional parameters: relation_type
-#                relation_type: return relations only of this type
-#------------------------------------------------------------------------------
-def relation_ids(relation_types=('db',)):
-    # accept strings or iterators
-    if isinstance(relation_types, basestring):
-        reltypes = [relation_types, ]
-    else:
-        reltypes = relation_types
-    relids = []
-    for reltype in reltypes:
-        relid_cmd_line = ['relation-ids', '--format=json', reltype]
-        json_relids = subprocess.check_output(relid_cmd_line).strip()
-        if json_relids:
-            relids.extend(json.loads(json_relids))
-    return relids
-
-
-#------------------------------------------------------------------------------
-# relation_get_all:  Returns a dictionary containing the relation information
-#                optional parameters: relation_type
-#                relation_type: limits the scope of the returned data to the
-#                               desired item.
-#------------------------------------------------------------------------------
-def relation_get_all(*args, **kwargs):
-    relation_data = []
-    relids = relation_ids(*args, **kwargs)
-    for relid in relids:
-        units_cmd_line = ['relation-list', '--format=json', '-r', relid]
-        json_units = subprocess.check_output(units_cmd_line).strip()
-        if json_units:
-            for unit in json.loads(json_units):
-                unit_data = \
-                    json.loads(relation_json(relation_id=relid,
-                                             unit_name=unit))
-                for key in unit_data:
-                    if key.endswith('-list'):
-                        unit_data[key] = unit_data[key].split()
-                unit_data['relation-id'] = relid
-                unit_data['unit'] = unit
-                relation_data.append(unit_data)
-    return relation_data
-
-
-#------------------------------------------------------------------------------
-# apt_get_install( packages ):  Installs package(s)
-#------------------------------------------------------------------------------
-def apt_get_install(packages=None):
-    if packages is None:
-        return(False)
-    cmd_line = ['apt-get', '-y', 'install', '-qq']
-    cmd_line.extend(packages)
-    return(subprocess.call(cmd_line))
-
-
-#------------------------------------------------------------------------------
-# create_postgresql_config:   Creates the postgresql.conf file
-#------------------------------------------------------------------------------
 def create_postgresql_config(postgresql_config):
+    '''Create the postgresql.conf file'''
     if config_data["performance_tuning"] == "auto":
         # Taken from:
         # http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
@@ -566,10 +392,8 @@ def create_postgresql_config(postgresql_config):
     # certain minimum levels.
     num_slaves = slave_count()
     if num_slaves > 0:
-        juju_log(
-            MSG_INFO, 'Master replicated to {} hot standbys.'.format(
-                num_slaves))
-        juju_log(MSG_INFO, 'Ensuring minimal replication settings')
+        log('{} hot standbys in peer relation.'.format(num_slaves))
+        log('Ensuring minimal replication settings')
         config_data['hot_standby'] = 'on'
         config_data['wal_level'] = 'hot_standby'
         config_data['max_wal_senders'] = max(
@@ -582,29 +406,27 @@ def create_postgresql_config(postgresql_config):
     # Return it as pg_config
     pg_config = Template(
         open("templates/postgresql.conf.tmpl").read()).render(config_data)
-    install_file(pg_config, postgresql_config)
+    write_file(
+        postgresql_config, pg_config,
+        owner="postgres",  group="postgres", perms=0600)
 
     local_state['saved_config'] = config_data
     local_state.save()
 
 
-#------------------------------------------------------------------------------
-# create_postgresql_ident:  Creates the pg_ident.conf file
-#------------------------------------------------------------------------------
 def create_postgresql_ident(postgresql_ident):
+    '''Create the pg_ident.conf file.'''
     ident_data = {}
-    pg_ident_template = \
-        Template(
-            open("templates/pg_ident.conf.tmpl").read()).render(ident_data)
-    with open(postgresql_ident, 'w') as ident_file:
-        ident_file.write(str(pg_ident_template))
+    pg_ident_template = Template(
+        open("templates/pg_ident.conf.tmpl").read())
+    write_file(
+        postgresql_ident, pg_ident_template.render(ident_data),
+        owner="postgres", group="postgres", perms=0600)
 
 
-#------------------------------------------------------------------------------
-# generate_postgresql_hba:  Creates the pg_hba.conf file
-#------------------------------------------------------------------------------
-def generate_postgresql_hba(postgresql_hba, user=None,
-                            schema_user=None, database=None):
+def generate_postgresql_hba(
+    postgresql_hba, user=None, schema_user=None, database=None):
+    '''Create the pg_hba.conf file.'''
 
     # Per Bug #1117542, when generating the postgresql_hba file we
     # need to cope with private-address being either an IP address
@@ -619,9 +441,10 @@ def generate_postgresql_hba(postgresql_hba, user=None,
             return addr
 
     relation_data = []
-    for relid in relation_ids(relation_types=['db', 'db-admin']):
-        local_relation = relation_get(
-            unit_name=os.environ['JUJU_UNIT_NAME'], relation_id=relid)
+    relids = hookenv.relation_ids('db') + hookenv.relation_ids('db-admin')
+    for relid in relids:
+        local_relation = hookenv.relation_get(
+            unit=hookenv.local_unit(), rid=relid)
 
         # We might see relations that have not yet been setup enough.
         # At a minimum, the relation-joined hook needs to have been run
@@ -630,10 +453,10 @@ def generate_postgresql_hba(postgresql_hba, user=None,
         if 'user' not in local_relation:
             continue
 
-        for unit in relation_list(relid):
-            relation = relation_get(unit_name=unit, relation_id=relid)
+        for unit in hookenv.related_units(relid):
+            relation = hookenv.relation_get(unit=unit, rid=relid)
 
-            relation['relation-id']  = relid
+            relation['relation-id'] = relid
             relation['unit'] = unit
 
             if relid.startswith('db-admin:'):
@@ -658,15 +481,15 @@ def generate_postgresql_hba(postgresql_hba, user=None,
                 relation['private-address'])
             relation_data.append(relation)
 
-    juju_log(MSG_INFO, str(relation_data))
+    log(str(relation_data), INFO)
 
     # Replication connections. Each unit needs to be able to connect to
     # every other unit's postgres database and the magic replication
     # database. It also needs to be able to connect to its own postgres
     # database.
-    for relid in relation_ids(relation_types=replication_relation_types):
-        for unit in relation_list(relid):
-            relation = relation_get(unit_name=unit, relation_id=relid)
+    for relid in hookenv.relation_ids('replication'):
+        for unit in hookenv.related_units(relid):
+            relation = hookenv.relation_get(unit=unit, rid=relid)
             remote_addr = munge_address(relation['private-address'])
             remote_replication = {'database': 'replication',
                                   'user': 'juju_replication',
@@ -684,27 +507,25 @@ def generate_postgresql_hba(postgresql_hba, user=None,
             relation_data.append(remote_pgdb)
 
     # Hooks need permissions too to setup replication.
-    for relid in relation_ids(relation_types=['replication']):
+    for relid in hookenv.relation_ids('replication'):
         local_replication = {'database': 'postgres',
                              'user': 'juju_replication',
-                             'private-address': munge_address(get_unit_host()),
+                             'private-address': munge_address(
+                                 hookenv.unit_private_ip()),
                              'relation-id': relid,
-                             'unit': os.environ['JUJU_UNIT_NAME'],
+                             'unit': hookenv.local_unit(),
                              }
         relation_data.append(local_replication)
 
-    pg_hba_template = Template(
-        open("templates/pg_hba.conf.tmpl").read()).render(
-            access_list=relation_data)
-    with open(postgresql_hba, 'w') as hba_file:
-        hba_file.write(str(pg_hba_template))
+    pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read())
+    write_file(
+        postgresql_hba, pg_hba_template.render(access_list=relation_data),
+        owner="postgres", group="postgres", perms=0600)
     postgresql_reload()
 
 
-#------------------------------------------------------------------------------
-# install_postgresql_crontab:  Creates the postgresql crontab file
-#------------------------------------------------------------------------------
 def install_postgresql_crontab(postgresql_ident):
+    '''Create the postgres user's crontab'''
     crontab_data = {
         'backup_schedule': config_data["backup_schedule"],
         'scripts_dir': postgresql_scripts_dir,
@@ -712,7 +533,28 @@ def install_postgresql_crontab(postgresql_ident):
     }
     crontab_template = Template(
         open("templates/postgres.cron.tmpl").read()).render(crontab_data)
-    install_file(str(crontab_template), "/etc/cron.d/postgres", mode=0644)
+    write_file('/etc/cron.d/postgres', crontab_template, perms=0600)
+
+
+def create_recovery_conf(master_host, password, restart_on_change=False):
+    recovery_conf_path = os.path.join(postgresql_cluster_dir, 'recovery.conf')
+    if os.path.exists(recovery_conf_path):
+        old_recovery_conf = open(recovery_conf_path, 'r').read()
+    else:
+        old_recovery_conf = None
+
+    recovery_conf = Template(
+        open("templates/recovery.conf.tmpl").read()).render({
+            'host': master_host,
+            'password': local_state['replication_password']})
+    log(recovery_conf, DEBUG)
+    write_file(
+        os.path.join(postgresql_cluster_dir, 'recovery.conf'),
+        recovery_conf, owner="postgres", group="postgres", perms=0o600)
+
+    if restart_on_change and old_recovery_conf != recovery_conf:
+        log("recovery.conf updated. Restarting to take effect.")
+        postgresql_restart()
 
 
 #------------------------------------------------------------------------------
@@ -729,28 +571,6 @@ def load_postgresql_config(postgresql_config):
 
 
 #------------------------------------------------------------------------------
-# open_port:  Convenience function to open a port in juju to
-#             expose a service
-#------------------------------------------------------------------------------
-def open_port(port=None, protocol="TCP"):
-    if port is None:
-        return(None)
-    return(subprocess.call(['open-port', "%d/%s" %
-                            (int(port), protocol)]))
-
-
-#------------------------------------------------------------------------------
-# close_port:  Convenience function to close a port in juju to
-#              unexpose a service
-#------------------------------------------------------------------------------
-def close_port(port=None, protocol="TCP"):
-    if port is None:
-        return(None)
-    return(subprocess.call(['close-port', "%d/%s" %
-                            (int(port), protocol)]))
-
-
-#------------------------------------------------------------------------------
 # update_service_ports:  Convenience function that evaluate the old and new
 #                        service ports to decide which ports need to be
 #                        opened and which to close
@@ -759,18 +579,14 @@ def update_service_port(old_service_port=None, new_service_port=None):
     if old_service_port is None or new_service_port is None:
         return(None)
     if new_service_port != old_service_port:
-        close_port(old_service_port)
-        open_port(new_service_port)
+        hookenv.close_port(old_service_port)
+        hookenv.open_port(new_service_port)
 
 
-#------------------------------------------------------------------------------
-# pwgen:  Generates a random password
-#         pwd_length:  Defines the length of the password to generate
-#                      default: 20
-#------------------------------------------------------------------------------
 def pwgen(pwd_length=None):
+    '''Generate a random password.'''
     if pwd_length is None:
-        pwd_length = random.choice(range(20, 30))
+        pwd_length = random.choice(range(30, 40))
     alphanumeric_chars = [l for l in (string.letters + string.digits)
                           if l not in 'Iil0oO1']
     random_chars = [random.choice(alphanumeric_chars)
@@ -815,13 +631,13 @@ def db_cursor(autocommit=False, db='template1', user='postgres',
         try:
             conn = psycopg2.connect(conn_str)
             break
-        except psycopg2.Error:
+        except psycopg2.Error, x:
             if time.time() > start + timeout:
-                juju_log(
-                    MSG_CRITICAL, "Database connection {!r} failed".format(
-                        conn_str))
+                log("Database connection {!r} failed".format(
+                    conn_str), CRITICAL)
                 raise
-        time.sleep(0.3)
+            log("Unable to open connection ({}), retrying.".format(x))
+            time.sleep(1)
     conn.autocommit = autocommit
     return conn.cursor()
 
@@ -833,7 +649,7 @@ def run_sql_as_postgres(sql, *parameters):
         cur.execute(sql, parameters)
         return cur.statusmessage
     except psycopg2.ProgrammingError:
-        juju_log(MSG_CRITICAL, sql)
+        log(sql, CRITICAL)
         raise
 
 
@@ -862,15 +678,16 @@ def config_changed_volume_apply():
     if volid:
         if volume_is_permanent(volid):
             if not volume_init_and_mount(volid):
-                juju_log(MSG_ERROR,
-                         "volume_init_and_mount failed, "
-                         "not applying changes")
+                log(
+                    "volume_init_and_mount failed, not applying changes",
+                    ERROR)
                 return False
 
         if not os.path.exists(data_directory_path):
-            juju_log(MSG_CRITICAL,
-                     "postgresql data dir = %s not found, "
-                     "not applying changes." % data_directory_path)
+            log(
+                "postgresql data dir {} not found, "
+                "not applying changes.".format(data_directory_path),
+                CRITICAL)
             return False
 
         mount_point = volume_mount_point_from_volid(volid)
@@ -878,22 +695,22 @@ def config_changed_volume_apply():
         new_pg_version_cluster_dir = os.path.join(
             new_pg_dir, config_data["version"], config_data["cluster_name"])
         if not mount_point:
-            juju_log(MSG_ERROR,
-                     "invalid mount point from volid = \"%s\", "
-                     "not applying changes." % mount_point)
+            log(
+                "invalid mount point from volid = {}, "
+                "not applying changes.".format(mount_point), ERROR)
             return False
 
         if ((os.path.islink(data_directory_path) and
              os.readlink(data_directory_path) == new_pg_version_cluster_dir and
              os.path.isdir(new_pg_version_cluster_dir))):
-            juju_log(MSG_INFO,
-                     "NOTICE: postgresql data dir '%s' already points "
-                     "to '%s', skipping storage changes." %
-                     (data_directory_path, new_pg_version_cluster_dir))
-            juju_log(MSG_INFO,
-                     "existing-symlink: to fix/avoid UID changes from "
-                     "previous units, doing: "
-                     "chown -R postgres:postgres %s" % new_pg_dir)
+            log(
+                "postgresql data dir '%s' already points "
+                "to {}, skipping storage changes.".format(
+                    data_directory_path, new_pg_version_cluster_dir))
+            log(
+                "existing-symlink: to fix/avoid UID changes from "
+                "previous units, doing: "
+                "chown -R postgres:postgres {}".format(new_pg_dir))
             run("chown -R postgres:postgres %s" % new_pg_dir)
             return True
 
@@ -905,7 +722,7 @@ def config_changed_volume_apply():
                         os.path.join(new_pg_dir, config_data["version"]),
                         new_pg_version_cluster_dir]:
             if not os.path.isdir(new_dir):
-                juju_log(MSG_INFO, "mkdir %s" % new_dir)
+                log("mkdir %s".format(new_dir))
                 os.mkdir(new_dir)
                 # copy permissions from current data_directory_path
                 os.chown(new_dir, curr_dir_stat.st_uid, curr_dir_stat.st_gid)
@@ -916,45 +733,49 @@ def config_changed_volume_apply():
         # but keep previous "main/"  directory, by renaming it to
         # main-$TIMESTAMP
         if not postgresql_stop():
-            juju_log(MSG_ERROR,
-                     "postgresql_stop() returned False - can't migrate data.")
+            log("postgresql_stop() failed - can't migrate data.", ERROR)
             return False
-        if not os.path.exists(os.path.join(new_pg_version_cluster_dir,
-                                           "PG_VERSION")):
-            juju_log(MSG_WARNING, "migrating PG data %s/ -> %s/" % (
-                     data_directory_path, new_pg_version_cluster_dir))
+        if not os.path.exists(os.path.join(
+            new_pg_version_cluster_dir, "PG_VERSION")):
+            log("migrating PG data {}/ -> {}/".format(
+                data_directory_path, new_pg_version_cluster_dir), WARNING)
             # void copying PID file to perm storage (shouldn't be any...)
-            command = "rsync -a --exclude postmaster.pid %s/ %s/" % \
-                (data_directory_path, new_pg_version_cluster_dir)
-            juju_log(MSG_INFO, "run: %s" % command)
-            #output = run(command)
+            command = "rsync -a --exclude postmaster.pid {}/ {}/".format(
+                data_directory_path, new_pg_version_cluster_dir)
+            log("run: {}".format(command))
             run(command)
         try:
-            os.rename(data_directory_path, "%s-%d" % (
+            os.rename(data_directory_path, "{}-{}".format(
                 data_directory_path, int(time.time())))
-            juju_log(MSG_INFO, "NOTICE: symlinking %s -> %s" %
-                     (new_pg_version_cluster_dir, data_directory_path))
+            log("NOTICE: symlinking {} -> {}".format(
+                new_pg_version_cluster_dir, data_directory_path))
             os.symlink(new_pg_version_cluster_dir, data_directory_path)
-            juju_log(MSG_INFO,
-                     "after-symlink: to fix/avoid UID changes from "
-                     "previous units, doing: "
-                     "chown -R postgres:postgres %s" % new_pg_dir)
-            run("chown -R postgres:postgres %s" % new_pg_dir)
+            log(
+                "after-symlink: to fix/avoid UID changes from "
+                "previous units, doing: "
+                "chown -R postgres:postgres {}".format(new_pg_dir))
+            run("chown -R postgres:postgres {}".format(new_pg_dir))
             return True
         except OSError:
-            juju_log(MSG_CRITICAL, "failed to symlink \"%s\" -> \"%s\"" % (
-                data_directory_path, mount_point))
+            log("failed to symlink {} -> {}".format(
+                data_directory_path, mount_point), CRITICAL)
             return False
     else:
-        juju_log(MSG_ERROR, "ERROR: Invalid volume storage configuration, " +
-                 "not applying changes")
+        log(
+            "Invalid volume storage configuration, not applying changes",
+            ERROR)
     return False
 
 
-###############################################################################
-# Hook functions
-###############################################################################
-def config_changed(postgresql_config, force_restart=False):
+def token_sql_safe(value):
+    # Only allow alphanumeric + underscore in database identifiers
+    if re.search('[^A-Za-z0-9_]', value):
+        return False
+    return True
+
+
+@hooks.hook()
+def config_changed(force_restart=False):
 
     add_extra_repos()
 
@@ -966,11 +787,11 @@ def config_changed(postgresql_config, force_restart=False):
         postgresql_stop()
         mounts = volume_get_all_mounted()
         if mounts:
-            juju_log(MSG_INFO, "FYI current mounted volumes: %s" % mounts)
-        juju_log(MSG_ERROR,
-                 "Disabled and stopped postgresql service, "
-                 "because of broken volume configuration - check "
-                 "'volume-ephemeral-storage' and 'volume-map'")
+            log("current mounted volumes: {}".format(mounts))
+        log(
+            "Disabled and stopped postgresql service, "
+            "because of broken volume configuration - check "
+            "'volume-ephemeral-storage' and 'volume-map'", ERROR)
         sys.exit(1)
 
     if volume_is_permanent(volid):
@@ -983,10 +804,10 @@ def config_changed(postgresql_config, force_restart=False):
             postgresql_stop()
             mounts = volume_get_all_mounted()
             if mounts:
-                juju_log(MSG_INFO, "FYI current mounted volumes: %s" % mounts)
-            juju_log(MSG_ERROR,
-                     "Disabled and stopped postgresql service "
-                     "(config_changed_volume_apply failure)")
+                log("current mounted volumes: {}".format(mounts))
+            log(
+                "Disabled and stopped postgresql service "
+                "(config_changed_volume_apply failure)", ERROR)
             sys.exit(1)
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
@@ -1001,13 +822,7 @@ def config_changed(postgresql_config, force_restart=False):
     return postgresql_reload_or_restart()
 
 
-def token_sql_safe(value):
-    # Only allow alphanumeric + underscore in database identifiers
-    if re.search('[^A-Za-z0-9_]', value):
-        return False
-    return True
-
-
+@hooks.hook()
 def install(run_pre=True):
     if run_pre:
         for f in glob.glob('exec.d/*/charm-pre-install'):
@@ -1019,8 +834,9 @@ def install(run_pre=True):
     packages = ["postgresql", "pwgen", "python-jinja2", "syslinux",
                 "python-psycopg2", "postgresql-contrib", "postgresql-plpython",
                 "postgresql-%s-debversion" % config_data["version"]]
-    packages.extend(config_data["extra-packages"].split())
-    apt_get_install(packages)
+    packages.extend((hookenv.config('extra-packages') or '').split())
+    packages = host.filter_installed_packages(packages)
+    host.apt_install(packages, fatal=True)
 
     if not 'state' in local_state:
         # Fresh installation. Because this function is invoked by both
@@ -1036,9 +852,9 @@ def install(run_pre=True):
         run("pg_createcluster --locale='{}' --encoding='{}' 9.1 main".format(
             config_data['locale'], config_data['encoding']))
 
-    install_dir(postgresql_backups_dir, owner="postgres", mode=0755)
-    install_dir(postgresql_scripts_dir, owner="postgres", mode=0755)
-    install_dir(postgresql_logs_dir, owner="postgres", mode=0755)
+    host.mkdir(postgresql_backups_dir, owner="postgres", perms=0o755)
+    host.mkdir(postgresql_scripts_dir, owner="postgres", perms=0o755)
+    host.mkdir(postgresql_logs_dir, owner="postgres", perms=0o755)
     paths = {
         'base_dir': postgresql_data_dir,
         'backup_dir': postgresql_backups_dir,
@@ -1049,52 +865,39 @@ def install(run_pre=True):
         open("templates/dump-pg-db.tmpl").read()).render(paths)
     backup_job = Template(
         open("templates/pg_backup_job.tmpl").read()).render(paths)
-    install_file(dump_script, '{}/dump-pg-db'.format(postgresql_scripts_dir),
-                 mode=0755)
-    install_file(backup_job, '{}/pg_backup_job'.format(postgresql_scripts_dir),
-                 mode=0755)
+    write_file(
+        '{}/dump-pg-db'.format(postgresql_scripts_dir),
+        dump_script, perms=0755)
+    write_file(
+        '{}/pg_backup_job'.format(postgresql_scripts_dir),
+        backup_job, perms=0755)
     install_postgresql_crontab(postgresql_crontab)
-    open_port(5432)
+    hookenv.open_port(5432)
 
     # Ensure at least minimal access granted for hooks to run.
     # Reload because we are using the default cluster setup and started
     # when we installed the PostgreSQL packages.
-    config_changed(postgresql_config, force_restart=True)
-
-
-def upgrade_charm():
-    # Detect if we are upgrading from the old charm that used repmgr for
-    # replication.
-    from_repmgr = not 'juju_replication' in local_state
-
-    # Handle renaming of the repmgr user to juju_replication.
-    if from_repmgr and local_state['state'] == 'master':
-        replication_password = create_user(
-            'juju_replication', admin=True, replication=True)
-        generate_pgpass()
-        local_state['replication_password'] = replication_password
-        juju_log(MSG_INFO, "Updating replication connection details")
-        local_state.publish()
-        drop_database('repmgr')
-
-    if from_repmgr and local_state['state'] == 'hot standby':
-        for relid in relation_ids(relation_types=['replication']):
-            for unit in relation_list(relid):
-                relation = relation_get(unit_name=unit, relation_id=relid)
-                if relation.get('state', None) == 'master':
-                    recovery_conf = Template(
-                        open("templates/recovery.conf.tmpl").read()).render({
-                            'host': relation['private-address'],
-                            'password': local_state['replication_password']})
-                    juju_log(MSG_DEBUG, recovery_conf)
-                    install_file(
-                        recovery_conf,
-                        os.path.join(postgresql_cluster_dir, 'recovery.conf'),
-                        owner="postgres", group="postgres")
-                    postgresql_restart()
-                    break
+    config_changed(force_restart=True)
 
     snapshot_relations()
+
+
+@hooks.hook()
+def upgrade_charm():
+    install(run_pre=False)
+    snapshot_relations()
+
+
+@hooks.hook()
+def start():
+    if not postgresql_restart():
+        raise SystemExit(1)
+
+
+@hooks.hook()
+def stop():
+    if not postgresql_stop():
+        raise SystemExit(1)
 
 
 def quote_identifier(identifier):
@@ -1175,8 +978,10 @@ def create_user(user, admin=False, replication=False):
         password = pwgen()
         set_password(user, password)
     if user_exists(user):
+        log("Updating {} user".format(user))
         action = ["ALTER ROLE"]
     else:
+        log("Creating {} user".format(user))
         action = ["CREATE ROLE"]
     action.append('%s WITH LOGIN')
     if admin:
@@ -1238,45 +1043,115 @@ def ensure_database(user, schema_user, database):
                         AsIs(quote_identifier(user)))
 
 
-def get_relation_host():
-    remote_host = run("relation-get ip")
-    if not remote_host:
-        # remote unit $JUJU_REMOTE_UNIT uses deprecated 'ip=' component of
-        # interface.
-        remote_host = run("relation-get private-address")
-    return remote_host
-
-
-def get_unit_host():
-    this_host = run("unit-get private-address")
-    return this_host.strip()
-
-
 def snapshot_relations():
     '''Snapshot our relation information into local state.
 
     We need this information to be available in -broken
     hooks letting us actually clean up properly. Bug #1190996.
     '''
+    log("Snapshotting relations", DEBUG)
     local_state['relations'] = hookenv.relations()
     local_state.save()
 
+# Each database unit needs to publish connection details to the
+# client. This is problematic, because 1) the user and database are
+# only created on the master unit and this is replicated to the
+# slave units outside of juju and 2) we have no control over the
+# order that units join the relation.
+#
+# The simplest approach of generating usernames and passwords in
+# the master units db-relation-joined hook fails because slave
+# units may well have already run their hooks and found no
+# connection details to republish. When the master unit publishes
+# the connection details it only triggers relation-changed hooks
+# on the client units, not the relation-changed hook on other peer
+# units.
+#
+# A more complex approach is for the first database unit that joins
+# the relation to generate the usernames and passwords and publish
+# this to the relation. Subsequent units can retrieve this
+# information and republish it. Of course, the master unit also 
+# creates the database and users when it joins the relation.
+# This approach should work reliably on the server side. However,
+# there is a window from when a slave unit joins a client relation
+# until the master unit has joined that relation when the
+# credentials published by the slave unit are invalid. These
+# credentials will only become valid after the master unit has
+# actually created the user and database.
+#
+# The implemented approach is for the master unit's
+# db-relation-joined hook to create the user and database and
+# publish the connection details, and in addition update a list
+# of active relations to the service's peer 'replication' relation.
+# After the master unit has updated the peer relationship, the
+# slave unit's peer replication-relation-changed hook will
+# be triggered and it will have an opportunity to republish the
+# connection details. Of course, it may not be able to do so if the
+# slave unit's db-relation-joined hook has yet been run, so we must
+# also attempt to to republish the connection settings there.
+# This way we are guaranteed at least one chance to republish the
+# connection details after the database and user have actually been
+# created and both the master and slave units have joined the
+# relation.
+#
+# The order of relevant hooks firing may be:
+#
+# master db-relation-joined (publish)
+# slave db-relation-joined (republish)
+# slave replication-relation-changed (noop)
+#
+# slave db-relation-joined (noop)
+# master db-relation-joined (publish)
+# slave replication-relation-changed (republish)
+#
+# master db-relation-joined (publish)
+# slave replication-relation-changed (noop; slave not yet joined db rel)
+# slave db-relation-joined (republish)
 
-def db_relation_joined_changed(user, database, roles):
-    if not user_exists(user):
-        password = create_user(user)
-        run("relation-set user='%s' password='%s'" % (user, password))
+@hooks.hook('db-relation-joined', 'db-relation-changed')
+def db_relation_joined_changed():
+    if local_state['state'] == 'hot standby':
+        publish_hot_standby_credentials()
+        return
+
+    # By default, we create a database named after the remote
+    # servicename. The remote service can override this by setting
+    # the database property on the relation.
+    database = hookenv.relation_get('database')
+    if not database:
+        database = hookenv.remote_unit().split('/')[0]
+
+    # Generate a unique username for this relation to use.
+    user = user_name(hookenv.relation_id(), hookenv.remote_unit())
+
+    roles = filter(None, (hookenv.relation_get('roles') or '').split(","))
+
+    log('{} unit publishing credentials'.format(local_state['state']))
+
+    password = create_user(user)
     grant_roles(user, roles)
     schema_user = "{}_schema".format(user)
-    if not user_exists(schema_user):
-        schema_password = create_user(schema_user)
-        run("relation-set schema_user='%s' schema_password='%s'" % (
-            schema_user, schema_password))
+    schema_password = create_user(schema_user)
     ensure_database(user, schema_user, database)
-    config_data = config_get()
-    host = get_unit_host()
-    run("relation-set host='%s' database='%s' port='%s'" % (
-        host, database, config_data["listen_port"]))
+    host = hookenv.unit_private_ip()
+    port = hookenv.config('listen_port')
+    state = local_state['state']  # master, hot standby, standalone
+
+    # Publish connection details.
+    connection_settings = dict(
+        user=user, password=password,
+        schema_user=schema_user, schema_password=schema_password,
+        host=host, database=database, port=port, state=state)
+    log("Connection settings {!r}".format(connection_settings), DEBUG)
+    hookenv.relation_set(relation_settings=connection_settings)
+
+    # Update the peer relation, notifying any hot standby units
+    # to republish connection details to the client relation.
+    local_state['client_relations'] = ' '.join(
+        hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
+    log("Client relations {}".format(local_state['client_relations']))
+    local_state.publish()
+
     generate_postgresql_hba(postgresql_hba, user=user,
                             schema_user=schema_user,
                             database=database)
@@ -1284,56 +1159,92 @@ def db_relation_joined_changed(user, database, roles):
     snapshot_relations()
 
 
-def db_admin_relation_joined_changed(user, database='all'):
-    if not user_exists(user):
-        password = create_user(user, admin=True)
-        run("relation-set user='%s' password='%s'" % (user, password))
-    host = get_unit_host()
-    config_data = config_get()
-    run("relation-set host='%s' port='%s'" % (
-        host, config_data["listen_port"]))
+@hooks.hook('db-admin-relation-joined', 'db-admin-relation-changed')
+def db_admin_relation_joined_changed():
+    if local_state['state'] == 'hot standby':
+        publish_hot_standby_credentials()
+        return
+
+    user = user_name(
+        hookenv.relation_id(), hookenv.remote_unit(), admin=True)
+
+    log('{} unit publishing credentials'.format(local_state['state']))
+
+    password = create_user(user, admin=True)
+    host = hookenv.unit_private_ip()
+    port = hookenv.config('listen_port')
+    state = local_state['state']  # master, hot standby, standalone
+
+    # Publish connection details.
+    connection_settings = dict(
+        user=user, password=password,
+        host=host, database='all', port=port, state=state)
+    log("Connection settings {!r}".format(connection_settings), DEBUG)
+    hookenv.relation_set(relation_settings=connection_settings)
+
+    # Update the peer relation, notifying any hot standby units
+    # to republish connection details to the client relation.
+    local_state['client_relations'] = ' '.join(
+        hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
+    log("Client relations {}".format(local_state['client_relations']))
+    local_state.publish()
+
     generate_postgresql_hba(postgresql_hba)
 
     snapshot_relations()
 
 
+@hooks.hook()
 def db_relation_broken():
     from psycopg2.extensions import AsIs
+
+    relid = os.environ['JUJU_RELATION_ID']
+    if relid not in local_state['relations']['db']:
+        # This was to be a hot standby, but it had not yet got as far as
+        # receiving and handling credentials from the master.
+        log("db-relation-broken called before relation finished setup", DEBUG)
+        return
 
     # The relation no longer exists, so we can't pull the database name
     # we used from there. Instead, we have to persist this information
     # ourselves.
-    relation = local_state['relations']['db'][os.environ['JUJU_RELATION_ID']]
+    relation = local_state['relations']['db'][relid]
     unit_relation_data = relation[os.environ['JUJU_UNIT_NAME']]
 
-    user = unit_relation_data['user']
-    database = unit_relation_data['database']
+    if local_state['state'] in ('master', 'standalone'):
+        user = unit_relation_data.get('user', None)
+        database = unit_relation_data['database']
 
-    sql = "REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s"
-    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
-                        AsIs(quote_identifier(user)))
-    run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
-                        AsIs(quote_identifier(user + "_schema")))
+        sql = "REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s"
+        run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                            AsIs(quote_identifier(user)))
+        run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                            AsIs(quote_identifier(user + "_schema")))
+
+    generate_postgresql_hba(postgresql_hba)
 
     # Cleanup our local state.
     snapshot_relations()
 
 
-def db_admin_relation_broken(user):
+@hooks.hook()
+def db_admin_relation_broken():
     from psycopg2.extensions import AsIs
 
-    if user_exists(user):
-        sql = "ALTER USER %s NOSUPERUSER"
-        run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
+    if local_state['state'] in ('master', 'standalone'):
+        user = hookenv.relation_get('user', unit=hookenv.local_unit())
+        if user:
+            sql = "ALTER USER %s NOSUPERUSER"
+            run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
+
     generate_postgresql_hba(postgresql_hba)
 
-
-def TODO(msg):
-    juju_log(MSG_WARNING, 'TODO> %s' % msg)
+    # Cleanup our local state.
+    snapshot_relations()
 
 
 def add_extra_repos():
-    extra_repos = config_get('extra_archives')
+    extra_repos = hookenv.config('extra_archives')
     extra_repos_added = local_state.setdefault('extra_repos_added', set())
     if extra_repos:
         repos_added = False
@@ -1343,7 +1254,7 @@ def add_extra_repos():
                 extra_repos_added.add(repo)
                 repos_added = True
         if repos_added:
-            run('apt-get update')
+            host.apt_update(fatal=True)
             local_state.save()
 
 
@@ -1356,7 +1267,7 @@ def ensure_local_ssh():
     """
     comment = 'repmgr key for {}'.format(os.environ['JUJU_UNIT_NAME'])
     if not os.path.isdir(postgres_ssh_dir):
-        install_dir(postgres_ssh_dir, "postgres", "postgres", 0700)
+        host.mkdir(postgres_ssh_dir, "postgres", "postgres", 0o700)
     if not os.path.exists(postgres_ssh_private_key):
         run("sudo -u postgres -H ssh-keygen -q -t rsa -C '{}' -N '' "
             "-f '{}'".format(comment, postgres_ssh_private_key))
@@ -1372,9 +1283,9 @@ def authorize_remote_ssh():
     authorized_units = set()
     authorized_keys = set()
     known_hosts = set()
-    for relid in relation_ids(relation_types=replication_relation_types):
-        for unit in relation_list(relid):
-            relation = relation_get(unit_name=unit, relation_id=relid)
+    for relid in hookenv.relation_ids('replication'):
+        for unit in hookenv.related_units(relid):
+            relation = hookenv.relation_get(unit=unit, rid=relid)
             public_key = relation.get('public_ssh_key', None)
             if public_key:
                 authorized_units.add(unit)
@@ -1383,14 +1294,14 @@ def authorize_remote_ssh():
                     relation['private-address'], relation['ssh_host_key']))
 
     # Generate known_hosts
-    install_file(
-        '\n'.join(known_hosts), postgres_ssh_known_hosts,
-        owner="postgres", group="postgres", mode=0o644)
+    write_file(
+        postgres_ssh_known_hosts, '\n'.join(known_hosts),
+        owner="postgres", group="postgres", perms=0o644)
 
     # Generate authorized_keys
-    install_file(
-        '\n'.join(authorized_keys), postgres_ssh_authorized_keys,
-        owner="postgres", group="postgres", mode=0o400)
+    write_file(
+        postgres_ssh_authorized_keys, '\n'.join(authorized_keys),
+        owner="postgres", group="postgres", perms=0o400)
 
     # Publish details, so relation knows they have been granted access.
     local_state['authorized'] = authorized_units
@@ -1400,23 +1311,19 @@ def authorize_remote_ssh():
 def generate_pgpass():
     passwords = {}
 
-    # Replication
-    for relid in relation_ids(relation_types=['replication', 'master']):
-        for unit in relation_list(relid):
-            relation = relation_get(unit_name=unit, relation_id=relid)
-
-            if relation.get('state', None) == 'master':
-                replication_password = relation.get('replication_password', '')
-                if replication_password:
-                    passwords['juju_replication'] = replication_password
+    # Replication.
+    # pg_basebackup only works with the password in .pgpass, or entered
+    # at the command prompt.
+    if 'replication_password' in local_state:
+        passwords['juju_replication'] = local_state['replication_password']
 
     if passwords:
         pgpass = '\n'.join(
             "*:*:*:{}:{}".format(username, password)
             for username, password in passwords.items())
-        install_file(
-            pgpass, charm_pgpass,
-            owner="postgres", group="postgres", mode=0o400)
+        write_file(
+            charm_pgpass, pgpass,
+            owner="postgres", group="postgres", perms=0o400)
 
 
 def drop_database(dbname, warn=True):
@@ -1430,8 +1337,7 @@ def drop_database(dbname, warn=True):
         except psycopg2.Error:
             if time.time() > now + timeout:
                 if warn:
-                    juju_log(
-                        MSG_WARNING, "Unable to drop database %s" % dbname)
+                    log("Unable to drop database {}".format(dbname), WARNING)
                 else:
                     raise
             time.sleep(0.5)
@@ -1439,289 +1345,335 @@ def drop_database(dbname, warn=True):
             break
 
 
-def replication_gc():
-    """Remove old nodes from the repmgr database, tear down if no slaves"""
-    wanted_units = []
-    for relid in relation_ids(replication_relation_types):
-        wanted_units.extend(relation_list(relid))
-
-    # If there are replication relationships, trash the local repmgr setup.
-    if not wanted_units:
-        # Restore a hot standby to a standalone configuration.
-        if postgresql_is_in_recovery():
-            pg_ctl = os.path.join(postgresql_bin_dir, 'pg_ctl')
-            run("sudo -u postgres {} promote -D '{}'".format(
-                pg_ctl, postgresql_cluster_dir))
-
-        if os.path.exists(charm_pgpass):
-            os.unlink(charm_pgpass)
-
-        local_state['state'] = 'standalone'
+def authorized_by(unit):
+    '''Return True if the peer has authorized our database connections.'''
+    relation = hookenv.relation_get(unit=unit)
+    authorized = relation.get('authorized', '').split()
+    return hookenv.local_unit() in authorized
 
 
-def is_master():
-    '''True if we are, or should be, the master.
+def promote_database():
+    '''Take the database out of recovery mode.'''
+    recovery_conf = os.path.join(postgresql_cluster_dir, 'recovery.conf')
+    if os.path.exists(recovery_conf):
+        # Rather than using 'pg_ctl promote', we do the promotion
+        # this way to avoid creating a timeline change. Switch this
+        # to using 'pg_ctl promote' once PostgreSQL propagates
+        # timeline changes via streaming replication.
+        os.unlink(os.path.join(postgresql_cluster_dir, 'recovery.conf'))
+        postgresql_restart()
 
-    Return True if I am the active master, or if neither myself nor
-    the remote unit is and I win an election.
-    '''
-    master_relation_ids = relation_ids(relation_types=['master'])
-    slave_relation_ids = relation_ids(relation_types=['slave'])
-    if master_relation_ids and slave_relation_ids:
-        # Both master and slave relations, so an attempt has been made
-        # to set up cascading replication. This is not yet supported in
-        # PostgreSQL, so we cannot support it either. Unfortunately,
-        # there is no way yet to inform juju about this so we just have
-        # to leave the impossible relation in a broken state.
-        juju_log(
-            MSG_CRITICAL,
-            "Unable to create relationship. "
-            "Cascading replication not supported.")
-        raise SystemExit(1)
 
-    if slave_relation_ids:
-        # I'm explicitly the slave in a master/slave relationship.
-        # No units in my service can be a master.
-        juju_log(MSG_DEBUG, "In a slave relation, so I'm a slave")
-        return False
+def follow_database(master):
+    '''Connect the database as a streaming replica of the master.'''
+    master_relation = hookenv.relation_get(unit=master)
+    create_recovery_conf(
+        master_relation['private-address'],
+        local_state['replication_password'], restart_on_change=True)
 
-    # Do I think I'm the master?
+
+def elected_master():
+    """Return the unit that should be master, or None if we don't yet know."""
     if local_state['state'] == 'master':
-        juju_log(MSG_DEBUG, "I already believe I am the master")
-        return True
+        log("I am already the master", DEBUG)
+        return hookenv.local_unit()
 
-    # Lets see what out peer group thinks.
-    peer_units = set()
-    peer_host = {}  # Cache of addresses for peer units.
-    peer_authorized = {}  # True if the peer unit has authorized us.
-    for relid in relation_ids(relation_types=['replication']):
-        # If there are any other peers claiming to be the master, then I am
-        # not the master.
-        for unit in relation_list(relid):
-            relation = relation_get(unit_name=unit, relation_id=relid)
-            peer_units.add(unit)
-            peer_host[unit] = relation['private-address']
-            peer_authorized[unit] = False
-            for a in relation.get('authorized', '').split():
-                if a == os.environ['JUJU_UNIT_NAME']:
-                    peer_authorized[unit] = True
-                    break
-            if relation.get('state', None) == 'master':
-                juju_log(MSG_DEBUG, "Found a master in peers, so I'm a slave")
-                return False
+    if local_state['state'] == 'failover':
+        former_master = local_state['following']
+        log("Failover from {}".format(former_master))
 
-    # Are there other units? Maybe we are the only one left in the
-    # various master/slave/replication relationships.
-    alone = True
-    for relid in relation_ids(relation_types=replication_relation_types):
-        if relation_list(relid):
-            alone = False
-            break
-    if alone:
-        juju_log(MSG_DEBUG, "I am alone, no point being a master")
-        return False
+        units_not_in_failover = set()
+        for relid in hookenv.relation_ids('replication'):
+            for unit in hookenv.related_units(relid):
+                if unit == former_master:
+                    log("Found dying master {}".format(unit), DEBUG)
+                    continue
 
-    # If the peer group has lost a master, the hot standby with the
-    # least lag should be the new master. Perhaps that is me?
-    my_offset = postgresql_wal_received_offset(
-        host=None, db='postgres', user='postgres')
-    if my_offset is not None:
-        # Store the offset, unit number & unit in a tuple for easy
-        # sorting.
-        my_unit = os.environ['JUJU_UNIT_NAME']
-        offsets = set([(my_offset, int(my_unit.split('/')[1]), my_unit)])
-        for unit in peer_units:
-            if peer_authorized[unit]:
-                # If the peer has not yet got as far as authorizing us,
-                # it will not be further in sync with the master than
-                # us.
-                host = peer_host[unit]
-                offset = postgresql_wal_received_offset(host)
-                if offset is not None:
-                    if offset < my_offset:
-                        juju_log(
-                            MSG_DEBUG,
-                            "A peer is less lagged than me, so I'm a slave")
-                        return False  # Short circuit.
-                    offsets.add((offset, int(unit.split('/')[1]), unit))
-            else:
-                juju_log(
-                    MSG_DEBUG,
-                    "Unable to check {} wal offset - unauthorized".format(
-                        unit))
-        best_unit = sorted(offsets)[0][2]  # Lowest number wins a tie.
-        if best_unit == my_unit:
-            juju_log(MSG_DEBUG, "I won the lag tie breaker and am the master")
-            return True
-        else:
-            juju_log(MSG_DEBUG, "I lost the lag tie breaker and am a slave")
-            return False
+                relation = hookenv.relation_get(unit=unit, rid=relid)
 
-    # There are no masters, so we need an election within this peer
-    # relation. Lowest unit number wins and gets to be the master.
-    remote_nums = sorted(int(unit.split('/')[1]) for unit in peer_units)
-    if not remote_nums:
-        return True  # Only unit in a service in a master relationship.
-    my_num = int(os.environ['JUJU_UNIT_NAME'].split('/')[1])
-    if my_num < remote_nums[0]:
-        juju_log(MSG_DEBUG, "Lowest unit so I'm the master")
-        return True
-    else:
-        juju_log(MSG_DEBUG, "Not the lowest unit so I'm a slave")
-        return False
+                if relation['state'] == 'master':
+                    log(
+                        "{} says it already won the election".format(unit),
+                        INFO)
+                    return unit
+
+                if relation['state'] != 'failover':
+                    units_not_in_failover.add(unit)
+
+        if units_not_in_failover:
+            log("{} unaware of impending election. Deferring result.".format(
+                " ".join(unit_sorted(units_not_in_failover))))
+            return None
+
+        log("Election in progress")
+        winner = None
+        winning_offset = -1
+        for relid in hookenv.relation_ids('replication'):
+            candidates = set(hookenv.related_units(relid))
+            candidates.add(hookenv.local_unit())
+            candidates.discard(former_master)
+            # Sort the unit lists so we get consistent results in a tie
+            # and lowest unit number wins.
+            for unit in unit_sorted(candidates):
+                relation = hookenv.relation_get(unit=unit, rid=relid)
+                if int(relation['wal_received_offset']) > winning_offset:
+                    winner = unit
+                    winning_offset = int(relation['wal_received_offset'])
+
+        # All remaining hot standbys are in failover mode and have
+        # reported their wal_received_offset. We can declare victory.
+        log("{} won the election as is the new master".format(winner))
+        return winner
+
+    # Maybe another peer thinks it is the master?
+    for relid in hookenv.relation_ids('replication'):
+        for unit in hookenv.related_units(relid):
+            if hookenv.relation_get('state', unit, relid) == 'master':
+                return unit
+
+    # New peer group. Lowest numbered unit will be the master.
+    for relid in hookenv.relation_ids('replication'):
+        units = hookenv.related_units(relid) + [hookenv.local_unit()]
+        master = unit_sorted(units)[0]
+        log("New peer group. {} is elected master".format(master))
+        return master
 
 
-def replication_relation_changed():
-    ## Without repmgr, we no longer need SSH authorization
-    ## Leaving the code around for now in case we want it as the log
-    ## shipping transport.
-    ##
-    ## ensure_local_ssh()  # Generate SSH key and publish details
-    ## authorize_remote_ssh()  # Authorize relationship SSH keys.
-    config_changed(postgresql_config)  # Ensure minimal replication settings.
+@hooks.hook('replication-relation-joined', 'replication-relation-changed')
+def replication_relation_joined_changed():
+    config_changed()  # Ensure minimal replication settings.
 
     # Now that pg_hba.conf has been regenerated and loaded, inform related
     # units that they have been granted replication access.
     authorized_units = set()
-    for relid in relation_ids(relation_types=replication_relation_types):
-        for unit in relation_list(relid):
-            authorized_units.add(unit)
+    for unit in hookenv.related_units():
+        authorized_units.add(unit)
     local_state['authorized'] = authorized_units
-    local_state.publish()
 
-    relation = relation_get()
+    master = elected_master()
 
-    juju_log(MSG_INFO, "Current state is {}".format(local_state['state']))
+    # Handle state changes:
+    #  - Fresh install becoming the master
+    #  - Fresh install becoming a hot standby
+    #  - Hot standby being promoted to master
 
-    if is_master():
-        if local_state['state'] == 'standalone':  # Initial setup of a master.
-            juju_log(MSG_INFO, "I am standalone and becoming the master")
-            # The juju_replication user connects as both a streaming
-            # replication connection and as a superuser to check
-            # replication status.
-            # TODO: Does it? We can use explicit grants to remove the
-            # superuser requirement now.
+    if master is None:
+        log("Master is not yet elected. Deferring.")
+
+    elif master == hookenv.local_unit():
+        if local_state['state'] != 'master':
+            log("I have elected myself master")
+            promote_database()
+            if 'following' in local_state:
+                del local_state['following']
+            if 'wal_received_offset' in local_state:
+                del local_state['wal_received_offset']
+            if 'paused_at_failover' in local_state:
+                del local_state['paused_at_failover']
+            local_state['state'] = 'master'
+
+            # Publish credentials to hot standbys so they can connect.
             replication_password = create_user(
-                'juju_replication', admin=True, replication=True)
-            local_state['state'] = 'master'
+                'juju_replication', replication=True)
             local_state['replication_password'] = replication_password
-            juju_log(
-                MSG_INFO,
-                "Publishing replication connection details to hot standbys")
-            local_state.publish()
-
-        elif local_state['state'] == 'master':  # Already the master.
-            juju_log(MSG_INFO, "I am the master")
-            replication_gc()
-
-        elif local_state['state'] == 'hot standby':  # I've been promoted
-            juju_log(MSG_INFO, "I am a hot standby being promoted to master")
-            # Rather than using 'pg_ctl promote', we do the promotion
-            # this way to avoid creating a timeline change. Switch this
-            # to using 'pg_ctl promote' once PostgreSQL propagates
-            # timeline changes via streaming replication.
-            os.unlink(os.path.join(postgresql_cluster_dir, 'recovery.conf'))
-            postgresql_restart()
-            local_state['state'] = 'master'
-            local_state.publish()
-            replication_gc()
+            local_state['client_relations'] = ' '.join(
+                hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
 
         else:
-            raise AssertionError(
-                "Unknown state {}".format(local_state['state']))
+            log("I am master and remain master")
 
-    else:  # A hot standby, now or soon.
-        remote_is_master = (relation.get('state', '') == 'master')
+    elif not authorized_by(master):
+        log("I need to follow {} but am not yet authorized".format(master))
 
-        remote_has_authorized = False
-        for unit in relation.get('authorized', '').split():
-            if unit == os.environ['JUJU_UNIT_NAME']:
-                remote_has_authorized = True
+    else:
+        log("Syncing replication_password from {}".format(master), DEBUG)
+        local_state['replication_password'] = hookenv.relation_get(
+            'replication_password', master)
+        generate_pgpass()
 
-        if remote_is_master and remote_has_authorized:
-            replication_password = relation['replication_password']
-            if ((local_state.get('replication_password', None) !=
-                 replication_password)):
-                local_state['replication_password'] = replication_password
-                generate_pgpass()
+        if 'following' not in local_state:
+            log("Fresh unit. I will clone {} and become a hot standby".format(
+                master))
 
-            slave_relation_ids = relation_ids(relation_types=['slave'])
-            if local_state['state'] == 'standalone' or slave_relation_ids:
-                # Building a fresh hot standby. Either a new node
-                # ('standalone'), or a unit in a service that is being
-                # attached as a slave.
-                juju_log(MSG_INFO, "I am becoming a hot standby")
-                # Republish the replication password in case we failover to
-                # being the master in the future. Bug #806098.
-                local_state[
-                    'replication_password'] = relation['replication_password']
-                local_state.publish()
+            # Before we start destroying anything, ensure that the
+            # master is contactable.
+            master_ip = hookenv.relation_get('private-address', master)
+            wait_for_db(db='postgres', user='juju_replication', host=master_ip)
 
-                # We are just joining replication, and have found a
-                # master. Clone and follow it.
-                generate_pgpass()
+            clone_database(master, master_ip)
 
-                # Before we start destroying anything, ensure that the
-                # master is contactable.
-                wait_for_db(
-                    db='postgres', user='juju_replication',
-                    host=relation['private-address'])
+            local_state['state'] = 'hot standby'
+            local_state['following'] = master
+            if 'wal_received_offset' in local_state:
+                del local_state['wal_received_offset']
 
-                clone(
-                    os.environ['JUJU_REMOTE_UNIT'],
-                    relation['private-address'])
+        elif local_state['following'] == master:
+            log("I am a hot standby already following {}".format(master))
 
-                local_state['state'] = 'hot standby'
-                local_state['following'] = os.environ['JUJU_REMOTE_UNIT']
-                local_state.publish()
+            # Replication connection details may have changed, so
+            # ensure we are still following.
+            follow_database(master)
 
-            elif local_state['state'] == 'hot standby':
-                juju_log(MSG_INFO, "I am a hot standby")
-                if local_state['following'] != os.environ['JUJU_REMOTE_UNIT']:
-                    juju_log(
-                        MSG_INFO, "New master {} found. Following".format(
-                            os.environ['JUJU_REMOTE_UNIT']))
-                    recovery_conf = dedent("""\
-                        standby_mode = on
-                        primary_conninfo = 'host={} user=juju_replication'
-                        """.format(relation['private-address']))
-                    juju_log(MSG_DEBUG, recovery_conf)
-                    install_file(
-                        recovery_conf,
-                        os.path.join(postgresql_cluster_dir, 'recovery.conf'),
-                        owner="postgres", group="postgres")
-                    postgresql_restart()
-                    local_state['following'] = os.environ['JUJU_REMOTE_UNIT']
-                    local_state.save()
+        else:
+            log("I am a hot standby following new master {}".format(master))
+            follow_database(master)
+            if not local_state["paused_at_failover"]:
+                run_sql_as_postgres("SELECT pg_xlog_replay_resume()")
+            local_state['state'] = 'hot standby'
+            local_state['following'] = master
+            del local_state['wal_received_offset']
+            del local_state['paused_at_failover']
 
-            else:
-                raise AssertionError(
-                    "Unknown state {}".format(local_state['state']))
+        publish_hot_standby_credentials()
+        generate_postgresql_hba(postgresql_hba)
 
-        elif remote_is_master:
-            juju_log(
-                MSG_INFO,
-                "I am waiting for a master to authorize me")
+    local_state.publish()
 
 
+def publish_hot_standby_credentials():
+    '''
+    If a hot standby joins a client relation before the master
+    unit, it is unable to publish connection details. However,
+    when the master does join it updates the client_relations
+    value in the peer relation causing the replication-relation-changed
+    hook to be invoked. This gives us a second opertunity to publish
+    connection details.
+
+    This function is invoked from both the client and peer
+    relation-changed hook. One of these will work depending on the order
+    the master and hot standby joined the client relation.
+    '''
+    master = local_state['following']
+
+    client_relations = hookenv.relation_get(
+        'client_relations', master, hookenv.relation_ids('replication')[0])
+
+    if client_relations is None:
+        log("Master {} has not yet joined any client relations".format(
+            master), DEBUG)
+        return
+
+    # Build the set of client relations that both the master and this
+    # unit have joined.
+    active_client_relations = set(
+        hookenv.relation_ids('db') + hookenv.relation_ids('db-admin')
+        ).intersection(set(client_relations.split()))
+
+    for client_relation in active_client_relations:
+        # We need to pull the credentials from the master unit's
+        # end of the client relation. This is problematic as we
+        # have no way of knowing if the master unit has joined
+        # the relation yet. We use the exception handler to detect
+        # this case per Bug #1192803.
+        log('Hot standby republishing credentials from {} to {}'.format(
+            master, client_relation))
+
+        connection_settings = hookenv.relation_get(
+            unit=master, rid=client_relation)
+
+        # Override unit specific connection details
+        connection_settings['host'] = hookenv.unit_private_ip()
+        connection_settings['port'] = hookenv.config('listen_port')
+        connection_settings['state'] = local_state['state']
+
+        # Block until users and database has replicated, so we know the
+        # connection details we publish are actually valid. This will
+        # normally be pretty much instantaneous.
+        timeout = 900
+        start = time.time()
+        while time.time() < start + timeout:
+            cur = db_cursor(autocommit=True)
+            cur.execute('select datname from pg_database')
+            if cur.fetchone() is not None:
+                break
+            del cur
+            log('Waiting for database {} to be replicated'.format(
+                connection_settings['database']))
+            time.sleep(10)
+
+        log("Connection settings {!r}".format(connection_settings), DEBUG)
+        hookenv.relation_set(
+            client_relation, relation_settings=connection_settings)
+
+
+@hooks.hook()
+def replication_relation_departed():
+    '''A unit has left the replication peer group.'''
+    remote_unit = hookenv.remote_unit()
+
+    assert remote_unit is not None
+
+    log("{} has left the peer group".format(remote_unit))
+
+    # If we are the last unit standing, we become standalone
+    remaining_peers = set(hookenv.related_units(hookenv.relation_id()))
+    remaining_peers.discard(remote_unit)  # Bug #1192433
+
+    # True if we were following the departed unit.
+    following_departed = (local_state.get('following', None) == remote_unit)
+
+    if remaining_peers and not following_departed:
+        log("Remaining {}".format(local_state['state']))
+
+    elif remaining_peers and following_departed:
+        # If the unit being removed was our master, prepare for failover.
+        # We need to suspend replication to ensure that the replay point
+        # remains consistent throughout the election, and publish that
+        # replay point. Once all units have entered this steady state,
+        # we can identify the most up to date hot standby and promote it
+        # to be the new master.
+        log("Entering failover state")
+        cur = db_cursor(autocommit=True)
+        cur.execute("SELECT pg_is_xlog_replay_paused()")
+        already_paused = cur.fetchone()[0]
+        local_state["paused_at_failover"] = already_paused
+        if not already_paused:
+            cur.execute("SELECT pg_xlog_replay_pause()")
+        # Switch to failover state. Don't cleanup the 'following'
+        # setting because having access to the former master is still
+        # useful.
+        local_state['state'] = 'failover'
+        local_state['wal_received_offset'] = postgresql_wal_received_offset()
+
+    else:
+        log("Last unit standing. Switching from {} to standalone.".format(
+            local_state['state']))
+        promote_database()
+        local_state['state'] = 'standalone'
+        if 'following' in local_state:
+            del local_state['following']
+        if 'wal_received_offset' in local_state:
+            del local_state['wal_received_offset']
+        if 'paused_at_failover' in local_state:
+            del local_state['paused_at_failover']
+
+    config_changed()
+    local_state.publish()
+
+
+@hooks.hook()
 def replication_relation_broken():
-    config_changed(postgresql_config)
+    # This unit has been removed from the service.
+    promote_database()
+    if os.path.exists(charm_pgpass):
+        os.unlink(charm_pgpass)
+    config_changed()
 
 
-def clone(master_unit, master_host):
+def clone_database(master_unit, master_host):
     postgresql_stop()
-    juju_log(MSG_INFO, "Cloning master {}".format(master_unit))
+    log("Cloning master {}".format(master_unit))
 
     cmd = ['sudo', '-E', '-u', 'postgres',  # -E needed to locate pgpass file.
            'pg_basebackup', '-D', postgresql_cluster_dir,
            '--xlog', '--checkpoint=fast', '--no-password',
            '-h', master_host, '-p', '5432', '--username=juju_replication']
-    juju_log(MSG_DEBUG, ' '.join(cmd))
+    log(' '.join(cmd), DEBUG)
     if os.path.isdir(postgresql_cluster_dir):
         shutil.rmtree(postgresql_cluster_dir)
     try:
-        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        juju_log(MSG_DEBUG, output)
+        output = subprocess.check_output(cmd)
+        log(output, DEBUG)
         # Debian by default expects SSL certificates in the datadir.
         os.symlink(
             '/etc/ssl/certs/ssl-cert-snakeoil.pem',
@@ -1729,29 +1681,21 @@ def clone(master_unit, master_host):
         os.symlink(
             '/etc/ssl/private/ssl-cert-snakeoil.key',
             os.path.join(postgresql_cluster_dir, 'server.key'))
-        recovery_conf = Template(
-            open("templates/recovery.conf.tmpl").read()).render({
-                'host': master_host,
-                'password': local_state['replication_password']})
-        juju_log(MSG_DEBUG, recovery_conf)
-        install_file(
-            recovery_conf,
-            os.path.join(postgresql_cluster_dir, 'recovery.conf'),
-            owner="postgres", group="postgres")
+        create_recovery_conf(master_host, local_state['replication_password'])
     except subprocess.CalledProcessError, x:
         # We failed, and this cluster is broken. Rebuild a
         # working cluster so start/stop etc. works and we
         # can retry hooks again. Even assuming the charm is
         # functioning correctly, the clone may still fail
         # due to eg. lack of disk space.
-        juju_log(MSG_ERROR, "Clone failed, db cluster destroyed")
-        juju_log(MSG_ERROR, x.output)
+        log("Clone failed, db cluster destroyed", ERROR)
+        log(x.output, ERROR)
         if os.path.exists(postgresql_cluster_dir):
             shutil.rmtree(postgresql_cluster_dir)
         if os.path.exists(postgresql_config_dir):
             shutil.rmtree(postgresql_config_dir)
         run('pg_createcluster {} main'.format(version))
-        config_changed(postgresql_config)
+        config_changed()
         raise
     finally:
         postgresql_start()
@@ -1760,15 +1704,9 @@ def clone(master_unit, master_host):
 
 def slave_count():
     num_slaves = 0
-    for relid in relation_ids(relation_types=replication_relation_types):
-        num_slaves += len(relation_list(relid))
+    for relid in hookenv.relation_ids('replication'):
+        num_slaves += len(hookenv.related_units(relid))
     return num_slaves
-
-
-def postgresql_is_in_recovery():
-    cur = db_cursor(autocommit=True)
-    cur.execute("SELECT pg_is_in_recovery()")
-    return cur.fetchone()[0]
 
 
 def postgresql_is_in_backup_mode():
@@ -1776,9 +1714,18 @@ def postgresql_is_in_backup_mode():
         os.path.join(postgresql_cluster_dir, 'backup_label'))
 
 
-def postgresql_wal_received_offset(host, db='postgres',
-                                   user='juju_replication'):
-    cur = db_cursor(autocommit=True, db=db, user=user, host=host)
+def postgresql_wal_received_offset():
+    """How much WAL we have.
+
+    WAL is replicated asynchronously from the master to hot standbys.
+    The more WAL a hot standby has received, the better a candidate it
+    makes for master during failover.
+
+    Note that this is not quite the same as how in sync the hot standby is.
+    That depends on how much WAL has been replayed. WAL is replayed after
+    it is received.
+    """
+    cur = db_cursor(autocommit=True)
     cur.execute('SELECT pg_is_in_recovery(), pg_last_xlog_receive_location()')
     is_in_recovery, xlog_received = cur.fetchone()
     if is_in_recovery:
@@ -1797,16 +1744,23 @@ def wait_for_db(timeout=120, db='template1', user='postgres', host=None):
     db_cursor(db=db, user=user, host=host, timeout=timeout)
 
 
+def unit_sorted(units):
+    """Return a sorted list of unit names."""
+    return sorted(
+        units, lambda a, b: cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
+
+
+@hooks.hook('nrpe-external-master-relation-changed')
 def update_nrpe_checks():
-    config_data = config_get()
+    config_data = hookenv.config()
     try:
         nagios_uid = getpwnam('nagios').pw_uid
         nagios_gid = getgrnam('nagios').gr_gid
     except:
-        juju_log(MSG_DEBUG, "Nagios user not set up. Exiting.")
+        hookenv.log("Nagios user not set up.", hookenv.DEBUG)
         return
 
-    unit_name = os.environ['JUJU_UNIT_NAME'].replace('/', '-')
+    unit_name = hookenv.local_unit().replace('/', '-')
     nagios_hostname = "%s-%s" % (config_data['nagios_context'], unit_name)
     nagios_logdir = '/var/log/nagios'
     nrpe_service_file = \
@@ -1857,10 +1811,11 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
     if os.path.isfile('/etc/init.d/nagios-nrpe-server'):
         subprocess.call(['service', 'nagios-nrpe-server', 'reload'])
 
+
 ###############################################################################
 # Global variables
 ###############################################################################
-config_data = config_get()
+config_data = hookenv.config()
 version = config_data['version']
 cluster_name = config_data['cluster_name']
 postgresql_data_dir = "/var/lib/postgresql"
@@ -1894,100 +1849,12 @@ charm_pgpass = os.path.abspath(
 os.environ['PGPASSFILE'] = charm_pgpass
 
 
-###############################################################################
-# Main section
-###############################################################################
-def main():
-    juju_log(MSG_INFO, "Running {} hook".format(hook_name))
-    if hook_name == "install":
-        install()
-
-    elif hook_name == "config-changed":
-        config_changed(postgresql_config)
-
-    elif hook_name == "upgrade-charm":
-        install(run_pre=False)
-        upgrade_charm()
-
-    elif hook_name == "start":
-        if not postgresql_restart():
-            raise SystemExit(1)
-
-    elif hook_name == "stop":
-        if not postgresql_stop():
-            raise SystemExit(1)
-
-    elif hook_name == "db-relation-joined":
-        # By default, we create a database named after the remote
-        # servicename. The remote service can override this by setting
-        # the database property on the relation.
-        database = os.environ['JUJU_REMOTE_UNIT'].split('/')[0]
-
-        # Generate a unique username for this relation to use. We should
-        # probably change this to share the username between all units
-        # in the remote service, as it makes connection pooling better.
-        user = user_name(
-            os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
-
-        db_relation_joined_changed(user, database, [])  # No roles yet.
-
-    elif hook_name == "db-relation-changed":
-        roles = filter(None, (relation_get('roles') or '').split(","))
-
-        # If the remote service has requested we use a particular database
-        # name, honour that request.
-        database = relation_get('database')
-        if not database:
-            database = relation_get('database', os.environ['JUJU_UNIT_NAME'])
-
-        user = relation_get('user', os.environ['JUJU_UNIT_NAME'])
-        if not user:
-            user = user_name(
-                os.environ['JUJU_RELATION_ID'], os.environ['JUJU_REMOTE_UNIT'])
-        db_relation_joined_changed(user, database, roles)
-
-    elif hook_name == "db-relation-broken":
-        db_relation_broken()
-
-    elif hook_name in ("db-admin-relation-joined",
-                       "db-admin-relation-changed"):
-        user = user_name(os.environ['JUJU_RELATION_ID'],
-                         os.environ['JUJU_REMOTE_UNIT'], admin=True)
-        db_admin_relation_joined_changed(user, 'all')
-
-    elif hook_name == "db-admin-relation-broken":
-        # XXX: Fix: relation is not set when it is already broken
-        # cannot determine the user name
-        user = user_name(os.environ['JUJU_RELATION_ID'],
-                         os.environ['JUJU_REMOTE_UNIT'], admin=True)
-        db_admin_relation_broken(user)
-
-    elif hook_name == "nrpe-external-master-relation-changed":
-        update_nrpe_checks()
-
-    elif hook_name in ('master-relation-joined', 'master-relation-changed',
-                       'slave-relation-joined', 'slave-relation-changed',
-                       'replication-relation-joined',
-                       'replication-relation-changed'):
-        replication_relation_changed()
-
-    elif hook_name in ('master-relation-broken', 'slave-relation-broken',
-                       'replication-relation-broken',
-                       'replication-relation-departed'):
-        replication_relation_broken()
-
-    #-------- persistent-storage-relation-joined,
-    #         persistent-storage-relation-changed
-    #elif hook_name in ["persistent-storage-relation-joined",
-    #    "persistent-storage-relation-changed"]:
-    #    persistent_storage_relation_joined_changed()
-    #-------- persistent-storage-relation-broken
-    #elif hook_name == "persistent-storage-relation-broken":
-    #    persistent_storage_relation_broken()
-    else:
-        print "Unknown hook {}".format(hook_name)
-        raise SystemExit(1)
-
-
 if __name__ == '__main__':
-    raise SystemExit(main())
+    # Hook and context overview. The various replication and client
+    # hooks interact in complex ways.
+    log("Running {} hook".format(hook_name))
+    if hookenv.relation_id():
+        log("Relation {} with {}".format(
+            hookenv.relation_id(), hookenv.remote_unit()))
+
+    hooks.execute(sys.argv)
