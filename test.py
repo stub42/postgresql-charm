@@ -21,7 +21,7 @@ import unittest
 
 SERIES = 'precise'
 TEST_CHARM = 'local:postgresql'
-PSQL_CHARM = 'cs:postgresql-psql'
+PSQL_CHARM = 'local:postgresql-psql'
 
 
 def DEBUG(msg):
