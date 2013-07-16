@@ -440,6 +440,7 @@ def generate_postgresql_hba(
             # It's not an IP address.
             return addr
 
+    allowed_units = set()
     relation_data = []
     relids = hookenv.relation_ids('db') + hookenv.relation_ids('db-admin')
     for relid in relids:
@@ -477,6 +478,7 @@ def generate_postgresql_hba(
                 raise RuntimeError(
                     'Unknown relation type {}'.format(repr(relid)))
 
+            allowed_units.add(unit)
             relation['private-address'] = munge_address(
                 relation['private-address'])
             relation_data.append(relation)
@@ -522,6 +524,13 @@ def generate_postgresql_hba(
         postgresql_hba, pg_hba_template.render(access_list=relation_data),
         owner="postgres", group="postgres", perms=0600)
     postgresql_reload()
+
+    # Loop through all db relations, making sure each knows what are the list
+    # of allowed hosts that were just added. lp:#1187508
+    # We sort the list to ensure stability, probably unnecessarily.
+    for relid in hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'):
+        hookenv.relation_set(
+            relid, {"allowed-units": " ".join(unit_sorted(allowed_units))})
 
 
 def install_postgresql_crontab(postgresql_ident):
