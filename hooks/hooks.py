@@ -116,7 +116,7 @@ class State(dict):
 def volume_get_volid_from_volume_map():
     volume_map = {}
     try:
-        volume_map = yaml.load(config_data['volume-map'])
+        volume_map = yaml.load(config_data['volume-map'].strip())
         if volume_map:
             return volume_map.get(os.environ['JUJU_UNIT_NAME'])
     except ConstructorError as e:
