@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 # vim: et ai ts=4 sw=4:
 
+from contextlib import contextmanager
 import commands
 import cPickle as pickle
 import glob
 from grp import getgrnam
 import os.path
 from pwd import getpwnam
-import random
 import re
 import shutil
 import socket
-import string
 import subprocess
 import sys
+from tempfile import NamedTemporaryFile
 import time
 import yaml
 from yaml.constructor import ConstructorError
@@ -545,7 +545,7 @@ def install_postgresql_crontab(postgresql_ident):
     write_file('/etc/cron.d/postgres', crontab_template, perms=0600)
 
 
-def create_recovery_conf(master_host, password, restart_on_change=False):
+def create_recovery_conf(master_host, restart_on_change=False):
     recovery_conf_path = os.path.join(postgresql_cluster_dir, 'recovery.conf')
     if os.path.exists(recovery_conf_path):
         old_recovery_conf = open(recovery_conf_path, 'r').read()
@@ -592,17 +592,6 @@ def update_service_port(old_service_port=None, new_service_port=None):
         hookenv.open_port(new_service_port)
 
 
-def pwgen(pwd_length=None):
-    '''Generate a random password.'''
-    if pwd_length is None:
-        pwd_length = random.choice(range(30, 40))
-    alphanumeric_chars = [l for l in (string.letters + string.digits)
-                          if l not in 'Iil0oO1']
-    random_chars = [random.choice(alphanumeric_chars)
-                    for i in range(pwd_length)]
-    return(''.join(random_chars))
-
-
 def set_password(user, password):
     if not os.path.isdir("passwords"):
         os.makedirs("passwords")
@@ -638,7 +627,8 @@ def db_cursor(autocommit=False, db='template1', user='postgres',
     start = time.time()
     while True:
         try:
-            conn = psycopg2.connect(conn_str)
+            with pgpass():
+                conn = psycopg2.connect(conn_str)
             break
         except psycopg2.Error, x:
             if time.time() > start + timeout:
@@ -825,7 +815,6 @@ def config_changed(force_restart=False):
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
     update_nrpe_checks()
-    generate_pgpass()
     if force_restart:
         return postgresql_restart()
     return postgresql_reload_or_restart()
@@ -840,7 +829,7 @@ def install(run_pre=True):
 
     add_extra_repos()
 
-    packages = ["postgresql", "pwgen", "python-jinja2", "syslinux",
+    packages = ["postgresql", "python-jinja2", "syslinux",
                 "python-psycopg2", "postgresql-contrib", "postgresql-plpython",
                 "postgresql-%s-debversion" % config_data["version"]]
     packages.extend((hookenv.config('extra-packages') or '').split())
@@ -984,7 +973,7 @@ def create_user(user, admin=False, replication=False):
 
     password = get_password(user)
     if password is None:
-        password = pwgen()
+        password = host.pwgen()
         set_password(user, password)
     if user_exists(user):
         log("Updating {} user".format(user))
@@ -1317,7 +1306,8 @@ def authorize_remote_ssh():
     local_state.publish()
 
 
-def generate_pgpass():
+@contextmanager
+def pgpass():
     passwords = {}
 
     # Replication.
@@ -1326,13 +1316,23 @@ def generate_pgpass():
     if 'replication_password' in local_state:
         passwords['juju_replication'] = local_state['replication_password']
 
-    if passwords:
-        pgpass = '\n'.join(
-            "*:*:*:{}:{}".format(username, password)
-            for username, password in passwords.items())
-        write_file(
-            charm_pgpass, pgpass,
-            owner="postgres", group="postgres", perms=0o400)
+    pgpass_contents = '\n'.join(
+        "*:*:*:{}:{}".format(username, password)
+        for username, password in passwords.items())
+    pgpass_file = NamedTemporaryFile()
+    pgpass_file.write(pgpass_contents)
+    pgpass_file.flush()
+    os.chown(pgpass_file.name, getpwnam('postgres').pw_uid, -1)
+    os.chmod(pgpass_file.name, 0o400)
+    org_pgpassfile = os.environ.get('PGPASSFILE', None)
+    os.environ['PGPASSFILE'] = pgpass_file.name
+    try:
+        yield pgpass_file.name
+    finally:
+        if org_pgpassfile is None:
+            del os.environ['PGPASSFILE']
+        else:
+            os.environ['PGPASSFILE'] = org_pgpassfile
 
 
 def drop_database(dbname, warn=True):
@@ -1377,8 +1377,7 @@ def follow_database(master):
     '''Connect the database as a streaming replica of the master.'''
     master_relation = hookenv.relation_get(unit=master)
     create_recovery_conf(
-        master_relation['private-address'],
-        local_state['replication_password'], restart_on_change=True)
+        master_relation['private-address'], restart_on_change=True)
 
 
 def elected_master():
@@ -1498,7 +1497,6 @@ def replication_relation_joined_changed():
         log("Syncing replication_password from {}".format(master), DEBUG)
         local_state['replication_password'] = hookenv.relation_get(
             'replication_password', master)
-        generate_pgpass()
 
         if 'following' not in local_state:
             log("Fresh unit. I will clone {} and become a hot standby".format(
@@ -1526,7 +1524,7 @@ def replication_relation_joined_changed():
         else:
             log("I am a hot standby following new master {}".format(master))
             follow_database(master)
-            if not local_state["paused_at_failover"]:
+            if not local_state.get("paused_at_failover", None):
                 run_sql_as_postgres("SELECT pg_xlog_replay_resume()")
             local_state['state'] = 'hot standby'
             local_state['following'] = master
@@ -1664,51 +1662,52 @@ def replication_relation_departed():
 def replication_relation_broken():
     # This unit has been removed from the service.
     promote_database()
-    if os.path.exists(charm_pgpass):
-        os.unlink(charm_pgpass)
     config_changed()
 
 
 def clone_database(master_unit, master_host):
-    postgresql_stop()
-    log("Cloning master {}".format(master_unit))
+    with pgpass():
+        postgresql_stop()
+        log("Cloning master {}".format(master_unit))
 
-    cmd = ['sudo', '-E', '-u', 'postgres',  # -E needed to locate pgpass file.
-           'pg_basebackup', '-D', postgresql_cluster_dir,
-           '--xlog', '--checkpoint=fast', '--no-password',
-           '-h', master_host, '-p', '5432', '--username=juju_replication']
-    log(' '.join(cmd), DEBUG)
-    if os.path.isdir(postgresql_cluster_dir):
-        shutil.rmtree(postgresql_cluster_dir)
-    try:
-        output = subprocess.check_output(cmd)
-        log(output, DEBUG)
-        # Debian by default expects SSL certificates in the datadir.
-        os.symlink(
-            '/etc/ssl/certs/ssl-cert-snakeoil.pem',
-            os.path.join(postgresql_cluster_dir, 'server.crt'))
-        os.symlink(
-            '/etc/ssl/private/ssl-cert-snakeoil.key',
-            os.path.join(postgresql_cluster_dir, 'server.key'))
-        create_recovery_conf(master_host, local_state['replication_password'])
-    except subprocess.CalledProcessError, x:
-        # We failed, and this cluster is broken. Rebuild a
-        # working cluster so start/stop etc. works and we
-        # can retry hooks again. Even assuming the charm is
-        # functioning correctly, the clone may still fail
-        # due to eg. lack of disk space.
-        log("Clone failed, db cluster destroyed", ERROR)
-        log(x.output, ERROR)
-        if os.path.exists(postgresql_cluster_dir):
+        cmd = ['sudo', '-E',  # -E needed to locate pgpass file.
+            '-u', 'postgres', 'pg_basebackup', '-D', postgresql_cluster_dir,
+            '--xlog', '--checkpoint=fast', '--no-password',
+            '-h', master_host, '-p', '5432', '--username=juju_replication']
+        log(' '.join(cmd), DEBUG)
+
+        if os.path.isdir(postgresql_cluster_dir):
             shutil.rmtree(postgresql_cluster_dir)
-        if os.path.exists(postgresql_config_dir):
-            shutil.rmtree(postgresql_config_dir)
-        run('pg_createcluster {} main'.format(version))
-        config_changed()
-        raise
-    finally:
-        postgresql_start()
-        wait_for_db()
+
+        try:
+            output = subprocess.check_output(cmd)
+            log(output, DEBUG)
+            # Debian by default expects SSL certificates in the datadir.
+            os.symlink(
+                '/etc/ssl/certs/ssl-cert-snakeoil.pem',
+                os.path.join(postgresql_cluster_dir, 'server.crt'))
+            os.symlink(
+                '/etc/ssl/private/ssl-cert-snakeoil.key',
+                os.path.join(postgresql_cluster_dir, 'server.key'))
+            create_recovery_conf(master_host)
+        except subprocess.CalledProcessError, x:
+            # We failed, and this cluster is broken. Rebuild a
+            # working cluster so start/stop etc. works and we
+            # can retry hooks again. Even assuming the charm is
+            # functioning correctly, the clone may still fail
+            # due to eg. lack of disk space.
+            log("Clone failed, db cluster destroyed", ERROR)
+            log(x.output, ERROR)
+            if os.path.exists(postgresql_cluster_dir):
+                shutil.rmtree(postgresql_cluster_dir)
+            if os.path.exists(postgresql_config_dir):
+                shutil.rmtree(postgresql_config_dir)
+            run('pg_createcluster {} main'.format(version))
+            config_changed()
+            raise
+        finally:
+            postgresql_start()
+            wait_for_db()
 
 
 def slave_count():
@@ -1851,11 +1850,6 @@ postgres_ssh_known_hosts = os.path.join(postgres_ssh_dir, 'known_hosts')
 hook_name = os.path.basename(sys.argv[0])
 replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')
-charm_pgpass = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', 'pgpass'))
-
-# Hooks, running as root, need to be pointed at the correct .pgpass.
-os.environ['PGPASSFILE'] = charm_pgpass
 
 
 if __name__ == '__main__':

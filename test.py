@@ -118,9 +118,17 @@ class JujuFixture(fixtures.Fixture):
                             unit, units[unit].get('agent-state-info','')))
                     if agent_state != 'started':
                         ready = False
-        # Wait a little longer, as we have no way of telling
-        # if relationship hooks have finished running.
-        time.sleep(10)
+        # Unfortunately, there is no way to tell when a system is
+        # actually ready for us to test. Juju only tells us that a
+        # relation has started being setup, and that no errors have been
+        # encountered yet. It utterly fails to inform us when the
+        # cascade of hooks this triggers has finished and the
+        # environment is in a stable and actually testable state.
+        # So as a work around for Bug #1200267, we need to sleep long
+        # enough that our system is probably stable. This means we have
+        # extremely slow and flaky tests, but that is possibly better
+        # than no tests.
+        time.sleep(30)
 
     def setUp(self):
         DEBUG("JujuFixture.setUp()")
