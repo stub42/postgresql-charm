@@ -41,15 +41,6 @@ This charm supports several deployment models:
    maintains replication for you, using standard PostgreSQL streaming
    replication.
 
- - Multiple services linked using 'master'/'slave' relationships. A
-   single service can be the 'master', and multiple services connected
-   to this master in a 'slave' role. Each service can contain multiple
-   units; the 'master' service will contain a single 'master' unit and
-   remaining units all 'hot standby'. The 'slave' services will only
-   contain 'hot standby' units. 'Cascading replication is not
-   supported', so do not attempt to relate an existing 'slave' service
-   as a 'master' to another service.
-
 
 To setup a single 'standalone' service::
 
@@ -61,41 +52,34 @@ existing unit into a 'master'::
 
     juju add-unit pg-a
 
-To deploy a new service containing a 'master' and a 'hot standby'::
+To deploy a new service containing a 'master' and two 'hot standbys'::
 
-    juju deploy -n 2 postgresql pg-b
+    juju deploy -n 3 postgresql pg-b
+
+You can remove units as normal. If the master unit is removed, failover
+occurs and the most up to date 'hot standby' is promoted to 'master'.
+The 'db-relation-changed' and 'db-admin-relation-changed' hooks are
+fired, letting clients adjust::
+
+    juju remove-unit pg-b/0
 
 
-To relate a PostgreSQL service as a 'slave' of another PostgreSQL service.
-**Caution** - this destroys the existing databases in the pg-b service::
-
-    juju add-relation pg-a:master pg-b:slave
-
-
-To setup a client using a PostgreSQL database, in this case OpenERP and
-its web front end. Note that OpenERP requires an administrative level
-connection::
+To setup a client using a PostgreSQL database, in this case a vanilla
+Django installation listening on port 8080::
 
     juju deploy postgresql
-    juju deploy postgresql pg-standby
-    juju deploy openerp-web
-    juju deploy openerp-server
-
-    juju add-relation postgresql:master pg-standby:slave
-    juju add-relation openerp-server:db postgresql:db-admin
-    juju add-relation openerp-web openerp-server
-
-    juju expose openerp-web
-    juju expose openerp-server
+    juju deploy python-django
+    juju deploy gunicorn
+    juju add-relation python-django postgresql:db
+    juju add-relation python-django gunicorn
+    juju expose python-django
 
 
 ## Restrictions
 
 - Do not attempt to relate client charms to a PostgreSQL service
   containing multiple units unless you know the charm supports
-  a replicated service. You can use a 'master'/'slave' relationship
-  to create a redundant copy of your database until the client charms
-  are updated.
+  a replicated service.
 
 - You cannot host multiple units in a single juju container. This is
   problematic as some PostgreSQL features, such as tablespaces, use
@@ -103,10 +87,23 @@ connection::
 
 # Interacting with the Postgresql Service
 
-Typically, you just need to join a the `db` relation, and a user and database
-will be created for you.  For more advanced uses, you can join the `db-admin`
-relation, and a super user will be created.  Using this account, you can
-manipulate all other aspects of the database.
+At a minimum, you just need to join a the `db` relation, and a user and
+database will be created for you.  For more complex environments, 
+you can provide the `database` name allowing multiple services to share
+the same database. A client may also wish to defer its setup until the
+unit name is listed in `allowed-units`, to avoid attempting to connect
+to a database before it has been authorized.
+
+The `db-admin` relation may be used similarly to the `db` relation.
+The automatically generated user for `db-admin` relations is a
+PostgreSQL superuser.
+
+## During db-relation-joined
+
+### the client service provides:
+
+- `database`: Optional. The name of the database to use. The postgresql
+              service will create it if necessary.
 
 ## During db-relation-changed
 
