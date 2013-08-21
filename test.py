@@ -128,13 +128,19 @@ class JujuFixture(fixtures.Fixture):
         # enough that our system is probably stable. This means we have
         # extremely slow and flaky tests, but that is possibly better
         # than no tests.
-        time.sleep(30)
+        time.sleep(45)
 
     def setUp(self):
         DEBUG("JujuFixture.setUp()")
         super(JujuFixture, self).setUp()
         self.reset()
-        self.addCleanup(self.reset)
+        # Optionally, don't teardown services and machines after running
+        # a test. If a subsequent test is run, they will be torn down at
+        # that point. This option is only useful when running a single
+        # test, or when the test harness is set to abort after the first
+        # failed test.
+        if not os.environ.get('TEST_DONT_TEARDOWN_JUJU', False):
+            self.addCleanup(self.reset)
 
     def reset(self):
         DEBUG("JujuFixture.reset()")
@@ -285,7 +291,6 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
         result = self.sql('SELECT TRUE', dbname='postgres')
         self.assertEqual(result, [['t']])
-
 
     def is_master(self, postgres_unit, dbname=None):
         is_master = self.sql(

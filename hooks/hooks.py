@@ -32,20 +32,13 @@ def Template(*args, **kw):
     return Template(*args, **kw)
 
 
-def write_file(path, contents, owner='root', group='root', perms=0o444):
-    '''Temporary alternative to charm-helpers write_file().
-
-    charm-helpers' write_file() magic makes it useless for any file
-    containing curly brackets, so work around for now until the feature
-    can be discussed.
-    '''
-    log("Writing file {} {}:{} {:o}".format(path, owner, group, perms))
-    uid = getpwnam(owner).pw_uid
-    gid = getgrnam(group).gr_gid
-    dest_fd = os.open(path, os.O_WRONLY | os.O_TRUNC | os.O_CREAT, perms)
-    os.fchown(dest_fd, uid, gid)
-    with os.fdopen(dest_fd, 'w') as destfile:
-        destfile.write(str(contents))
+def log(msg, lvl=INFO):
+    # Per Bug #1208787, log messages sent via juju-log are being lost.
+    # Spit messages out to a log file to work around the problem.
+    myname = hookenv.local_unit().replace('/', '-')
+    with open('/tmp/{}-debug.log'.format(myname), 'a') as f:
+        f.write('{}: {}\n'.format(lvl, msg))
+    hookenv.log(msg, lvl)
 
 
 class State(dict):
@@ -87,8 +80,6 @@ class State(dict):
 
         replication_state = dict(client_state)
 
-        add(replication_state, 'public_ssh_key')
-        add(replication_state, 'ssh_host_key')
         add(replication_state, 'replication_password')
         add(replication_state, 'wal_received_offset')
         add(replication_state, 'following')
@@ -189,30 +180,18 @@ def volume_get_all_mounted():
     return output
 
 
-#------------------------------------------------------------------------------
-# Enable/disable service start by manipulating policy-rc.d
-#------------------------------------------------------------------------------
-def enable_service_start(service):
-    ### NOTE: doesn't implement per-service, this can be an issue
-    ###       for colocated charms (subordinates)
-    log("enabling {} start by policy-rc.d".format(service))
-    if os.path.exists('/usr/sbin/policy-rc.d'):
-        os.unlink('/usr/sbin/policy-rc.d')
-        return True
-    return False
-
-
-def disable_service_start(service):
-    log("disabling {} start by policy-rc.d".format(service))
-    policy_rc = '/usr/sbin/policy-rc.d'
-    policy_rc_tmp = "{}.tmp".format(policy_rc)
-    open(policy_rc_tmp, 'w').write("""#!/bin/bash
-[[ "$1"-"$2" == %s-start ]] && exit 101
-exit 0
-EOF
-""" % service)
-    os.chmod(policy_rc_tmp, 0755)
-    os.rename(policy_rc_tmp, policy_rc)
+def postgresql_autostart(enabled):
+    if enabled:
+        log("Enabling PostgreSQL startup in {}".format(startup_file))
+        mode = 'auto'
+    else:
+        log("Disabling PostgreSQL startup in {}".format(startup_file))
+        mode = 'manual'
+    startup_file = os.path.join(postgresql_config_dir, 'start.conf')
+    contents = Template(open("templates/start_conf.tmpl").read()).render(
+        {'mode': mode})
+    host.write_file(
+        startup_file, contents, 'postgres', 'postgres', perms=0o644)
 
 
 def run(command, exit_on_error=True):
@@ -229,10 +208,6 @@ def run(command, exit_on_error=True):
             raise
 
 
-#------------------------------------------------------------------------------
-# postgresql_stop, postgresql_start, postgresql_is_running:
-# wrappers over invoke-rc.d, with extra check for postgresql_is_running()
-#------------------------------------------------------------------------------
 def postgresql_is_running():
     # init script always return true (9.1), add extra check to make it useful
     status, output = commands.getstatusoutput("invoke-rc.d postgresql status")
@@ -244,17 +219,12 @@ def postgresql_is_running():
 
 
 def postgresql_stop():
-    status, output = commands.getstatusoutput("invoke-rc.d postgresql stop")
-    if status != 0:
-        return False
+    host.service_stop('postgresql')
     return not postgresql_is_running()
 
 
 def postgresql_start():
-    status, output = commands.getstatusoutput("invoke-rc.d postgresql start")
-    if status != 0:
-        log(output, CRITICAL)
-        return False
+    host.service_start('postgresql')
     return postgresql_is_running()
 
 
@@ -275,12 +245,9 @@ def postgresql_restart():
                 last_warning = time.time()
             time.sleep(5)
 
-        status, output = \
-            commands.getstatusoutput("invoke-rc.d postgresql restart")
-        if status != 0:
-            return False
+        return host.service_restart('postgresql')
     else:
-        postgresql_start()
+        return host.service_start('postgresql')
 
     # Store a copy of our known live configuration so
     # postgresql_reload_or_restart() can make good choices.
@@ -406,7 +373,7 @@ def create_postgresql_config(postgresql_config):
     # Return it as pg_config
     pg_config = Template(
         open("templates/postgresql.conf.tmpl").read()).render(config_data)
-    write_file(
+    host.write_file(
         postgresql_config, pg_config,
         owner="postgres",  group="postgres", perms=0600)
 
@@ -419,7 +386,7 @@ def create_postgresql_ident(postgresql_ident):
     ident_data = {}
     pg_ident_template = Template(
         open("templates/pg_ident.conf.tmpl").read())
-    write_file(
+    host.write_file(
         postgresql_ident, pg_ident_template.render(ident_data),
         owner="postgres", group="postgres", perms=0600)
 
@@ -520,7 +487,7 @@ def generate_postgresql_hba(
         relation_data.append(local_replication)
 
     pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read())
-    write_file(
+    host.write_file(
         postgresql_hba, pg_hba_template.render(access_list=relation_data),
         owner="postgres", group="postgres", perms=0600)
     postgresql_reload()
@@ -542,7 +509,7 @@ def install_postgresql_crontab(postgresql_ident):
     }
     crontab_template = Template(
         open("templates/postgres.cron.tmpl").read()).render(crontab_data)
-    write_file('/etc/cron.d/postgres', crontab_template, perms=0600)
+    host.write_file('/etc/cron.d/postgres', crontab_template, perms=0600)
 
 
 def create_recovery_conf(master_host, restart_on_change=False):
@@ -557,7 +524,7 @@ def create_recovery_conf(master_host, restart_on_change=False):
             'host': master_host,
             'password': local_state['replication_password']})
     log(recovery_conf, DEBUG)
-    write_file(
+    host.write_file(
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
         recovery_conf, owner="postgres", group="postgres", perms=0o600)
 
@@ -782,7 +749,7 @@ def config_changed(force_restart=False):
     volid = volume_get_volume_id()
     if not volid:
         ## Invalid configuration (whether ephemeral, or permanent)
-        disable_service_start("postgresql")
+        postgresql_autostart(False)
         postgresql_stop()
         mounts = volume_get_all_mounted()
         if mounts:
@@ -797,9 +764,9 @@ def config_changed(force_restart=False):
         ## config_changed_volume_apply will stop the service if it founds
         ## it necessary, ie: new volume setup
         if config_changed_volume_apply():
-            enable_service_start("postgresql")
+            postgresql_autostart(True)
         else:
-            disable_service_start("postgresql")
+            postgresql_autostart(False)
             postgresql_stop()
             mounts = volume_get_all_mounted()
             if mounts:
@@ -863,10 +830,10 @@ def install(run_pre=True):
         open("templates/dump-pg-db.tmpl").read()).render(paths)
     backup_job = Template(
         open("templates/pg_backup_job.tmpl").read()).render(paths)
-    write_file(
+    host.write_file(
         '{}/dump-pg-db'.format(postgresql_scripts_dir),
         dump_script, perms=0755)
-    write_file(
+    host.write_file(
         '{}/pg_backup_job'.format(postgresql_scripts_dir),
         backup_job, perms=0755)
     install_postgresql_crontab(postgresql_crontab)
@@ -1256,56 +1223,6 @@ def add_extra_repos():
             local_state.save()
 
 
-def ensure_local_ssh():
-    """Generate SSH keys for postgres user.
-
-    The public key is stored in public_ssh_key on the relation.
-
-    Bidirectional SSH access is required by repmgr.
-    """
-    comment = 'repmgr key for {}'.format(os.environ['JUJU_UNIT_NAME'])
-    if not os.path.isdir(postgres_ssh_dir):
-        host.mkdir(postgres_ssh_dir, "postgres", "postgres", 0o700)
-    if not os.path.exists(postgres_ssh_private_key):
-        run("sudo -u postgres -H ssh-keygen -q -t rsa -C '{}' -N '' "
-            "-f '{}'".format(comment, postgres_ssh_private_key))
-    public_key = open(postgres_ssh_public_key, 'r').read().strip()
-    host_key = open('/etc/ssh/ssh_host_ecdsa_key.pub').read().strip()
-    local_state['public_ssh_key'] = public_key
-    local_state['ssh_host_key'] = host_key
-    local_state.publish()
-
-
-def authorize_remote_ssh():
-    """Generate the SSH authorized_keys file."""
-    authorized_units = set()
-    authorized_keys = set()
-    known_hosts = set()
-    for relid in hookenv.relation_ids('replication'):
-        for unit in hookenv.related_units(relid):
-            relation = hookenv.relation_get(unit=unit, rid=relid)
-            public_key = relation.get('public_ssh_key', None)
-            if public_key:
-                authorized_units.add(unit)
-                authorized_keys.add(public_key)
-                known_hosts.add('{} {}'.format(
-                    relation['private-address'], relation['ssh_host_key']))
-
-    # Generate known_hosts
-    write_file(
-        postgres_ssh_known_hosts, '\n'.join(known_hosts),
-        owner="postgres", group="postgres", perms=0o644)
-
-    # Generate authorized_keys
-    write_file(
-        postgres_ssh_authorized_keys, '\n'.join(authorized_keys),
-        owner="postgres", group="postgres", perms=0o400)
-
-    # Publish details, so relation knows they have been granted access.
-    local_state['authorized'] = authorized_units
-    local_state.publish()
-
-
 @contextmanager
 def pgpass():
     passwords = {}
@@ -1665,6 +1582,16 @@ def replication_relation_broken():
     config_changed()
 
 
+@contextmanager
+def switch_cwd(new_working_directory):
+    org_dir = os.getcwd()
+    os.chdir(new_working_directory)
+    try:
+        yield new_working_directory
+    finally:
+        os.chdir(org_dir)
+
+
 def clone_database(master_unit, master_host):
     with pgpass():
         postgresql_stop()
@@ -1680,7 +1607,10 @@ def clone_database(master_unit, master_host):
             shutil.rmtree(postgresql_cluster_dir)
 
         try:
-            output = subprocess.check_output(cmd)
+            # Change directory the postgres user can read.
+            with switch_cwd('/tmp'):
+                # Run the sudo command.
+                output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             log(output, DEBUG)
             # Debian by default expects SSL certificates in the datadir.
             os.symlink(
@@ -1690,7 +1620,7 @@ def clone_database(master_unit, master_host):
                 '/etc/ssl/private/ssl-cert-snakeoil.key',
                 os.path.join(postgresql_cluster_dir, 'server.key'))
             create_recovery_conf(master_host)
-        except subprocess.CalledProcessError, x:
+        except subprocess.CalledProcessError as x:
             # We failed, and this cluster is broken. Rebuild a
             # working cluster so start/stop etc. works and we
             # can retry hooks again. Even assuming the charm is
@@ -1817,7 +1747,7 @@ def update_nrpe_checks():
 check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
 
     if os.path.isfile('/etc/init.d/nagios-nrpe-server'):
-        subprocess.call(['service', 'nagios-nrpe-server', 'reload'])
+        host.service_reload('nagios-nrpe-server')
 
 
 ###############################################################################
@@ -1841,12 +1771,6 @@ postgresql_backups_dir = (
     config_data['backup_dir'].strip() or
     os.path.join(postgresql_data_dir, 'backups'))
 postgresql_logs_dir = os.path.join(postgresql_data_dir, 'logs')
-postgres_ssh_dir = os.path.expanduser('~postgres/.ssh')
-postgres_ssh_public_key = os.path.join(postgres_ssh_dir, 'id_rsa.pub')
-postgres_ssh_private_key = os.path.join(postgres_ssh_dir, 'id_rsa')
-postgres_ssh_authorized_keys = os.path.join(postgres_ssh_dir,
-                                            'authorized_keys')
-postgres_ssh_known_hosts = os.path.join(postgres_ssh_dir, 'known_hosts')
 hook_name = os.path.basename(sys.argv[0])
 replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')
@@ -1859,5 +1783,4 @@ if __name__ == '__main__':
     if hookenv.relation_id():
         log("Relation {} with {}".format(
             hookenv.relation_id(), hookenv.remote_unit()))
-
     hooks.execute(sys.argv)
