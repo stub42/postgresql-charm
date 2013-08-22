@@ -393,11 +393,18 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
         self.juju.wait_until_ready()
 
-        # On a freshly setup service, lowest numbered unit is always the
-        # master.
-        units = unit_sorted(
-            self.juju.status['services']['postgresql']['units'].keys())
-        master_unit, standby_unit_1, standby_unit_2 = units
+        # Even on a freshly setup service, we have no idea which unit
+        # will become the master as we have no control over which two
+        # units join the peer relation first.
+        units = sorted((self.is_master(unit, 'postgres'), unit)
+            for unit in
+                self.juju.status['services']['postgresql']['units'].keys())
+        self.assertFalse(units[0][0])
+        self.assertFalse(units[1][0])
+        self.assertTrue(units[2][0])
+        standby_unit_1 = units[0][1]
+        standby_unit_2 = units[1][1]
+        master_unit = units[2][1]
 
         # Shutdown PostgreSQL on standby_unit_1 and ensure
         # standby_unit_2 will have received more WAL information from
