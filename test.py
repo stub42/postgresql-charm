@@ -33,6 +33,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         super(PostgreSQLCharmTestCase, self).setUp()
 
         self.juju = self.useFixture(JujuFixture(
+            reuse_machines=True,
             do_teardown='TEST_DONT_TEARDOWN_JUJU' not in os.environ))
 
         # If the charms fail, we don't want tests to hang indefinitely.
