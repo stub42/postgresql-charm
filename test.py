@@ -74,12 +74,12 @@ class JujuFixture(fixtures.Fixture):
         return None
 
     def deploy(self, charm, name=None, num_units=1):
-        # The first time we deploy a charm in the test run, it needs to
-        # deploy with --update to ensure we are testing the desired
-        # revision of the charm. Subsequent deploys we do not use
-        # --update to avoid overhead and needless incrementing of the
+        # The first time we deploy a local: charm in the test run, it
+        # needs to deploy with --update to ensure we are testing the
+        # desired revision of the charm. Subsequent deploys we do not
+        # use --update to avoid overhead and needless incrementing of the
         # revision number.
-        if charm.startswith('cs:') or charm in self._deployed_charms:
+        if not charm.startswith('local:') or charm in self._deployed_charms:
             cmd = ['deploy']
         else:
             cmd = ['deploy', '-u']
@@ -102,7 +102,7 @@ class JujuFixture(fixtures.Fixture):
         self.status = self.get_result(['status'])
         return self.status
 
-    def wait_until_ready(self):
+    def wait_until_ready(self, extra=45):
         ready = False
         while not ready:
             self.refresh_status()
@@ -128,7 +128,7 @@ class JujuFixture(fixtures.Fixture):
         # enough that our system is probably stable. This means we have
         # extremely slow and flaky tests, but that is possibly better
         # than no tests.
-        time.sleep(20)
+        time.sleep(extra)
 
     def setUp(self):
         DEBUG("JujuFixture.setUp()")
@@ -156,7 +156,7 @@ class JujuFixture(fixtures.Fixture):
         # Per Bug #1190250 (WONTFIX), we need to wait for dying services
         # to die before we can continue.
         if found_services:
-            self.wait_until_ready()
+            self.wait_until_ready(0)
 
         # We shouldn't reuse machines, as we have no guarantee they are
         # still in a usable state, so tear them down too. Per
