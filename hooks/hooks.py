@@ -20,7 +20,7 @@ from yaml.constructor import ConstructorError
 
 from charmhelpers.core import hookenv, host
 from charmhelpers.core.hookenv import (
-    CRITICAL, ERROR, WARNING, INFO, DEBUG, log,
+    CRITICAL, ERROR, WARNING, INFO, DEBUG,
     )
 
 hooks = hookenv.Hooks()
@@ -28,16 +28,24 @@ hooks = hookenv.Hooks()
 # jinja2 may not be importable until the install hook has installed the
 # required packages.
 def Template(*args, **kw):
+    """jinja2.Template with deferred jinja2 import"""
     from jinja2 import Template
     return Template(*args, **kw)
 
 
 def log(msg, lvl=INFO):
-    # Per Bug #1208787, log messages sent via juju-log are being lost.
-    # Spit messages out to a log file to work around the problem.
+    '''Log a message.
+
+    Per Bug #1208787, log messages sent via juju-log are being lost.
+    Spit messages out to a log file to work around the problem.
+    It is also rather nice to have the log messages we explicitly emit
+    in a separate log file, rather than just mashed up with all the
+    juju noise.
+    '''
     myname = hookenv.local_unit().replace('/', '-')
-    with open('/tmp/{}-debug.log'.format(myname), 'a') as f:
-        f.write('{}: {}\n'.format(lvl, msg))
+    ts = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
+    with open('/var/log/juju/{}-debug.log'.format(myname), 'a') as f:
+        f.write('{} {}: {}\n'.format(ts, lvl, msg))
     hookenv.log(msg, lvl)
 
 
@@ -49,6 +57,7 @@ class State(dict):
         self.load()
 
     def load(self):
+        '''Load stored state from local disk.'''
         if os.path.exists(self._state_file):
             state = pickle.load(open(self._state_file, 'rb'))
         else:
@@ -58,6 +67,7 @@ class State(dict):
         self.update(state)
 
     def save(self):
+        '''Store state to local disk.'''
         state = {}
         state.update(self)
         pickle.dump(state, open(self._state_file, 'wb'))
@@ -181,13 +191,13 @@ def volume_get_all_mounted():
 
 
 def postgresql_autostart(enabled):
+    startup_file = os.path.join(postgresql_config_dir, 'start.conf')
     if enabled:
         log("Enabling PostgreSQL startup in {}".format(startup_file))
         mode = 'auto'
     else:
         log("Disabling PostgreSQL startup in {}".format(startup_file))
         mode = 'manual'
-    startup_file = os.path.join(postgresql_config_dir, 'start.conf')
     contents = Template(open("templates/start_conf.tmpl").read()).render(
         {'mode': mode})
     host.write_file(
@@ -209,6 +219,7 @@ def run(command, exit_on_error=True):
 
 
 def postgresql_is_running():
+    '''Return true if PostgreSQL is running.'''
     # init script always return true (9.1), add extra check to make it useful
     status, output = commands.getstatusoutput("invoke-rc.d postgresql status")
     if status != 0:
@@ -219,72 +230,65 @@ def postgresql_is_running():
 
 
 def postgresql_stop():
-    host.service_stop('postgresql')
-    return not postgresql_is_running()
+    '''Shutdown PostgreSQL.'''
+    success = host.service_stop('postgresql')
+    return not (success and postgresql_is_running())
 
 
 def postgresql_start():
-    host.service_start('postgresql')
-    return postgresql_is_running()
+    '''Start PostgreSQL if it is not already running.'''
+    success = host.service_start('postgresql')
+    return success and postgresql_is_running()
 
 
 def postgresql_restart():
+    '''Restart PostgreSQL, or start it if it is not already running.'''
     if postgresql_is_running():
-        # If the database is in backup mode, we don't want to restart
-        # PostgreSQL and abort the procedure. This may be another unit being
-        # cloned, or a filesystem level backup is being made. There is no
-        # timeout here, as backups can take hours or days. Instead, keep
-        # logging so admins know wtf is going on.
-        last_warning = time.time()
-        while postgresql_is_in_backup_mode():
-            if time.time() + 120 > last_warning:
-                log("In backup mode. PostgreSQL restart blocked.", WARNING)
-                log(
-                    "Run \"psql -U postgres -c 'SELECT pg_stop_backup()'\""
-                    "to cancel backup mode and forcefully unblock this hook.")
-                last_warning = time.time()
-            time.sleep(5)
-
-        return host.service_restart('postgresql')
+        with restart_lock(hookenv.local_unit(), True):
+            # 'service postgresql restart' fails; it only does a reload.
+            # success = host.service_restart('postgresql')
+            try:
+                run('pg_ctlcluster -force {version} {cluster_name} '
+                    'restart'.format(**config_data))
+                success = True
+            except subprocess.CalledProcessError as e:
+                success = False
     else:
-        return host.service_start('postgresql')
+        success = host.service_start('postgresql')
 
     # Store a copy of our known live configuration so
     # postgresql_reload_or_restart() can make good choices.
-    if 'saved_config' in local_state:
+    if success and 'saved_config' in local_state:
         local_state['live_config'] = local_state['saved_config']
         local_state.save()
 
-    return postgresql_is_running()
+    return success and postgresql_is_running()
 
 
 def postgresql_reload():
+    '''Make PostgreSQL reload its configuration.'''
     # reload returns a reliable exit status
     status, output = commands.getstatusoutput("invoke-rc.d postgresql reload")
     return (status == 0)
 
 
-def postgresql_reload_or_restart():
-    """Reload PostgreSQL configuration, restarting if necessary."""
-    # Pull in current values of settings that can only be changed on
-    # server restart.
+def requires_restart():
+    '''Check for configuration changes requiring a restart to take effect.'''
     if not postgresql_is_running():
-        return postgresql_restart()
+        return True
 
-    # Suck in the config last written to postgresql.conf.
     saved_config = local_state.get('saved_config', None)
     if not saved_config:
         # No record of postgresql.conf state, perhaps an upgrade.
         # Better restart.
-        return postgresql_restart()
+        return True
 
-    # Suck in our live config from last time we restarted.
     live_config = local_state.setdefault('live_config', {})
 
     # Pull in a list of PostgreSQL settings.
     cur = db_cursor()
     cur.execute("SELECT name, context FROM pg_settings")
-    requires_restart = False
+    restart = False
     for name, context in cur.fetchall():
         live_value = live_config.get(name, None)
         new_value = saved_config.get(name, None)
@@ -296,23 +300,27 @@ def postgresql_reload_or_restart():
             if context == 'postmaster':
                 # A setting has changed that requires PostgreSQL to be
                 # restarted before it will take effect.
-                requires_restart = True
+                restart = True
+    return restart
 
-    if requires_restart:
-        # A change has been requested that requires a restart.
-        log(
-            "Configuration change requires PostgreSQL restart. Restarting.",
+
+def postgresql_reload_or_restart():
+    """Reload PostgreSQL configuration, restarting if necessary."""
+    if requires_restart():
+        log("Configuration change requires PostgreSQL restart. Restarting.",
             WARNING)
-        rc = postgresql_restart()
+        success = postgresql_restart()
+        if not success or requires_restart():
+            log("Configuration changes failed to apply", WARNING)
+            success = False
     else:
-        log("PostgreSQL reload, config changes taking effect.", DEBUG)
-        rc = postgresql_reload()  # No pending need to bounce, just reload.
+        success = host.service_reload('postgresql')
 
-    if rc == 0 and 'saved_config' in local_state:
-        local_state['live_config'] = local_state['saved_config']
+    if success:
+        local_state['saved_config'] = local_state['live_config']
         local_state.save()
 
-    return rc
+    return success
 
 
 def get_service_port(postgresql_config):
@@ -344,8 +352,6 @@ def create_postgresql_config(postgresql_config):
             config_data["shared_buffers"] = \
                 "%sMB" % (int(int(total_ram) * 0.15),)
         # XXX: This is very messy - should probably be a subordinate charm
-        # file overlaps with __builtin__.file ... renaming to conf_file
-        # negronjl
         conf_file = open("/etc/sysctl.d/50-postgresql.conf", "w")
         conf_file.write("kernel.sem = 250 32000 100 1024\n")
         conf_file.write("kernel.shmall = %s\n" %
@@ -579,7 +585,7 @@ def get_password(user):
 
 
 def db_cursor(autocommit=False, db='template1', user='postgres',
-              host=None, timeout=120):
+              host=None, timeout=30):
     import psycopg2
     if host:
         conn_str = "dbname={} host={} user={}".format(db, host, user)
@@ -855,14 +861,16 @@ def upgrade_charm():
 
 @hooks.hook()
 def start():
-    if not postgresql_restart():
+    if not postgresql_reload_or_restart():
         raise SystemExit(1)
 
 
 @hooks.hook()
 def stop():
-    if not postgresql_stop():
-        raise SystemExit(1)
+    if postgresql_is_running():
+        with restart_lock(hookenv.local_unit(), True):
+            if not postgresql_stop():
+                raise SystemExit(1)
 
 
 def quote_identifier(identifier):
@@ -1163,7 +1171,7 @@ def db_admin_relation_joined_changed():
 def db_relation_broken():
     from psycopg2.extensions import AsIs
 
-    relid = os.environ['JUJU_RELATION_ID']
+    relid = hookenv.relation_id()
     if relid not in local_state['relations']['db']:
         # This was to be a hot standby, but it had not yet got as far as
         # receiving and handling credentials from the master.
@@ -1174,7 +1182,7 @@ def db_relation_broken():
     # we used from there. Instead, we have to persist this information
     # ourselves.
     relation = local_state['relations']['db'][relid]
-    unit_relation_data = relation[os.environ['JUJU_UNIT_NAME']]
+    unit_relation_data = relation[hookenv.local_unit()]
 
     if local_state['state'] in ('master', 'standalone'):
         user = unit_relation_data.get('user', None)
@@ -1303,27 +1311,75 @@ def elected_master():
         log("I am already the master", DEBUG)
         return hookenv.local_unit()
 
+    if local_state['state'] == 'hot standby':
+        log("I am already following {}".format(
+            local_state['following']), DEBUG)
+        return local_state['following']
+
+    replication_relid = hookenv.relation_ids('replication')[0]
+    replication_units = hookenv.related_units(replication_relid)
+
+    if local_state['state'] == 'standalone':
+        log("I'm a standalone unit wanting to participate in replication")
+        existing_replication = False
+        for unit in replication_units:
+            # If another peer thinks it is the master, believe it.
+            remote_state = hookenv.relation_get(
+                'state', unit, replication_relid)
+            if remote_state == 'master':
+                log("{} thinks it is the master, believing it".format(
+                    unit), DEBUG)
+                return unit
+
+            # If we find a peer that isn't standalone, we know
+            # replication has already been setup at some point.
+            if remote_state != 'standalone':
+                existing_replication = True
+
+        # If we are joining a peer relation where replication has
+        # already been setup, but there is currently no master, wait
+        # until one of the remaining participating units has been
+        # promoted to master. Only they have the data we need to
+        # preserve.
+        if existing_replication:
+            log("Peers participating in replication need to elect a master",
+                DEBUG)
+            return None
+
+        # There are no peers claiming to be master, and there is no
+        # election in progress, so lowest numbered unit wins.
+        units = replication_units + [hookenv.local_unit()]
+        master = unit_sorted(units)[0]
+        if master == hookenv.local_unit():
+            log("I'm Master - lowest numbered unit in new peer group")
+            return master
+        else:
+            log("Waiting on {} to declare itself Master".format(master), DEBUG)
+            return None
+
     if local_state['state'] == 'failover':
         former_master = local_state['following']
         log("Failover from {}".format(former_master))
 
         units_not_in_failover = set()
-        for relid in hookenv.relation_ids('replication'):
-            for unit in hookenv.related_units(relid):
-                if unit == former_master:
-                    log("Found dying master {}".format(unit), DEBUG)
-                    continue
+        candidates = set()
+        for unit in replication_units:
+            if unit == former_master:
+                log("Found dying master {}".format(unit), DEBUG)
+                continue
 
-                relation = hookenv.relation_get(unit=unit, rid=relid)
+            relation = hookenv.relation_get(unit=unit, rid=replication_relid)
 
-                if relation['state'] == 'master':
-                    log(
-                        "{} says it already won the election".format(unit),
-                        INFO)
-                    return unit
+            if relation['state'] == 'master':
+                log("{} says it already won the election".format(unit),
+                    INFO)
+                return unit
 
-                if relation['state'] != 'failover':
-                    units_not_in_failover.add(unit)
+            if relation['state'] == 'failover':
+                candidates.add(unit)
+
+            elif relation['state'] != 'standalone':
+                units_not_in_failover.add(unit)
 
         if units_not_in_failover:
             log("{} unaware of impending election. Deferring result.".format(
@@ -1333,35 +1389,24 @@ def elected_master():
         log("Election in progress")
         winner = None
         winning_offset = -1
-        for relid in hookenv.relation_ids('replication'):
-            candidates = set(hookenv.related_units(relid))
-            candidates.add(hookenv.local_unit())
-            candidates.discard(former_master)
-            # Sort the unit lists so we get consistent results in a tie
-            # and lowest unit number wins.
-            for unit in unit_sorted(candidates):
-                relation = hookenv.relation_get(unit=unit, rid=relid)
-                if int(relation['wal_received_offset']) > winning_offset:
-                    winner = unit
-                    winning_offset = int(relation['wal_received_offset'])
+        candidates.add(hookenv.local_unit())
+        # Sort the unit lists so we get consistent results in a tie
+        # and lowest unit number wins.
+        for unit in unit_sorted(candidates):
+            relation = hookenv.relation_get(unit=unit, rid=replication_relid)
+            if int(relation['wal_received_offset']) > winning_offset:
+                winner = unit
+                winning_offset = int(relation['wal_received_offset'])
 
         # All remaining hot standbys are in failover mode and have
         # reported their wal_received_offset. We can declare victory.
-        log("{} won the election as is the new master".format(winner))
-        return winner
-
-    # Maybe another peer thinks it is the master?
-    for relid in hookenv.relation_ids('replication'):
-        for unit in hookenv.related_units(relid):
-            if hookenv.relation_get('state', unit, relid) == 'master':
-                return unit
-
-    # New peer group. Lowest numbered unit will be the master.
-    for relid in hookenv.relation_ids('replication'):
-        units = hookenv.related_units(relid) + [hookenv.local_unit()]
-        master = unit_sorted(units)[0]
-        log("New peer group. {} is elected master".format(master))
-        return master
+        if winner == hookenv.local_unit():
+            log("I won the election, announcing myself winner")
+            return winner
+        else:
+            log("Waiting for {} to announce its victory".format(winner),
+                DEBUG)
+            return None
 
 
 @hooks.hook('replication-relation-joined', 'replication-relation-changed')
@@ -1419,10 +1464,7 @@ def replication_relation_joined_changed():
             log("Fresh unit. I will clone {} and become a hot standby".format(
                 master))
 
-            # Before we start destroying anything, ensure that the
-            # master is contactable.
             master_ip = hookenv.relation_get('private-address', master)
-            wait_for_db(db='postgres', user='juju_replication', host=master_ip)
 
             clone_database(master, master_ip)
 
@@ -1592,8 +1634,55 @@ def switch_cwd(new_working_directory):
         os.chdir(org_dir)
 
 
+@contextmanager
+def restart_lock(unit, exclusive):
+    '''Aquire the database restart lock on the given unit.
+
+    A database needing a restart should grab an exclusive lock before
+    doing so. To block a remote database from doing a restart, grab a shared
+    lock.
+    '''
+    import psycopg2
+    key = long(config_data['advisory_lock_restart_key'])
+    if exclusive:
+        lock_function = 'pg_advisory_lock'
+    else:
+        lock_function = 'pg_advisory_lock_shared'
+    q = 'SELECT {}({})'.format(lock_function, key)
+
+    # We will get an exception if the database is rebooted while waiting
+    # for a shared lock. If the connection is killed, we retry a few
+    # times to cope.
+    num_retries = 3
+
+    for count in range(0, num_retries):
+        try:
+            if unit == hookenv.local_unit():
+                cur = db_cursor(autocommit=True)
+            else:
+                host = hookenv.relation_get('private-address', unit)
+                cur = db_cursor(
+                    autocommit=True, db='postgres',
+                    user='juju_replication', host=host)
+            cur.execute(q)
+            break
+        except psycopg2.Error:
+            if count == num_retries - 1:
+                raise
+
+    try:
+        yield
+    finally:
+        # Close our connection, swallowing any exceptions as the database
+        # may be being rebooted now we have released our lock.
+        try:
+            del cur
+        except psycopg2.Error:
+            pass
+
+
 def clone_database(master_unit, master_host):
-    with pgpass():
+    with restart_lock(master_unit, False):
         postgresql_stop()
         log("Cloning master {}".format(master_unit))
 
@@ -1607,9 +1696,10 @@ def clone_database(master_unit, master_host):
             shutil.rmtree(postgresql_cluster_dir)
 
         try:
-            # Change directory the postgres user can read.
-            with switch_cwd('/tmp'):
-                # Run the sudo command.
+            # Change directory the postgres user can read, and need
+            # .pgpass too.
+            with switch_cwd('/tmp'), pgpass():
+                # Clone the master with pg_basebackup.
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             log(output, DEBUG)
             # Debian by default expects SSL certificates in the datadir.
@@ -1626,8 +1716,8 @@ def clone_database(master_unit, master_host):
             # can retry hooks again. Even assuming the charm is
             # functioning correctly, the clone may still fail
             # due to eg. lack of disk space.
-            log("Clone failed, db cluster destroyed", ERROR)
             log(x.output, ERROR)
+            log("Clone failed, local db destroyed", ERROR)
             if os.path.exists(postgresql_cluster_dir):
                 shutil.rmtree(postgresql_cluster_dir)
             if os.path.exists(postgresql_config_dir):
@@ -1650,6 +1740,15 @@ def slave_count():
 def postgresql_is_in_backup_mode():
     return os.path.exists(
         os.path.join(postgresql_cluster_dir, 'backup_label'))
+
+
+def pg_basebackup_is_running():
+    cur = db_cursor(autocommit=True)
+    cur.execute("""
+        SELECT count(*) FROM pg_stat_activity
+        WHERE usename='juju_replication' AND application_name='pg_basebackup'
+        """)
+    return cur.fetchone()[0] > 0
 
 
 def postgresql_wal_received_offset():
@@ -1694,7 +1793,7 @@ def update_nrpe_checks():
     try:
         nagios_uid = getpwnam('nagios').pw_uid
         nagios_gid = getgrnam('nagios').gr_gid
-    except:
+    except Exception:
         hookenv.log("Nagios user not set up.", hookenv.DEBUG)
         return
 
