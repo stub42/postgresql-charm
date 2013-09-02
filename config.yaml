@@ -313,3 +313,10 @@ options:
     type: string
     description: |
         Extra archives to add with add-apt-repository(1).
+  advisory_lock_restart_key:
+    default: 765
+    type: int
+    description: |
+        An advisory lock key used internally by the charm. You do not need
+        to change it unless it happens to conflict with an advisory lock key
+        being used by your applications.
