@@ -1,13 +1,17 @@
 name: postgresql
-summary: "object-relational SQL database (supported version)"
+summary: "PostgreSQL object-relational SQL database (supported version)"
 description: |
-  PostgreSQL is a fully featured object-relational database management
-  system.  It supports a large part of the SQL standard and is designed
-  to be extensible by users in many aspects.  Some of the features are:
-  ACID transactions, foreign keys, views, sequences, subqueries,
-  triggers, user-defined types and functions, outer joins, multiversion
-  concurrency control.  Graphical user interfaces and bindings for many
-  programming languages are available as well.
+  PostgreSQL is a powerful, open source object-relational database system.
+  It has more than 15 years of active development and a proven
+  architecture that has earned it a strong reputation for reliability,
+  data integrity, and correctness. It is fully ACID compliant, has full
+  support for foreign keys, joins, views, triggers, and stored procedures
+  (in multiple languages). It includes most SQL:2008 data types, including
+  INTEGER, NUMERIC, BOOLEAN, CHAR, VARCHAR, DATE, INTERVAL, and TIMESTAMP.
+  It also supports storage of binary large objects, including pictures,
+  sounds, or video. It has native programming interfaces for C/C++, Java,
+  .Net, Perl, Python, Ruby, Tcl, ODBC, among others, and exceptional
+  documentation (http://www.postgresql.org/docs/manuals/).
 maintainer: Stuart Bishop <stuart.bishop@canonical.com>
 categories:
     - databases
