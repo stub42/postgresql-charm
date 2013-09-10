@@ -492,6 +492,15 @@ def generate_postgresql_hba(
                              }
         relation_data.append(local_replication)
 
+    # Admin IP for people useing tools like pgAdminIII in a local JuJu
+    if config_data["admin_ip"] != 'None':
+      admin_host = {'database':'all',
+                    'user':'all',
+                    'private-address':munge_address(config_data["admin_ip"]),
+                   }
+      relation_data.append(admin_host)
+
+
     pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read())
     host.write_file(
         postgresql_hba, pg_hba_template.render(access_list=relation_data),

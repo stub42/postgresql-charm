@@ -1,4 +1,13 @@
 options:
+  admin_ip:
+    default: "None"
+    type: string
+    description: |
+      IP Address admin tool like pgAdmin3 will connect from, this is most useful for
+      developers running juju in local mode that need to connect tools like pgAdmin
+      to a postgres server running inside a juju container. The IP address added
+      here will be added to the pg_hba.conf file allowing ip connections to all 
+      databases on the server from the given ip using md5 password encryption.
   locale:
     default: "C"
     type: string
