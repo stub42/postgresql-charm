@@ -1,6 +1,6 @@
 options:
   admin_ip:
-    default: "None"
+    default: ""
     type: string
     description: |
       IP Address admin tool like pgAdmin3 will connect from, this is most useful for

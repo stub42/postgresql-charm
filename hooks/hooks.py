@@ -493,7 +493,7 @@ def generate_postgresql_hba(
         relation_data.append(local_replication)
 
     # Admin IP for people useing tools like pgAdminIII in a local JuJu
-    if config_data["admin_ip"] != 'None':
+    if config_data["admin_ip"] != '':
       admin_host = {'database':'all',
                     'user':'all',
                     'private-address':munge_address(config_data["admin_ip"]),
