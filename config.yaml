@@ -233,7 +233,7 @@ options:
     type: int
     description: Kernel/shmmax
   shared_buffers:
-    default: "8MB"
+    default: ""
     type: string
     description: Shared buffers
   temp_buffers:
@@ -254,7 +254,7 @@ options:
     type: float
     description: Random page cost
   effective_cache_size:
-    default: "128MB"
+    default: ""
     type: string
     description: Effective cache size
   #------------------------------------------------------------------------
