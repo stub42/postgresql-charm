@@ -343,14 +343,16 @@ def create_postgresql_config(postgresql_config):
         # num_cpus is not being used ... commenting it out ... negronjl
         #num_cpus = run("cat /proc/cpuinfo | grep processor | wc -l")
         total_ram = run("free -m | grep Mem | awk '{print $2}'")
-        config_data["effective_cache_size"] = \
-            "%sMB" % (int(int(total_ram) * 0.75),)
-        if total_ram > 1023:
-            config_data["shared_buffers"] = \
-                "%sMB" % (int(int(total_ram) * 0.25),)
-        else:
-            config_data["shared_buffers"] = \
-                "%sMB" % (int(int(total_ram) * 0.15),)
+        if not config_data["effective_cache_size"]:
+            config_data["effective_cache_size"] = \
+                "%sMB" % (int(int(total_ram) * 0.75),)
+        if not config_data["shared_buffers"]:
+            if total_ram > 1023:
+                config_data["shared_buffers"] = \
+                    "%sMB" % (int(int(total_ram) * 0.25),)
+            else:
+                config_data["shared_buffers"] = \
+                    "%sMB" % (int(int(total_ram) * 0.15),)
         # XXX: This is very messy - should probably be a subordinate charm
         conf_file = open("/etc/sysctl.d/50-postgresql.conf", "w")
         conf_file.write("kernel.sem = 250 32000 100 1024\n")
