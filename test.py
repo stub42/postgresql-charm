@@ -11,6 +11,7 @@ Usage:
 
 import os.path
 import subprocess
+import sys
 import time
 import unittest
 
@@ -18,8 +19,8 @@ import fixtures
 import testtools
 from testtools.content import text_content
 
-from testing.jujufixture import JujuFixture
-from testing.run import run
+sys.path.append(os.path.join(os.path.dirname(__file__), 'hooks'))
+from charmhelpers.testing.jujufixture import JujuFixture, run
 
 
 SERIES = 'precise'

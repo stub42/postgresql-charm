@@ -18,7 +18,7 @@ import time
 import yaml
 from yaml.constructor import ConstructorError
 
-from charmhelpers.core import hookenv, host
+from charmhelpers.core import fetch, hookenv, host
 from charmhelpers.core.hookenv import (
     CRITICAL, ERROR, WARNING, INFO, DEBUG,
     )
@@ -806,8 +806,8 @@ def install(run_pre=True):
                 "python-psycopg2", "postgresql-contrib", "postgresql-plpython",
                 "postgresql-%s-debversion" % config_data["version"]]
     packages.extend((hookenv.config('extra-packages') or '').split())
-    packages = host.filter_installed_packages(packages)
-    host.apt_install(packages, fatal=True)
+    packages = fetch.filter_installed_packages(packages)
+    fetch.apt_install(packages, fatal=True)
 
     if not 'state' in local_state:
         # Fresh installation. Because this function is invoked by both
