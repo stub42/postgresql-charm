@@ -1,4 +1,6 @@
 destination: hooks/charmhelpers
-branch: lp:~stub/charm-helpers/bug-1214793-service-wrappers
+branch: lp:~stub/charm-helpers/test-harness
 include:
     - core
+    - testing
+    - fetch
