@@ -494,6 +494,24 @@ def generate_postgresql_hba(
                              }
         relation_data.append(local_replication)
 
+    # Admin IP addresses for people using tools like pgAdminIII in a local JuJu
+    # We accept a single IP or a comma separated list of IPs, these are added
+    # to the list of relations that end up in pg_hba.conf thus granting
+    # the IP addresses socket access to the postgres server.
+    if config_data["admin_addresses"] != '':
+        if "," in config_data["admin_addresses"]:
+            admin_ip_list = config_data["admin_addresses"].split(",")
+        else:
+            admin_ip_list = [config_data["admin_addresses"]]
+
+        for admin_ip in admin_ip_list:
+            admin_host = {'database':'all',
+                'user':'all',
+                'private-address':munge_address(admin_ip),
+            }
+            relation_data.append(admin_host)
+
+
     pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read())
     host.write_file(
         postgresql_hba, pg_hba_template.render(access_list=relation_data),
