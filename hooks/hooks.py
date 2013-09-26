@@ -343,14 +343,16 @@ def create_postgresql_config(postgresql_config):
         # num_cpus is not being used ... commenting it out ... negronjl
         #num_cpus = run("cat /proc/cpuinfo | grep processor | wc -l")
         total_ram = run("free -m | grep Mem | awk '{print $2}'")
-        config_data["effective_cache_size"] = \
-            "%sMB" % (int(int(total_ram) * 0.75),)
-        if total_ram > 1023:
-            config_data["shared_buffers"] = \
-                "%sMB" % (int(int(total_ram) * 0.25),)
-        else:
-            config_data["shared_buffers"] = \
-                "%sMB" % (int(int(total_ram) * 0.15),)
+        if not config_data["effective_cache_size"]:
+            config_data["effective_cache_size"] = \
+                "%sMB" % (int(int(total_ram) * 0.75),)
+        if not config_data["shared_buffers"]:
+            if total_ram > 1023:
+                config_data["shared_buffers"] = \
+                    "%sMB" % (int(int(total_ram) * 0.25),)
+            else:
+                config_data["shared_buffers"] = \
+                    "%sMB" % (int(int(total_ram) * 0.15),)
         # XXX: This is very messy - should probably be a subordinate charm
         conf_file = open("/etc/sysctl.d/50-postgresql.conf", "w")
         conf_file.write("kernel.sem = 250 32000 100 1024\n")
@@ -491,6 +493,24 @@ def generate_postgresql_hba(
                              'unit': hookenv.local_unit(),
                              }
         relation_data.append(local_replication)
+
+    # Admin IP addresses for people using tools like pgAdminIII in a local JuJu
+    # We accept a single IP or a comma separated list of IPs, these are added
+    # to the list of relations that end up in pg_hba.conf thus granting
+    # the IP addresses socket access to the postgres server.
+    if config_data["admin_addresses"] != '':
+        if "," in config_data["admin_addresses"]:
+            admin_ip_list = config_data["admin_addresses"].split(",")
+        else:
+            admin_ip_list = [config_data["admin_addresses"]]
+
+        for admin_ip in admin_ip_list:
+            admin_host = {'database':'all',
+                'user':'all',
+                'private-address':munge_address(admin_ip),
+            }
+            relation_data.append(admin_host)
+
 
     pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read())
     host.write_file(
