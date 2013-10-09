@@ -18,12 +18,14 @@ import time
 import yaml
 from yaml.constructor import ConstructorError
 
-from charmhelpers.core import fetch, hookenv, host
+from charmhelpers import fetch
+from charmhelpers.core import hookenv, host
 from charmhelpers.core.hookenv import (
     CRITICAL, ERROR, WARNING, INFO, DEBUG,
     )
 
 hooks = hookenv.Hooks()
+
 
 # jinja2 may not be importable until the install hook has installed the
 # required packages.
@@ -505,12 +507,11 @@ def generate_postgresql_hba(
             admin_ip_list = [config_data["admin_addresses"]]
 
         for admin_ip in admin_ip_list:
-            admin_host = {'database':'all',
-                'user':'all',
-                'private-address':munge_address(admin_ip),
-            }
+            admin_host = {
+                'database': 'all',
+                'user': 'all',
+                'private-address': munge_address(admin_ip)}
             relation_data.append(admin_host)
-
 
     pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read())
     host.write_file(
@@ -1063,7 +1064,7 @@ def snapshot_relations():
 # A more complex approach is for the first database unit that joins
 # the relation to generate the usernames and passwords and publish
 # this to the relation. Subsequent units can retrieve this
-# information and republish it. Of course, the master unit also 
+# information and republish it. Of course, the master unit also
 # creates the database and users when it joins the relation.
 # This approach should work reliably on the server side. However,
 # there is a window from when a slave unit joins a client relation
@@ -1100,6 +1101,7 @@ def snapshot_relations():
 # master db-relation-joined (publish)
 # slave replication-relation-changed (noop; slave not yet joined db rel)
 # slave db-relation-joined (republish)
+
 
 @hooks.hook('db-relation-joined', 'db-relation-changed')
 def db_relation_joined_changed():
