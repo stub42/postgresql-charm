@@ -20,6 +20,9 @@ provides:
     interface: pgsql
   db-admin:
     interface: pgsql
+  nrpe-external-master:
+    interface: nrpe-external-master
+    scope: container
 requires:
   persistent-storage:
     interface: directory-path
