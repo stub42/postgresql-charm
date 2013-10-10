@@ -25,10 +25,13 @@ from charmhelpers.core.hookenv import (
 
 hooks = hookenv.Hooks()
 
-# jinja2 may not be importable until the install hook has installed the
-# required packages.
+
 def Template(*args, **kw):
-    """jinja2.Template with deferred jinja2 import"""
+    """jinja2.Template with deferred jinja2 import.
+
+    jinja2 may not be importable until the install hook has installed the
+    required packages.
+    """
     from jinja2 import Template
     return Template(*args, **kw)
 
@@ -251,7 +254,7 @@ def postgresql_restart():
                 run('pg_ctlcluster -force {version} {cluster_name} '
                     'restart'.format(**config_data))
                 success = True
-            except subprocess.CalledProcessError as e:
+            except subprocess.CalledProcessError:
                 success = False
     else:
         success = host.service_start('postgresql')
@@ -400,7 +403,7 @@ def create_postgresql_ident(postgresql_ident):
 
 
 def generate_postgresql_hba(
-    postgresql_hba, user=None, schema_user=None, database=None):
+        postgresql_hba, user=None, schema_user=None, database=None):
     '''Create the pg_hba.conf file.'''
 
     # Per Bug #1117542, when generating the postgresql_hba file we
@@ -505,12 +508,11 @@ def generate_postgresql_hba(
             admin_ip_list = [config_data["admin_addresses"]]
 
         for admin_ip in admin_ip_list:
-            admin_host = {'database':'all',
-                'user':'all',
-                'private-address':munge_address(admin_ip),
-            }
+            admin_host = {
+                'database': 'all',
+                'user': 'all',
+                'private-address': munge_address(admin_ip)}
             relation_data.append(admin_host)
-
 
     pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read())
     host.write_file(
@@ -547,8 +549,8 @@ def create_recovery_conf(master_host, restart_on_change=False):
 
     recovery_conf = Template(
         open("templates/recovery.conf.tmpl").read()).render({
-            'host': master_host,
-            'password': local_state['replication_password']})
+        'host': master_host,
+        'password': local_state['replication_password']})
     log(recovery_conf, DEBUG)
     host.write_file(
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
@@ -728,7 +730,7 @@ def config_changed_volume_apply():
             log("postgresql_stop() failed - can't migrate data.", ERROR)
             return False
         if not os.path.exists(os.path.join(
-            new_pg_version_cluster_dir, "PG_VERSION")):
+                new_pg_version_cluster_dir, "PG_VERSION")):
             log("migrating PG data {}/ -> {}/".format(
                 data_directory_path, new_pg_version_cluster_dir), WARNING)
             # void copying PID file to perm storage (shouldn't be any...)
@@ -1063,7 +1065,7 @@ def snapshot_relations():
 # A more complex approach is for the first database unit that joins
 # the relation to generate the usernames and passwords and publish
 # this to the relation. Subsequent units can retrieve this
-# information and republish it. Of course, the master unit also 
+# information and republish it. Of course, the master unit also
 # creates the database and users when it joins the relation.
 # This approach should work reliably on the server side. However,
 # there is a window from when a slave unit joins a client relation
@@ -1100,6 +1102,7 @@ def snapshot_relations():
 # master db-relation-joined (publish)
 # slave replication-relation-changed (noop; slave not yet joined db rel)
 # slave db-relation-joined (republish)
+
 
 @hooks.hook('db-relation-joined', 'db-relation-changed')
 def db_relation_joined_changed():
@@ -1706,7 +1709,8 @@ def clone_database(master_unit, master_host):
         postgresql_stop()
         log("Cloning master {}".format(master_unit))
 
-        cmd = ['sudo', '-E',  # -E needed to locate pgpass file.
+        cmd = [
+            'sudo', '-E',  # -E needed to locate pgpass file.
             '-u', 'postgres', 'pg_basebackup', '-D', postgresql_cluster_dir,
             '--xlog', '--checkpoint=fast', '--no-password',
             '-h', master_host, '-p', '5432', '--username=juju_replication']
