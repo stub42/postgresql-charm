@@ -19,8 +19,7 @@ import fixtures
 import testtools
 from testtools.content import text_content
 
-sys.path.append(os.path.join(os.path.dirname(__file__), 'hooks'))
-from charmhelpers.testing.jujufixture import JujuFixture, run
+from testing.jujufixture import JujuFixture, run
 
 
 SERIES = 'precise'

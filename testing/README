@@ -1,0 +1,36 @@
+This package provides a Juju test fixture to help you write tests for
+your charms as a Python test suite. It requires you to already have a
+bootstrapped environment.
+
+Below is a simple example using the fixture. You can find a more extensive
+example in the PostgreSQL charm.
+
+#!/usr/bin/python
+import os
+import fixtures
+import testtools
+import unittest
+from charmhelpers.testing.jujufixture import JujuFixture
+
+
+class CharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
+
+    def setUp(self):
+        super(CharmTestCase, self).setUp()
+
+        self.juju = self.useFixture(JujuFixture(reuse_machines=True))
+
+        # If the charms fail, we don't want tests to hang indefinitely.
+        timeout = int(os.environ.get('TEST_TIMEOUT', 900))
+        self.useFixture(fixtures.Timeout(timeout, gentle=True))
+
+    def test_basic(self):
+        self.juju.deploy('local:mycharm', 'test-mycharm', num_units=1)
+        self.juju.add_unit('local:mycharm', 'test-mycharm', num_units=2)
+        self.juju.deploy('local:othercharm')
+        self.juju.do(['add-relation', 'test-mycharm:rel', 'othercharm:rel'])
+        self.juju.wait_until_ready()
+        [ ... test the deployment ... ]
+
+if __name__ == '__main__':
+    unittest.main()
