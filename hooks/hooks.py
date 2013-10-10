@@ -27,10 +27,12 @@ from charmhelpers.core.hookenv import (
 hooks = hookenv.Hooks()
 
 
-# jinja2 may not be importable until the install hook has installed the
-# required packages.
 def Template(*args, **kw):
-    """jinja2.Template with deferred jinja2 import"""
+    """jinja2.Template with deferred jinja2 import.
+
+    jinja2 may not be importable until the install hook has installed the
+    required packages.
+    """
     from jinja2 import Template
     return Template(*args, **kw)
 
@@ -253,7 +255,7 @@ def postgresql_restart():
                 run('pg_ctlcluster -force {version} {cluster_name} '
                     'restart'.format(**config_data))
                 success = True
-            except subprocess.CalledProcessError as e:
+            except subprocess.CalledProcessError:
                 success = False
     else:
         success = host.service_start('postgresql')
@@ -402,7 +404,7 @@ def create_postgresql_ident(postgresql_ident):
 
 
 def generate_postgresql_hba(
-    postgresql_hba, user=None, schema_user=None, database=None):
+        postgresql_hba, user=None, schema_user=None, database=None):
     '''Create the pg_hba.conf file.'''
 
     # Per Bug #1117542, when generating the postgresql_hba file we
@@ -548,8 +550,8 @@ def create_recovery_conf(master_host, restart_on_change=False):
 
     recovery_conf = Template(
         open("templates/recovery.conf.tmpl").read()).render({
-            'host': master_host,
-            'password': local_state['replication_password']})
+        'host': master_host,
+        'password': local_state['replication_password']})
     log(recovery_conf, DEBUG)
     host.write_file(
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
@@ -729,7 +731,7 @@ def config_changed_volume_apply():
             log("postgresql_stop() failed - can't migrate data.", ERROR)
             return False
         if not os.path.exists(os.path.join(
-            new_pg_version_cluster_dir, "PG_VERSION")):
+                new_pg_version_cluster_dir, "PG_VERSION")):
             log("migrating PG data {}/ -> {}/".format(
                 data_directory_path, new_pg_version_cluster_dir), WARNING)
             # void copying PID file to perm storage (shouldn't be any...)
@@ -1708,7 +1710,8 @@ def clone_database(master_unit, master_host):
         postgresql_stop()
         log("Cloning master {}".format(master_unit))
 
-        cmd = ['sudo', '-E',  # -E needed to locate pgpass file.
+        cmd = [
+            'sudo', '-E',  # -E needed to locate pgpass file.
             '-u', 'postgres', 'pg_basebackup', '-D', postgresql_cluster_dir,
             '--xlog', '--checkpoint=fast', '--no-password',
             '-h', master_host, '-p', '5432', '--username=juju_replication']
