@@ -115,7 +115,7 @@ class JujuFixture(fixtures.Fixture):
                     agent_state = units[unit].get('agent-state', '')
                     if agent_state == 'error':
                         raise RuntimeError('{} error: {}'.format(
-                            unit, units[unit].get('agent-state-info','')))
+                            unit, units[unit].get('agent-state-info', '')))
                     if agent_state != 'started':
                         ready = False
         # Unfortunately, there is no way to tell when a system is
