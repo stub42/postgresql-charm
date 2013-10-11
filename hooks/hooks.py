@@ -1247,11 +1247,11 @@ def add_extra_repos():
         repos_added = False
         for repo in extra_repos.split():
             if repo not in extra_repos_added:
-                run("add-apt-repository --yes '{}'".format(repo))
+                fetch.add_source(repo)
                 extra_repos_added.add(repo)
                 repos_added = True
         if repos_added:
-            host.apt_update(fatal=True)
+            fetch.apt_update(fatal=True)
             local_state.save()
 
 
