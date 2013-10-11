@@ -115,7 +115,7 @@ class JujuFixture(fixtures.Fixture):
                     agent_state = units[unit].get('agent-state', '')
                     if agent_state == 'error':
                         raise RuntimeError('{} error: {}'.format(
-                            unit, units[unit].get('agent-state-info','')))
+                            unit, units[unit].get('agent-state-info', '')))
                     if agent_state != 'started':
                         ready = False
         # Unfortunately, there is no way to tell when a system is
@@ -262,7 +262,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         return result
 
     def pg_ctlcluster(self, unit, command):
-        cmd = ['juju', 'ssh', unit,
+        cmd = [
+            'juju', 'ssh', unit,
             # Due to Bug #1191079, we need to send the whole remote command
             # as a single argument.
             'sudo pg_ctlcluster 9.1 main -force {}'.format(command)]
@@ -308,9 +309,9 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # Even on a freshly setup service, we have no idea which unit
         # will become the master as we have no control over which two
         # units join the peer relation first.
-        units = sorted((self.is_master(unit), unit)
-            for unit in
-                self.juju.status['services']['postgresql']['units'].keys())
+        units = sorted(
+            (self.is_master(unit), unit) for unit in
+            self.juju.status['services']['postgresql']['units'].keys())
         self.assertFalse(units[0][0])
         self.assertFalse(units[1][0])
         self.assertTrue(units[2][0])
@@ -396,9 +397,9 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # Even on a freshly setup service, we have no idea which unit
         # will become the master as we have no control over which two
         # units join the peer relation first.
-        units = sorted((self.is_master(unit, 'postgres'), unit)
-            for unit in
-                self.juju.status['services']['postgresql']['units'].keys())
+        units = sorted(
+            (self.is_master(unit, 'postgres'), unit) for unit in
+            self.juju.status['services']['postgresql']['units'].keys())
         self.assertFalse(units[0][0])
         self.assertFalse(units[1][0])
         self.assertTrue(units[2][0])
@@ -439,8 +440,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 def unit_sorted(units):
     """Return a correctly sorted list of unit names."""
     return sorted(
-        units, lambda a,b:
-            cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
+        units, lambda a, b: cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
 
 
 if __name__ == '__main__':
