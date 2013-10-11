@@ -322,7 +322,9 @@ options:
     default: ""
     type: string
     description: |
-        Extra archives to add with add-apt-repository(1).
+        Extra archives to add, space separated. Supports ppa:, http:, cloud:
+        URIs, as well as other schemes and keywords supported by
+        charmhelpers.fetch.add_source() such as "proposed".
   advisory_lock_restart_key:
     default: 765
     type: int
