@@ -381,6 +381,18 @@ def create_postgresql_config(postgresql_config):
             config_data['wal_keep_segments'],
             config_data['replicated_wal_keep_segments'])
 
+    # If we are using SwiftWAL for WAL shipping into Swift.
+    if config_data['swiftwal_log_shipping']:
+        contents = Template(
+            open("templates/swiftwal.conf.tmpl").read()).render(config_data)
+        host.write_file(
+            swiftwal_config, contents,
+            owner="postgres", group="postgres", perms=0600)
+        config_data['archive_mode'] = 'on'
+        config_data['wal_level'] = 'hot_standby'
+        config_data['archive_command'] = (
+            'swiftwal --config={} archive-wal %p'.format(swiftwal_config))
+
     # Send config data to the template
     # Return it as pg_config
     pg_config = Template(
@@ -529,13 +541,10 @@ def generate_postgresql_hba(
             relid, {"allowed-units": " ".join(unit_sorted(allowed_units))})
 
 
-def install_postgresql_crontab(postgresql_ident):
+def install_postgresql_crontab():
     '''Create the postgres user's crontab'''
-    crontab_data = {
-        'backup_schedule': config_data["backup_schedule"],
-        'scripts_dir': postgresql_scripts_dir,
-        'backup_days': config_data["backup_retention_count"],
-    }
+    crontab_data = dict(config_data)
+    crontab_data['scripts_dir'] = postgresql_scripts_dir
     crontab_template = Template(
         open("templates/postgres.cron.tmpl").read()).render(crontab_data)
     host.write_file('/etc/cron.d/postgres', crontab_template, perms=0600)
@@ -547,6 +556,17 @@ def create_recovery_conf(master_host, restart_on_change=False):
         old_recovery_conf = open(recovery_conf_path, 'r').read()
     else:
         old_recovery_conf = None
+
+    params = {
+        'host': master_host,
+        'password': local_state['replication_pasword'],
+        'restore_command': None}
+
+    # If we have SwiftWAL log shipping, then we can use this archive
+    # as a backup for when streaming replication falls too far behind.
+    if config_data['swiftwal_log_shipping']:
+        params['restore_command'] = (
+            'swiftwal --config={} restore-wal %f %p'.format(swiftwal_config))
 
     recovery_conf = Template(
         open("templates/recovery.conf.tmpl").read()).render({
@@ -865,7 +885,7 @@ def install(run_pre=True):
     host.write_file(
         '{}/pg_backup_job'.format(postgresql_scripts_dir),
         backup_job, perms=0755)
-    install_postgresql_crontab(postgresql_crontab)
+    install_postgresql_crontab()
     hookenv.open_port(5432)
 
     # Ensure at least minimal access granted for hooks to run.
@@ -1888,13 +1908,13 @@ postgresql_config_dir = os.path.join("/etc/postgresql", version, cluster_name)
 postgresql_config = os.path.join(postgresql_config_dir, "postgresql.conf")
 postgresql_ident = os.path.join(postgresql_config_dir, "pg_ident.conf")
 postgresql_hba = os.path.join(postgresql_config_dir, "pg_hba.conf")
-postgresql_crontab = "/etc/cron.d/postgresql"
 postgresql_service_config_dir = "/var/run/postgresql"
 postgresql_scripts_dir = os.path.join(postgresql_data_dir, 'scripts')
 postgresql_backups_dir = (
     config_data['backup_dir'].strip() or
     os.path.join(postgresql_data_dir, 'backups'))
 postgresql_logs_dir = os.path.join(postgresql_data_dir, 'logs')
+swiftwal_config = os.path.join(postgresql_config_dir, 'swiftwal.conf')
 hook_name = os.path.basename(sys.argv[0])
 replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')

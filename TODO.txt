@@ -1,0 +1,9 @@
+All units configured to archive to the one container. This could fail when
+a master is removed, as it might manage to archive the next WAL file
+before the failover is promoted and starts.
+  -- timelines would fix this? We can pg_ctl promote with a WAL archive.
+
+
+Ensure a base backup is made on initial setup if swift wal archiving is on.
+
+Scheduled base backups and pruning

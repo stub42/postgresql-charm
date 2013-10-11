@@ -3,3 +3,6 @@
 #------------------------------------------------------------------------------
 standby_mode = on
 primary_conninfo = 'host={{host}} user=juju_replication password={{password}} requirepeer=postgres'
+{% if restore_command -%}
+restore_command = '{{restore_command}}'
+{% endif -%}
