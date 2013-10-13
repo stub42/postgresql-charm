@@ -1816,6 +1816,12 @@ def update_nrpe_checks():
     except Exception:
         hookenv.log("Nagios user not set up.", hookenv.DEBUG)
         return
+    nagios_password = create_user('nagios')
+    pg_pass_entry = '*:*:*:nagios:%s' % (nagios_password)
+    with open('/var/lib/nagios/.pgpass', 'w') as target:
+        os.fchown(target.fileno(), nagios_uid, nagios_gid)
+        os.fchmod(target.fileno(), 0400)
+        target.write(pg_pass_entry)
 
     unit_name = hookenv.local_unit().replace('/', '-')
     nagios_hostname = "%s-%s" % (config_data['nagios_context'], unit_name)
