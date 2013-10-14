@@ -773,6 +773,11 @@ def token_sql_safe(value):
 def config_changed(force_restart=False):
 
     add_extra_repos()
+    extra_packages = (hookenv.config('extra-packages') or '').split()
+    if extra_packages:
+        extra_packages = fetch.filter_installed_packages(extra_packages)
+        if extra_packages:
+            fetch.apt_install(extra_packages)
 
     # Trigger volume initialization logic for permanent storage
     volid = volume_get_volume_id()
