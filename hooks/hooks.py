@@ -791,8 +791,7 @@ def token_sql_safe(value):
 
 @hooks.hook()
 def config_changed(force_restart=False):
-
-    add_extra_repos()
+    update_repos_and_packages()
 
     # Trigger volume initialization logic for permanent storage
     volid = volume_get_volume_id()
@@ -843,14 +842,7 @@ def install(run_pre=True):
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 subprocess.check_call(['sh', '-c', f])
 
-    add_extra_repos()
-
-    packages = ["postgresql", "python-jinja2", "syslinux",
-                "python-psycopg2", "postgresql-contrib", "postgresql-plpython",
-                "postgresql-%s-debversion" % config_data["version"]]
-    packages.extend((hookenv.config('extra-packages') or '').split())
-    packages = fetch.filter_installed_packages(packages)
-    fetch.apt_install(packages, fatal=True)
+    update_repos_and_packages()
 
     if not 'state' in local_state:
         # Fresh installation. Because this function is invoked by both
@@ -1260,7 +1252,7 @@ def db_admin_relation_broken():
     snapshot_relations()
 
 
-def add_extra_repos():
+def update_repos_and_packages():
     extra_repos = hookenv.config('extra_archives')
     extra_repos_added = local_state.setdefault('extra_repos_added', set())
     if extra_repos:
@@ -1273,6 +1265,13 @@ def add_extra_repos():
         if repos_added:
             fetch.apt_update(fatal=True)
             local_state.save()
+
+    packages = ["postgresql", "python-jinja2", "syslinux",
+                "python-psycopg2", "postgresql-contrib", "postgresql-plpython",
+                "postgresql-%s-debversion" % config_data["version"]]
+    packages.extend((hookenv.config('extra-packages') or '').split())
+    packages = fetch.filter_installed_packages(packages)
+    fetch.apt_install(packages, fatal=True)
 
 
 @contextmanager
