@@ -10,11 +10,13 @@ Usage:
 """
 
 import os.path
+import socket
 import subprocess
 import time
 import unittest
 
 import fixtures
+import psycopg2
 import testtools
 from testtools.content import text_content
 
@@ -256,6 +258,42 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # Ensure the election went as predicted.
         self.assertIs(True, self.is_master(standby_unit_2, 'postgres'))
         self.assertIs(False, self.is_master(standby_unit_1, 'postgres'))
+
+    def test_admin_addresses(self):
+        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
+        self.juju.wait_until_ready()
+
+        # We need to determine the IP address that the unit will see.
+        unit = self.juju.status['services']['postgresql']['units'].keys()[0]
+        unit_ip = self.juju.status['services']['postgresql']['units'][
+            unit]['public-address']
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect((unit_ip, 5432))
+        my_ip = s.getsockname()[0]
+        del s
+
+        # We also need to set a password.
+        self.sql(
+            "ALTER USER postgres ENCRYPTED PASSWORD 'foo'", dbname='postgres')
+
+        # Direct connection string to the unit's database.
+        conn_str = 'dbname=postgres user=postgres password=foo host={}'.format(
+            unit_ip)
+
+        # Direct database connections should fail at the moment.
+        self.assertRaises(
+            psycopg2.OperationalError, psycopg2.connect, conn_str)
+
+        # Connections should work after setting the admin-addresses.
+        self.juju.do([
+            'set', 'postgresql', 'admin_addresses={}'.format(my_ip)])
+        self.juju.wait_until_ready()
+        con = psycopg2.connect(conn_str)
+        cur = con.cursor()
+        cur.execute('SELECT 1')
+        self.assertEquals(1, cur.fetchone()[0])
 
 
 def unit_sorted(units):
