@@ -5,18 +5,22 @@ Test the PostgreSQL charm.
 
 Usage:
     juju bootstrap
-    TEST_DEBUG_FILE=test-debug.log TEST_TIMEOUT=900 ./test.py -v
+    TEST_TIMEOUT=900 ./test.py -v
     juju destroy-environment
 """
 
-import fixtures
-import json
 import os.path
+import socket
 import subprocess
-import testtools
-from testtools.content import text_content
 import time
 import unittest
+
+import fixtures
+import psycopg2
+import testtools
+from testtools.content import text_content
+
+from testing.jujufixture import JujuFixture, run
 
 
 SERIES = 'precise'
@@ -24,191 +28,16 @@ TEST_CHARM = 'local:postgresql'
 PSQL_CHARM = 'local:postgresql-psql'
 
 
-def DEBUG(msg):
-    """Allow us to watch these slow tests as they run."""
-    debug_file = os.environ.get('TEST_DEBUG_FILE', '')
-    if debug_file:
-        with open(debug_file, 'a') as f:
-            f.write('{}> {}\n'.format(time.ctime(), msg))
-            f.flush()
-
-
-def _run(detail_collector, cmd, input=''):
-    DEBUG("Running {}".format(' '.join(cmd)))
-    try:
-        proc = subprocess.Popen(
-            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError, x:
-        DEBUG("exception: {!r}".format(x))
-        DEBUG("stderr: {}".format(proc.stderr.read()))
-        raise
-
-    (out, err) = proc.communicate(input)
-    if out:
-        DEBUG("stdout: {}".format(out))
-        detail_collector.addDetail('stdout', text_content(out))
-    if err:
-        DEBUG("stderr: {}".format(err))
-        detail_collector.addDetail('stderr', text_content(err))
-    if proc.returncode != 0:
-        DEBUG("rv: {}".format(proc.returncode))
-        raise subprocess.CalledProcessError(
-            proc.returncode, cmd, err)
-    return out
-
-
-class JujuFixture(fixtures.Fixture):
-    """Interact with juju. Assumes juju environment is bootstrapped."""
-    _deployed_charms = set()
-
-    def do(self, cmd):
-        cmd = ['juju'] + cmd
-        _run(self, cmd)
-
-    def get_result(self, cmd):
-        cmd = ['juju'] + cmd + ['--format=json']
-        out = _run(self, cmd)
-        if out:
-            return json.loads(out)
-        return None
-
-    def deploy(self, charm, name=None, num_units=1):
-        # The first time we deploy a local: charm in the test run, it
-        # needs to deploy with --update to ensure we are testing the
-        # desired revision of the charm. Subsequent deploys we do not
-        # use --update to avoid overhead and needless incrementing of the
-        # revision number.
-        if not charm.startswith('local:') or charm in self._deployed_charms:
-            cmd = ['deploy']
-        else:
-            cmd = ['deploy', '-u']
-            self._deployed_charms.add(charm)
-
-        if num_units > 1:
-            cmd.extend(['-n', str(num_units)])
-
-        cmd.append(charm)
-
-        if name:
-            cmd.append(name)
-
-        self.do(cmd)
-
-    # The most recent environment status, updated by refresh_status()
-    status = None
-
-    def refresh_status(self):
-        self.status = self.get_result(['status'])
-        return self.status
-
-    def wait_until_ready(self, extra=45):
-        ready = False
-        while not ready:
-            self.refresh_status()
-            ready = True
-            for service in self.status['services']:
-                if self.status['services'][service].get('life', '') == 'dying':
-                    ready = False
-                units = self.status['services'][service].get('units', {})
-                for unit in units.keys():
-                    agent_state = units[unit].get('agent-state', '')
-                    if agent_state == 'error':
-                        raise RuntimeError('{} error: {}'.format(
-                            unit, units[unit].get('agent-state-info', '')))
-                    if agent_state != 'started':
-                        ready = False
-        # Unfortunately, there is no way to tell when a system is
-        # actually ready for us to test. Juju only tells us that a
-        # relation has started being setup, and that no errors have been
-        # encountered yet. It utterly fails to inform us when the
-        # cascade of hooks this triggers has finished and the
-        # environment is in a stable and actually testable state.
-        # So as a work around for Bug #1200267, we need to sleep long
-        # enough that our system is probably stable. This means we have
-        # extremely slow and flaky tests, but that is possibly better
-        # than no tests.
-        time.sleep(extra)
-
-    def setUp(self):
-        DEBUG("JujuFixture.setUp()")
-        super(JujuFixture, self).setUp()
-        self.reset()
-        # Optionally, don't teardown services and machines after running
-        # a test. If a subsequent test is run, they will be torn down at
-        # that point. This option is only useful when running a single
-        # test, or when the test harness is set to abort after the first
-        # failed test.
-        if not os.environ.get('TEST_DONT_TEARDOWN_JUJU', False):
-            self.addCleanup(self.reset)
-
-    def reset(self):
-        DEBUG("JujuFixture.reset()")
-        # Tear down any services left running.
-        found_services = False
-        self.refresh_status()
-        for service in self.status['services']:
-            found_services = True
-            # It is an error to destroy a dying service.
-            if self.status['services'][service].get('life', '') != 'dying':
-                self.do(['destroy-service', service])
-
-        # Per Bug #1190250 (WONTFIX), we need to wait for dying services
-        # to die before we can continue.
-        if found_services:
-            self.wait_until_ready(0)
-
-        # We shouldn't reuse machines, as we have no guarantee they are
-        # still in a usable state, so tear them down too. Per
-        # Bug #1190492 (INVALID), in the future this will be much nicer
-        # when we can use containers for isolation and can happily reuse
-        # machines.
-        dirty_machines = [
-            m for m in self.status['machines'].keys() if m != '0']
-        if dirty_machines:
-            self.do(['terminate-machine'] + dirty_machines)
-
-
-class LocalCharmRepositoryFixture(fixtures.Fixture):
-    """Create links so the given directory can be deployed as a charm."""
-    def __init__(self, path=None):
-        if path is None:
-            path = os.getcwd()
-        self.local_repo_path = os.path.abspath(path)
-
-    def setUp(self):
-        super(LocalCharmRepositoryFixture, self).setUp()
-
-        series_dir = os.path.join(self.local_repo_path, SERIES)
-        charm_dir = os.path.join(series_dir, TEST_CHARM)
-
-        if not os.path.exists(series_dir):
-            os.mkdir(series_dir, 0o700)
-            self.addCleanup(os.rmdir, series_dir)
-
-        if not os.path.exists(charm_dir):
-            os.symlink(self.local_repo_path, charm_dir)
-            self.addCleanup(os.remove, charm_dir)
-
-        self.useFixture(fixtures.EnvironmentVariable(
-            'JUJU_REPOSITORY', self.local_repo_path))
-
-
 class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
     def setUp(self):
         super(PostgreSQLCharmTestCase, self).setUp()
 
-        self.juju = self.useFixture(JujuFixture())
-
-        ## Disabled until postgresql-psql is in the charm store.
-        ## Otherwise, we need to make the local:postgresql-psql charm
-        ## discoverable.
-        ## self.useFixture(LocalCharmRepositoryFixture())
+        self.juju = self.useFixture(JujuFixture(
+            reuse_machines=True,
+            do_teardown='TEST_DONT_TEARDOWN_JUJU' not in os.environ))
 
         # If the charms fail, we don't want tests to hang indefinitely.
-        # We might need to increase this in some environments or if the
-        # environment doesn't have enough machines warmed up.
         timeout = int(os.environ.get('TEST_TIMEOUT', 900))
         self.useFixture(fixtures.Timeout(timeout, gentle=True))
 
@@ -254,9 +83,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
             # Due to Bug #1191079, we need to send the whole remote command
             # as a single argument.
             ' '.join(psql_cmd + psql_args)]
-        DEBUG("SQL {}".format(sql))
-        out = _run(self, cmd, input=sql)
-        DEBUG("OUT {}".format(out))
+        out = run(self, cmd, input=sql)
         result = [line.split(',') for line in out.splitlines()]
         self.addDetail('sql', text_content(repr((sql, result))))
         return result
@@ -267,7 +94,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
             # Due to Bug #1191079, we need to send the whole remote command
             # as a single argument.
             'sudo pg_ctlcluster 9.1 main -force {}'.format(command)]
-        _run(self, cmd)
+        run(self, cmd)
 
     def test_basic(self):
         '''Connect to a a single unit service via the db relationship.'''
@@ -276,10 +103,6 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
 
-        # There a race condition here, as hooks may still be running
-        # from adding the relation. I'm protected here as 'juju status'
-        # takes about 25 seconds to run from here to my test cloud but
-        # others might not be so 'lucky'.
         result = self.sql('SELECT TRUE')
         self.assertEqual(result, [['t']])
 
@@ -435,6 +258,42 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         # Ensure the election went as predicted.
         self.assertIs(True, self.is_master(standby_unit_2, 'postgres'))
         self.assertIs(False, self.is_master(standby_unit_1, 'postgres'))
+
+    def test_admin_addresses(self):
+        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
+        self.juju.wait_until_ready()
+
+        # We need to determine the IP address that the unit will see.
+        unit = self.juju.status['services']['postgresql']['units'].keys()[0]
+        unit_ip = self.juju.status['services']['postgresql']['units'][
+            unit]['public-address']
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect((unit_ip, 5432))
+        my_ip = s.getsockname()[0]
+        del s
+
+        # We also need to set a password.
+        self.sql(
+            "ALTER USER postgres ENCRYPTED PASSWORD 'foo'", dbname='postgres')
+
+        # Direct connection string to the unit's database.
+        conn_str = 'dbname=postgres user=postgres password=foo host={}'.format(
+            unit_ip)
+
+        # Direct database connections should fail at the moment.
+        self.assertRaises(
+            psycopg2.OperationalError, psycopg2.connect, conn_str)
+
+        # Connections should work after setting the admin-addresses.
+        self.juju.do([
+            'set', 'postgresql', 'admin_addresses={}'.format(my_ip)])
+        self.juju.wait_until_ready()
+        con = psycopg2.connect(conn_str)
+        cur = con.cursor()
+        cur.execute('SELECT 1')
+        self.assertEquals(1, cur.fetchone()[0])
 
 
 def unit_sorted(units):
