@@ -148,7 +148,9 @@ options:
   search_path:
     default: "\"$user\",public"
     type: string
-    descripton: Schema names
+    description: |
+        Comma separated list of schema names for
+        the default SQL search path.
   standard_conforming_strings:
     default: True
     type: boolean
