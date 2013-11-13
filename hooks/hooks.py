@@ -1246,9 +1246,14 @@ def update_repos_and_packages():
             fetch.apt_update(fatal=True)
             local_state.save()
 
-    packages = ["postgresql", "python-jinja2", "syslinux",
-                "python-psycopg2", "postgresql-contrib", "postgresql-plpython",
-                "postgresql-%s-debversion" % config_data["version"]]
+    # It might have been better for debversion and plpython to only get
+    # installed if they were listed in the extra-packages config item,
+    # but they predate this feature.
+    packages = ["postgresql-%s" % config_data["version"],
+                "postgresql-contrib-%s" % config_data["version"],
+                "postgresql-plpython-%s" % config_data["version"],
+                "postgresql-%s-debversion" % config_data["version"],
+                "python-jinja2", "syslinux", "python-psycopg2"]
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
     fetch.apt_install(packages, fatal=True)
