@@ -392,6 +392,8 @@ def create_postgresql_config(postgresql_config):
         config_data['wal_level'] = 'hot_standby'
         config_data['archive_command'] = (
             'swiftwal --config={} archive-wal %p'.format(swiftwal_config))
+    elif os.path.exists(swiftwal_config):
+        os.unlink(swiftwal_config)
 
     # Send config data to the template
     # Return it as pg_config
@@ -559,7 +561,7 @@ def create_recovery_conf(master_host, restart_on_change=False):
 
     params = {
         'host': master_host,
-        'password': local_state['replication_pasword'],
+        'password': local_state['replication_password'],
         'restore_command': None}
 
     # If we have SwiftWAL log shipping, then we can use this archive
