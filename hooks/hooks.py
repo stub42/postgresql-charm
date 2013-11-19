@@ -440,7 +440,7 @@ def generate_postgresql_hba(
             except:
                 return addr
             if len(output) != 0:
-                return output.rstrip(".") # trailing dot
+                return output.rstrip(".")  # trailing dot
             return addr
 
     allowed_units = set()
