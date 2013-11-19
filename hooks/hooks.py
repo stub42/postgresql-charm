@@ -376,7 +376,8 @@ def create_postgresql_config(postgresql_config):
         config_data['hot_standby'] = 'on'
         config_data['wal_level'] = 'hot_standby'
         config_data['max_wal_senders'] = max(
-            num_slaves, config_data['max_wal_senders'])
+            num_slaves + int(bool(config_data['swiftwal_container'])),
+            config_data['max_wal_senders'])
         config_data['wal_keep_segments'] = max(
             config_data['wal_keep_segments'],
             config_data['replicated_wal_keep_segments'])
@@ -844,8 +845,24 @@ def config_changed(force_restart=False):
     update_service_port(current_service_port, updated_service_port)
     update_nrpe_checks()
     if force_restart:
-        return postgresql_restart()
-    return postgresql_reload_or_restart()
+        reloaded = postgresql_restart()
+    else:
+        reloaded = postgresql_reload_or_restart()
+
+    if not reloaded:
+        return reloaded  # Fail
+
+    want_pitr = (
+        local_state['state'] in ('standalone', 'master')
+        and config_data['swiftwal_container']
+        and config_data['swiftwal_backup_schedule']
+        and config_data['swiftwal_log_shipping'])
+
+    if want_pitr:
+        # PITR setup requested. We need to ensure we have a backup.
+        ensure_swiftwal_backup()
+
+    return reloaded
 
 
 @hooks.hook()
@@ -1062,6 +1079,20 @@ def ensure_database(user, schema_user, database):
     sql = "GRANT CONNECT ON DATABASE %s TO %s"
     run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
                         AsIs(quote_identifier(user)))
+
+
+def ensure_swiftwal_backup():
+    log('Checking for existing SwiftWAL backup', DEBUG)
+    swiftwal_cmd = ['swiftwal', '--config', swiftwal_config]
+    backups = subprocess.check_output(swiftwal_cmd + ['list-backups'])
+    if backups:
+        log('Existing SwiftWAL backups found: {0}'.format(
+            ', '.join(backups.split())), DEBUG)
+    else:
+        log('Creating initial SwiftWAL backup for PITR')
+        output = subprocess.check_output(swiftwal_cmd + [
+                'backup', '--checkpoint=fast', '--username', 'postgres'])
+        log(output, DEBUG)
 
 
 def snapshot_relations():
