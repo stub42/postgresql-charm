@@ -382,7 +382,7 @@ def create_postgresql_config(postgresql_config):
             config_data['replicated_wal_keep_segments'])
 
     # If we are using SwiftWAL for WAL shipping into Swift.
-    if config_data['swiftwal_log_shipping']:
+    if config_data['swiftwal_container']:
         contents = Template(
             open("templates/swiftwal.conf.tmpl").read()).render(config_data)
         host.write_file(
@@ -576,7 +576,8 @@ def create_recovery_conf(master_host, restart_on_change=False):
 
     # If we have SwiftWAL log shipping, then we can use this archive
     # as a backup for when streaming replication falls too far behind.
-    if config_data['swiftwal_log_shipping']:
+    if (config_data['swiftwal_container']
+            and config_data['swiftwal_log_shipping']):
         params['restore_command'] = (
             'swiftwal --config={} restore-wal %f %p'.format(swiftwal_config))
 
@@ -1271,6 +1272,7 @@ def update_repos_and_packages():
         repos_added = False
         for repo in extra_repos.split():
             if repo not in extra_repos_added:
+                log('Adding source {0}'.format(repo))
                 fetch.add_source(repo)
                 extra_repos_added.add(repo)
                 repos_added = True
@@ -1286,6 +1288,8 @@ def update_repos_and_packages():
                 "postgresql-plpython-%s" % config_data["version"],
                 "postgresql-%s-debversion" % config_data["version"],
                 "python-jinja2", "syslinux", "python-psycopg2"]
+    if config_data['swiftwal_container']:
+        packages.append('swiftwal')
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
     fetch.apt_install(packages, fatal=True)
@@ -1349,7 +1353,19 @@ def authorized_by(unit):
 def promote_database():
     '''Take the database out of recovery mode.'''
     recovery_conf = os.path.join(postgresql_cluster_dir, 'recovery.conf')
-    if os.path.exists(recovery_conf):
+    if not os.path.exists(recovery_conf):
+        return  # Not in recovery mode, nothing to do.
+
+    if (config_data['swiftwal_container']
+            and config_data['swiftwal_log_shipping']):
+        # WAL shipping replication. Use 'pg_ctl promote', triggering
+        # both promotion and a timeline change.
+        run(['pg_ctl', 'promote'])
+        log("Waiting for pg_ctl promote to take effect", DEBUG)
+        while postgresql_is_in_recovery():
+            time.sleep(1)
+    else:
+        # Streaming replication.
         # Rather than using 'pg_ctl promote', we do the promotion
         # this way to avoid creating a timeline change. Switch this
         # to using 'pg_ctl promote' once PostgreSQL propagates
@@ -1796,6 +1812,12 @@ def slave_count():
     for relid in hookenv.relation_ids('replication'):
         num_slaves += len(hookenv.related_units(relid))
     return num_slaves
+
+
+def postgresql_is_in_recovery():
+    cur = db_cursor(autocommit=True)
+    cur.execute('SELECT pg_is_in_recovery()')
+    return cur.fetchone()[0]
 
 
 def postgresql_is_in_backup_mode():

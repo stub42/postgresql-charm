@@ -337,6 +337,12 @@ options:
         being used by your applications.
 
   # Swift backups and PITR via SwiftWAL
+  swiftwal_container:
+    type: string
+    default: ""
+    description: |
+      Swift container used by SwiftWAL. Must be set for any other
+      SwiftWAL options to take effect.
   swiftwal_backup_schedule:
     type: string
     default: ""
@@ -374,8 +380,3 @@ options:
     type: string
     default: ""
     description: OpenStack Swift tenant name.
-  swiftwal_container:
-    type: string
-    default: ""
-    description: |
-      Swift container used by SwiftWAL. Defaults to the service name.
