@@ -431,6 +431,16 @@ def generate_postgresql_hba(
             return "%s/32" % addr
         except socket.error:
             # It's not an IP address.
+            # XXX workaround for MAAS bug
+            # https://bugs.launchpad.net/maas/+bug/1250435
+            # If it's a CNAME, use the A record it points to.
+            # If it fails for some reason, return the original address
+            try:
+                output = run("dig +short -t CNAME %s" % addr, True).strip()
+            except:
+                return addr
+            if len(output) != 0:
+                return output.rstrip(".") # trailing dot
             return addr
 
     allowed_units = set()
