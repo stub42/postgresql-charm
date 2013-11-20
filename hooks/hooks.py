@@ -375,15 +375,23 @@ def create_postgresql_config(postgresql_config):
         log('Ensuring minimal replication settings')
         config_data['hot_standby'] = 'on'
         config_data['wal_level'] = 'hot_standby'
+        # Ensure each slave gets a replication connection, as well
+        # as having a replication connection available for
+        # pg_basebackup(1).
         config_data['max_wal_senders'] = max(
-            num_slaves + int(bool(config_data['swiftwal_container'])),
+            num_slaves + int(bool(config_data['swiftwal_backup_schedule'])),
             config_data['max_wal_senders'])
         config_data['wal_keep_segments'] = max(
             config_data['wal_keep_segments'],
             config_data['replicated_wal_keep_segments'])
 
+    # If we are using SwiftWAL for backups, ensure a replication
+    # connection is available.
+    if config_data['swiftwal_backup_schedule']:
+        config_data['max_wal_senders'] = max(1, config_data['max_wal_senders'])
+
     # If we are using SwiftWAL for WAL shipping into Swift.
-    if config_data['swiftwal_container']:
+    if config_data['swiftwal_log_shipping']:
         contents = Template(
             open("templates/swiftwal.conf.tmpl").read()).render(config_data)
         host.write_file(
@@ -573,19 +581,20 @@ def create_recovery_conf(master_host, restart_on_change=False):
     params = {
         'host': master_host,
         'password': local_state['replication_password'],
+        'streaming_replication': config_data['streaming_replication'],
         'restore_command': None}
 
     # If we have SwiftWAL log shipping, then we can use this archive
     # as a backup for when streaming replication falls too far behind.
-    if (config_data['swiftwal_container']
-            and config_data['swiftwal_log_shipping']):
+    if config_data['swiftwal_log_shipping']:
         params['restore_command'] = (
             'swiftwal --config={} restore-wal %f %p'.format(swiftwal_config))
 
+    # We check this properly in config_changed()
+    assert params['streaming_replication'] or params['restore_command']
+
     recovery_conf = Template(
-        open("templates/recovery.conf.tmpl").read()).render({
-        'host': master_host,
-        'password': local_state['replication_password']})
+        open("templates/recovery.conf.tmpl").read()).render(params)
     log(recovery_conf, DEBUG)
     host.write_file(
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
@@ -803,8 +812,43 @@ def token_sql_safe(value):
     return True
 
 
+def validate_config_or_abort():
+    fail = False
+
+    if not config_data['swiftwal_container'] and (
+        config_data['swiftwal_backup_schedule']
+        or config_data['swiftwal_log_shipping']):
+        log('swiftwal_container is required to use SwiftWAL features',
+            CRITICAL)
+        fail = True
+
+    # At least one replication mechanism needs to be enabled or we will
+    # end up generating invalid configuration files.
+    if not (config_data['swiftwal_log_shipping']
+            or config_data['streaming_replication']):
+        log('streaming_replication can only be disabled when log '
+            'shipping enabled', CRITICAL)
+        fail = True
+
+    # This check of course will be removed when 9.2 and 9.3
+    # support lands.
+    if config_data['version'] != '9.1':
+        log('Only PostgreSQL version 9.1 supported', CRITICAL)
+        fail = True
+
+    # This feature needs to be fixed, or the config item deprecated.
+    if config_data['cluster_name'] != 'main':
+        log('Only supported cluster_name is main', CRITICAL)
+        fail = True
+
+    if fail:
+        sys.exit(1)
+
+
 @hooks.hook()
 def config_changed(force_restart=False):
+    validate_config_or_abort()
+
     update_repos_and_packages()
 
     # Trigger volume initialization logic for permanent storage
@@ -854,7 +898,6 @@ def config_changed(force_restart=False):
 
     want_pitr = (
         local_state['state'] in ('standalone', 'master')
-        and config_data['swiftwal_container']
         and config_data['swiftwal_backup_schedule']
         and config_data['swiftwal_log_shipping'])
 
@@ -865,8 +908,13 @@ def config_changed(force_restart=False):
     return reloaded
 
 
+def setup_swiftwal_storage():
+    if local_state
+
+
 @hooks.hook()
 def install(run_pre=True):
+    validate_config_or_abort()
     if run_pre:
         for f in glob.glob('exec.d/*/charm-pre-install'):
             if os.path.isfile(f) and os.access(f, os.X_OK):
@@ -874,7 +922,7 @@ def install(run_pre=True):
 
     update_repos_and_packages()
 
-    if not 'state' in local_state:
+    if 'state' not in local_state:
         # Fresh installation. Because this function is invoked by both
         # the install hook and the upgrade-charm hook, we need to guard
         # any non-idempotent setup. We should probably fix this; it
@@ -920,6 +968,7 @@ def install(run_pre=True):
 
 @hooks.hook()
 def upgrade_charm():
+    validate_config_or_abort()
     install(run_pre=False)
     snapshot_relations()
 
@@ -1091,7 +1140,7 @@ def ensure_swiftwal_backup():
     else:
         log('Creating initial SwiftWAL backup for PITR')
         output = subprocess.check_output(swiftwal_cmd + [
-                'backup', '--checkpoint=fast', '--username', 'postgres'])
+            'backup', '--checkpoint=fast', '--username', 'postgres'])
         log(output, DEBUG)
 
 
@@ -1319,7 +1368,8 @@ def update_repos_and_packages():
                 "postgresql-plpython-%s" % config_data["version"],
                 "postgresql-%s-debversion" % config_data["version"],
                 "python-jinja2", "syslinux", "python-psycopg2"]
-    if config_data['swiftwal_container']:
+    if (config_data['swiftwal_log_shipping']
+            or config_data['swiftwal_backup_schedule']):
         packages.append('swiftwal')
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
@@ -1387,10 +1437,11 @@ def promote_database():
     if not os.path.exists(recovery_conf):
         return  # Not in recovery mode, nothing to do.
 
-    if (config_data['swiftwal_container']
-            and config_data['swiftwal_log_shipping']):
+    if config_data['swiftwal_log_shipping']:
         # WAL shipping replication. Use 'pg_ctl promote', triggering
-        # both promotion and a timeline change.
+        # both promotion and a timeline change. We want the timeline
+        # change to protect against a former master shipping incorrect
+        # data into Swift before it is properly deceased.
         run(['pg_ctl', 'promote'])
         log("Waiting for pg_ctl promote to take effect", DEBUG)
         while postgresql_is_in_recovery():
@@ -1563,7 +1614,7 @@ def replication_relation_joined_changed():
         log("I need to follow {} but am not yet authorized".format(master))
 
     else:
-        log("Syncing replication_password from {}".format(master), DEBUG)
+        log("Syncing replication details from {}".format(master), DEBUG)
         local_state['replication_password'] = hookenv.relation_get(
             'replication_password', master)
 
@@ -1879,7 +1930,7 @@ def postgresql_wal_received_offset():
     cur = db_cursor(autocommit=True)
     cur.execute('SELECT pg_is_in_recovery(), pg_last_xlog_receive_location()')
     is_in_recovery, xlog_received = cur.fetchone()
-    if is_in_recovery:
+    if is_in_recovery and xlog_received:
         return wal_location_to_bytes(xlog_received)
     return None
 

@@ -337,12 +337,12 @@ options:
         being used by your applications.
 
   # Swift backups and PITR via SwiftWAL
-  swiftwal_container:
+  swiftwal_container_prefix:
     type: string
     default: ""
     description: |
-      Swift container used by SwiftWAL. Must be set for any other
-      SwiftWAL options to take effect.
+      Swift container prefix for SwiftWAL to use. Must be set if any
+      SwiftWAL features are enabled.
   swiftwal_backup_schedule:
     type: string
     default: ""
@@ -364,6 +364,13 @@ options:
       automatically with old backups. If swiftwal_backup_schedule is not set
       then WAL files are never removed. Enabling this option will override
       the archive_mode and archive_command settings.
+  streaming_replication:
+    type: boolean
+    default: true
+    description: |
+      Enable streaming replication. Normally, streaming replication is
+      always used, and any log shipping configured is used as a fallback.
+      Turning this off without configuring log shipping is an error.
   os_username:
     type: string
     default: ""
