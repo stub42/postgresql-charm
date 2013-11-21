@@ -1506,6 +1506,12 @@ def elected_master():
 
         # There are no peers claiming to be master, and there is no
         # election in progress, so lowest numbered unit wins.
+        # This is important, because the initial choice of master
+        # determines which unit's data is preserved, and which unit's
+        # data is destroyed. The lowest numbered unit is the first unit
+        # and, if it has been in operation for a while, is the unit with
+        # potentially important data. Any other units have only just
+        # now been added (triggering this election).
         units = replication_units + [hookenv.local_unit()]
         master = unit_sorted(units)[0]
         if master == hookenv.local_unit():
