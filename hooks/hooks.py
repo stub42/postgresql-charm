@@ -37,6 +37,12 @@ def Template(*args, **kw):
     return Template(*args, **kw)
 
 
+def render(template_path, **params):
+    return Template(open(template_path, 'r').read()).render(
+        config=config_data, local=local_state, env=os.environ,
+        vars=params or {})
+
+
 def log(msg, lvl=INFO):
     '''Log a message.
 
@@ -390,19 +396,14 @@ def create_postgresql_config(postgresql_config):
     if config_data['swiftwal_backup_schedule']:
         config_data['max_wal_senders'] = max(1, config_data['max_wal_senders'])
 
+    generate_swiftwal_config()
+
     # If we are using SwiftWAL for WAL shipping into Swift.
     if config_data['swiftwal_log_shipping']:
-        contents = Template(
-            open("templates/swiftwal.conf.tmpl").read()).render(config_data)
-        host.write_file(
-            swiftwal_config, contents,
-            owner="postgres", group="postgres", perms=0600)
         config_data['archive_mode'] = 'on'
         config_data['wal_level'] = 'hot_standby'
         config_data['archive_command'] = (
             'swiftwal --config={} archive-wal %p'.format(swiftwal_config))
-    elif os.path.exists(swiftwal_config):
-        os.unlink(swiftwal_config)
 
     # Send config data to the template
     # Return it as pg_config
@@ -562,6 +563,24 @@ def generate_postgresql_hba(
             relid, {"allowed-units": " ".join(unit_sorted(allowed_units))})
 
 
+def generate_swiftwal_config():
+    if config_data['swiftwal_log_shipping']:
+        if local_state.get('state', '') == 'standalone':
+            container = '{0} {1}'.format(
+                config_data['swiftwal_container_prefix'],
+                hookenv.local_unit().rsplit('/', 1)[1])
+        else:
+            container = config_data['swiftwal_container_prefix']
+
+        contents = render('templates/swiftwal.conf.tmpl', container=container)
+        host.write_file(
+            swiftwal_config, contents,
+            owner="postgres", group="postgres", perms=0600)
+
+    elif os.path.exists(swiftwal_config):
+        os.unlink(swiftwal_config)
+
+
 def install_postgresql_crontab():
     '''Create the postgres user's crontab'''
     crontab_data = dict(config_data)
@@ -588,7 +607,7 @@ def create_recovery_conf(master_host, restart_on_change=False):
     # as a backup for when streaming replication falls too far behind.
     if config_data['swiftwal_log_shipping']:
         params['restore_command'] = (
-            'swiftwal --config={} restore-wal %f %p'.format(swiftwal_config))
+            'swiftwal --config={0} restore-wal %f %p'.format(swiftwal_config))
 
     # We check this properly in config_changed()
     assert params['streaming_replication'] or params['restore_command']
@@ -815,10 +834,10 @@ def token_sql_safe(value):
 def validate_config_or_abort():
     fail = False
 
-    if not config_data['swiftwal_container'] and (
-        config_data['swiftwal_backup_schedule']
-        or config_data['swiftwal_log_shipping']):
-        log('swiftwal_container is required to use SwiftWAL features',
+    if not config_data['swiftwal_container_prefix'] and (
+            config_data['swiftwal_backup_schedule']
+            or config_data['swiftwal_log_shipping']):
+        log('swiftwal_container_prefix is required to use SwiftWAL features',
             CRITICAL)
         fail = True
 
@@ -906,10 +925,6 @@ def config_changed(force_restart=False):
         ensure_swiftwal_backup()
 
     return reloaded
-
-
-def setup_swiftwal_storage():
-    if local_state
 
 
 @hooks.hook()
@@ -1598,6 +1613,7 @@ def replication_relation_joined_changed():
         if local_state['state'] != 'master':
             log("I have elected myself master")
             promote_database()
+            ensure_swiftwal_backup()
             if 'following' in local_state:
                 del local_state['following']
             if 'wal_received_offset' in local_state:
