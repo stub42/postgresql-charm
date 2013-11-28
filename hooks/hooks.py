@@ -218,16 +218,22 @@ def run(command, exit_on_error=True):
     '''Run a command and return the output.'''
     shell = isinstance(command, basestring)
     try:
-        log(command, DEBUG)
+        if shell:
+            log(command, DEBUG)
+        else:
+            log(repr(command), DEBUG)  # Bug #1255933
         return subprocess.check_output(
             command, stderr=subprocess.STDOUT, shell=shell)
-    except subprocess.CalledProcessError, e:
+    except subprocess.CalledProcessError as e:
         log("Command: %r" % (command,), ERROR)
         log("status=%d, output=%s" % (e.returncode, e.output), ERROR)
         if exit_on_error:
             sys.exit(e.returncode)
         else:
             raise
+    except Exception:
+        log("Unhandled exception running {0!r}".format(command), ERROR)
+        raise
 
 
 def postgresql_is_running():
@@ -1459,13 +1465,15 @@ def promote_database():
         # both promotion and a timeline change. We want the timeline
         # change to protect against a former master shipping incorrect
         # data into Swift before it is properly deceased.
-        run(['pg_ctlcluster', config_data['version'],
-            config_data['cluster_name'], 'promote'])
+        # Once we move this charm to Ubuntu 14.04, we can change this to
+        # use pg_ctlcluster instead.
+        run([os.path.join(postgresql_bin_dir, 'pg_ctl'),
+            '-D', postgresql_cluster_dir])
         log("Waiting for pg_ctl promote to take effect", DEBUG)
         while postgresql_is_in_recovery():
             time.sleep(1)
     else:
-        # Streaming replication.
+        # No log shipping - just streaming replication.
         # Rather than using 'pg_ctl promote', we do the promotion
         # this way to avoid creating a timeline change. Switch this
         # to using 'pg_ctl promote' once PostgreSQL propagates
