@@ -341,17 +341,20 @@ options:
     type: string
     default: ""
     description: |
+      EXPERIMENTAL.
       Swift container prefix for SwiftWAL to use. Must be set if any
       SwiftWAL features are enabled.
   swiftwal_backup_schedule:
     type: string
     default: ""
     description: |
+      EXPERIMENTAL.
       Cron-formatted schedule for SwiftWAL database backups.
   swiftwal_backup_retention:
     type: int
     default: 2
     description: |
+      EXPERIMENTAL.
       Number of recent base backups to retain. You need enough space in
       Swift for this many backups plus one more, as an old backup will only
       be removed after a new one has been successfully made to replace it.
@@ -359,6 +362,7 @@ options:
     type: boolean
     default: false
     description: |
+      EXPERIMENTAL.
       Archive WAL files into Swift. If swiftwal_backup_schedule is set,
       this allows point-in-time recovery and WAL files are removed
       automatically with old backups. If swiftwal_backup_schedule is not set
@@ -368,22 +372,23 @@ options:
     type: boolean
     default: true
     description: |
+      EXPERIMENTAL.
       Enable streaming replication. Normally, streaming replication is
       always used, and any log shipping configured is used as a fallback.
       Turning this off without configuring log shipping is an error.
   os_username:
     type: string
     default: ""
-    description: OpenStack Swift username.
+    description: EXPERIMENTAL. OpenStack Swift username.
   os_password:
     type: string
     default: ""
-    description: OpenStack Swift password.
+    description: EXPERIMENTAL. OpenStack Swift password.
   os_auth_url:
     type: string
     default: ""
-    description: OpenStack Swift authentication URL.
+    description: EXPERIMENTAL. OpenStack Swift authentication URL.
   os_tenant_name:
     type: string
     default: ""
-    description: OpenStack Swift tenant name.
+    description: EXPERIMENTAL. OpenStack Swift tenant name.
