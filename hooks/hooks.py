@@ -216,11 +216,13 @@ def postgresql_autostart(enabled):
 
 def run(command, exit_on_error=True):
     '''Run a command and return the output.'''
+    shell = isinstance(command, basestring)
     try:
         log(command, DEBUG)
         return subprocess.check_output(
-            command, stderr=subprocess.STDOUT, shell=True)
+            command, stderr=subprocess.STDOUT, shell=shell)
     except subprocess.CalledProcessError, e:
+        log("Command: %r" % (command,), ERROR)
         log("status=%d, output=%s" % (e.returncode, e.output), ERROR)
         if exit_on_error:
             sys.exit(e.returncode)
@@ -566,7 +568,7 @@ def generate_postgresql_hba(
 def generate_swiftwal_config():
     if config_data['swiftwal_log_shipping']:
         if local_state.get('state', '') == 'standalone':
-            container = '{0} {1}'.format(
+            container = '{0}_{1}'.format(
                 config_data['swiftwal_container_prefix'],
                 hookenv.local_unit().rsplit('/', 1)[1])
         else:
@@ -1457,7 +1459,8 @@ def promote_database():
         # both promotion and a timeline change. We want the timeline
         # change to protect against a former master shipping incorrect
         # data into Swift before it is properly deceased.
-        run(['pg_ctl', 'promote'])
+        run(['pg_ctlcluster', config_data['version'],
+            config_data['cluster_name'], 'promote'])
         log("Waiting for pg_ctl promote to take effect", DEBUG)
         while postgresql_is_in_recovery():
             time.sleep(1)
