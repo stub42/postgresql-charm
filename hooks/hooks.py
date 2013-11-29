@@ -923,14 +923,7 @@ def config_changed(force_restart=False):
     if not reloaded:
         return reloaded  # Fail
 
-    want_pitr = (
-        local_state['state'] in ('standalone', 'master')
-        and config_data['swiftwal_backup_schedule']
-        and config_data['swiftwal_log_shipping'])
-
-    if want_pitr:
-        # PITR setup requested. We need to ensure we have a backup.
-        ensure_swiftwal_backup()
+    ensure_swiftwal_backup()
 
     return reloaded
 
@@ -1154,6 +1147,15 @@ def ensure_database(user, schema_user, database):
 
 
 def ensure_swiftwal_backup():
+    want_pitr = (
+        local_state['state'] in ('standalone', 'master')
+        and config_data['swiftwal_backup_schedule']
+        and config_data['swiftwal_log_shipping'])
+
+    if not want_pitr:
+        return
+
+    # PITR setup requested. We need to ensure we have a backup.
     log('Checking for existing SwiftWAL backup', DEBUG)
     swiftwal_cmd = ['swiftwal', '--config', swiftwal_config]
     backups = subprocess.check_output(swiftwal_cmd + ['list-backups'])
@@ -1624,7 +1626,8 @@ def replication_relation_joined_changed():
         if local_state['state'] != 'master':
             log("I have elected myself master")
             promote_database()
-            ensure_swiftwal_backup()
+            if config_data['swiftwal_backup_schedule']:
+                ensure_swiftwal_backup()
             if 'following' in local_state:
                 del local_state['following']
             if 'wal_received_offset' in local_state:
