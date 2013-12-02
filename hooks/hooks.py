@@ -373,7 +373,7 @@ def create_postgresql_config(postgresql_config):
     if num_slaves > 0:
         log('{} hot standbys in peer relation.'.format(num_slaves))
         log('Ensuring minimal replication settings')
-        config_data['hot_standby'] = 'on'
+        config_data['hot_standby'] = True
         config_data['wal_level'] = 'hot_standby'
         config_data['max_wal_senders'] = max(
             num_slaves, config_data['max_wal_senders'])
