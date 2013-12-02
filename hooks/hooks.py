@@ -387,7 +387,7 @@ def create_postgresql_config(postgresql_config):
     if num_slaves > 0:
         log('{} hot standbys in peer relation.'.format(num_slaves))
         log('Ensuring minimal replication settings')
-        config_data['hot_standby'] = 'on'
+        config_data['hot_standby'] = True
         config_data['wal_level'] = 'hot_standby'
         # Ensure each slave gets a replication connection, as well
         # as having a replication connection available for
