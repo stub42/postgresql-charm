@@ -39,7 +39,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
         # If the charms fail, we don't want tests to hang indefinitely.
         timeout = int(os.environ.get('TEST_TIMEOUT', 900))
-        self.useFixture(fixtures.Timeout(timeout, gentle=True))
+        if timeout > 0:
+            self.useFixture(fixtures.Timeout(timeout, gentle=True))
 
     def sql(self, sql, postgres_unit=None, psql_unit=None, dbname=None):
         '''Run some SQL on postgres_unit from psql_unit.

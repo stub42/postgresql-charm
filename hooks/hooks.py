@@ -1540,8 +1540,9 @@ def elected_master():
         # and, if it has been in operation for a while, is the unit with
         # potentially important data. Any other units have only just
         # now been added (triggering this election).
-        units = replication_units + [hookenv.local_unit()]
-        master = unit_sorted(units)[0]
+        units = unit_sorted(replication_units + [hookenv.local_unit()])
+        master = units[0]
+        log("Election from units {}".format(' '.join(units)))
         if master == hookenv.local_unit():
             log("I'm Master - lowest numbered unit in new peer group")
             return master
