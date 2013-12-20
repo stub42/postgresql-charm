@@ -676,18 +676,12 @@ def run_select_as_postgres(sql, *parameters):
 #     - if fresh new storage dir: rsync existing data
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
 #------------------------------------------------------------------------------
-def config_changed_volume_apply():
+def config_changed_volume_apply(volid=None):
     data_directory_path = postgresql_cluster_dir
     assert(data_directory_path)
-    volid = volume_get_volume_id()
-    if volid:
-        if volume_is_permanent(volid):
-            if not volume_init_and_mount(volid):
-                log(
-                    "volume_init_and_mount failed, not applying changes",
-                    ERROR)
-                return False
 
+    volid = volid if volid is not None else volume_get_volume_id()
+    if volid:
         if not os.path.exists(data_directory_path):
             log(
                 "postgresql data dir {} not found, "
@@ -780,11 +774,11 @@ def token_sql_safe(value):
 
 
 @hooks.hook()
-def config_changed(force_restart=False):
+def config_changed(force_restart=False, volume_config={}):
     update_repos_and_packages()
 
     # Trigger volume initialization logic for permanent storage
-    volid = volume_get_volume_id()
+    volid = volume_config.get("volume-id", volume_get_volume_id())
     if not volid:
         ## Invalid configuration (whether ephemeral, or permanent)
         postgresql_autostart(False)
@@ -801,7 +795,7 @@ def config_changed(force_restart=False):
     if volume_is_permanent(volid):
         ## config_changed_volume_apply will stop the service if it founds
         ## it necessary, ie: new volume setup
-        if config_changed_volume_apply():
+        if config_changed_volume_apply(volid):
             postgresql_autostart(True)
         else:
             postgresql_autostart(False)
@@ -1893,6 +1887,18 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
     if os.path.isfile('/etc/init.d/nagios-nrpe-server'):
         host.service_reload('nagios-nrpe-server')
 
+
+@hooks.hook('data-relation-changed')
+def use_volume():
+    # Grab volume info from the relation and pass it down to config_changed.
+    sys.exit(0)
+
+
+@hooks.hook('data-relation-joined')
+def set_mount_point():
+    hookenv.log("Setting mount point: Fooo.", hookenv.DEBUG)
+    hookenv.relation_set(mountpoint="/srv/juju/vol-00001")
+    
 
 ###############################################################################
 # Global variables
