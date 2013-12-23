@@ -296,6 +296,75 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         cur.execute('SELECT 1')
         self.assertEquals(1, cur.fetchone()[0])
 
+    def test_explicit_database(self):
+        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['set', 'psql', 'database=explicit'])
+        self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
+        self.juju.wait_until_ready()
+
+        result = self.sql('SELECT current_database()')
+        self.assertEqual(result, [['explicit']])
+
+
+    def test_roles_granted(self):
+        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['set', 'psql', 'roles=role_a'])
+        self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
+        self.juju.wait_until_ready()
+
+        result = self.sql('''
+            SELECT pg_has_role(current_user, 'role_a', 'MEMBER')
+            ''')
+        self.assertEqual(result, [['t']])
+
+        self.juju.do(['set', 'psql', 'roles=role_a,role_b'])
+        self.juju.wait_until_ready()
+
+        result = self.sql('''
+            SELECT
+                pg_has_role(current_user, 'role_a', 'MEMBER'),
+                pg_has_role(current_user, 'role_b', 'MEMBER')
+            ''')
+        self.assertEqual(result, [['t', 't']])
+
+    def test_roles_revoked(self):
+        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['set', 'psql', 'roles=role_a,role_b'])
+        self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
+        self.juju.wait_until_ready()
+
+        result = self.sql('''
+            SELECT
+                pg_has_role(current_user, 'role_a', 'MEMBER'),
+                pg_has_role(current_user, 'role_b', 'MEMBER')
+            ''')
+        self.assertEqual(result, [['t', 't']])
+
+        self.juju.do(['set', 'psql', 'roles=role_c'])
+        self.juju.wait_until_ready()
+
+        result = self.sql('''
+            SELECT
+                pg_has_role(current_user, 'role_a', 'MEMBER'),
+                pg_has_role(current_user, 'role_b', 'MEMBER'),
+                pg_has_role(current_user, 'role_c', 'MEMBER')
+            ''')
+        self.assertEqual(result, [['f', 'f', 't']])
+
+        self.juju.do(['unset', 'psql', 'roles'])
+        self.juju.wait_until_ready()
+
+        result = self.sql('''
+            SELECT
+                pg_has_role(current_user, 'role_a', 'MEMBER'),
+                pg_has_role(current_user, 'role_b', 'MEMBER'),
+                pg_has_role(current_user, 'role_c', 'MEMBER')
+            ''')
+        self.assertEqual(result, [['f', 'f', 'f']])
+
 
 def unit_sorted(units):
     """Return a correctly sorted list of unit names."""

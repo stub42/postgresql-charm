@@ -1101,29 +1101,53 @@ def create_user(user, admin=False, replication=False):
     return password
 
 
-def grant_roles(user, roles):
+def reset_user_roles(user, roles):
     from psycopg2.extensions import AsIs
 
-    # Delete previous roles
-    sql = ("DELETE FROM pg_auth_members WHERE member IN ("
-           "SELECT oid FROM pg_roles WHERE rolname = %s)")
-    run_sql_as_postgres(sql, user)
+    wanted_roles = set(roles)
 
-    for role in roles:
+    sql = """
+        SELECT role.rolname
+        FROM
+            pg_roles AS role,
+            pg_roles AS member,
+            pg_auth_members
+        WHERE
+            member.oid = pg_auth_members.member
+            AND role.oid = pg_auth_members.roleid
+            AND member.rolname = %s
+        """
+    existing_roles = set(r[0] for r in run_select_as_postgres(sql, user)[1])
+
+    roles_to_grant = wanted_roles.difference(existing_roles)
+
+    for role in roles_to_grant:
         ensure_role(role)
-        sql = "GRANT %s to %s"
-        run_sql_as_postgres(sql, AsIs(quote_identifier(role)),
-                            AsIs(quote_identifier(user)))
+
+    if roles_to_grant:
+        log("Granting {} to {}".format(",".join(roles_to_grant), user), INFO)
+
+    for role in roles_to_grant:
+        run_sql_as_postgres(
+            "GRANT %s TO %s",
+            AsIs(quote_identifier(role)), AsIs(quote_identifier(user)))
+
+    roles_to_revoke = existing_roles.difference(wanted_roles)
+
+    if roles_to_revoke:
+        log("Revoking {} from {}".format(",".join(roles_to_grant), user), INFO)
+
+    for role in roles_to_revoke:
+        run_sql_as_postgres(
+            "REVOKE %s FROM %s",
+            AsIs(quote_identifier(role)), AsIs(quote_identifier(user)))
 
 
 def ensure_role(role):
     from psycopg2.extensions import AsIs
 
     sql = "SELECT oid FROM pg_roles WHERE rolname = %s"
-    if run_select_as_postgres(sql, role)[0] != 0:
-        # role already exists
-        pass
-    else:
+    if run_select_as_postgres(sql, role)[0] == 0:
         sql = "CREATE ROLE %s INHERIT NOLOGIN"
         run_sql_as_postgres(sql, AsIs(quote_identifier(role)))
 
@@ -1178,6 +1202,7 @@ def snapshot_relations():
     log("Snapshotting relations", DEBUG)
     local_state['relations'] = hookenv.relations()
     local_state.save()
+
 
 # Each database unit needs to publish connection details to the
 # client. This is problematic, because 1) the user and database are
@@ -1256,7 +1281,7 @@ def db_relation_joined_changed():
     log('{} unit publishing credentials'.format(local_state['state']))
 
     password = create_user(user)
-    grant_roles(user, roles)
+    reset_user_roles(user, roles)
     schema_user = "{}_schema".format(user)
     schema_password = create_user(schema_user)
     ensure_database(user, schema_user, database)
