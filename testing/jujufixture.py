@@ -93,8 +93,10 @@ class JujuFixture(fixtures.Fixture):
         self.status = self.get_result(['status'])
 
         self._free_machines = set(
-            int(k) for k in self.status['machines'].keys()
-            if k != '0')
+            int(k) for k, m in self.status['machines'].items() if
+                k != '0'
+                and m.get('life', None) not in ('dead', 'dying')
+                and m.get('agent-state', 'pending') in ('started', 'ready'))
         for service in self.status.get('services', {}).values():
             for unit in service.get('units', []):
                 if 'machine' in unit:
@@ -148,29 +150,45 @@ class JujuFixture(fixtures.Fixture):
                     'services', {}).items():
                 if service_name in self._deployed_services:
                     found_services = True
-                    if service.get('life', '') != 'dying':
+                    if service.get('life', '') not in ('dying', 'dead'):
                         self.do(['destroy-service', service_name])
                     # If any units have failed hooks, unstick them.
                     for unit_name, unit in service.get('units', {}).items():
                         if unit.get('agent-state', None) == 'error':
-                            self.do(['resolved', unit_name])
+                            try:
+                                self.do(['resolved', unit_name])
+                            except subprocess.CalledProcessError:
+                                # More race conditions in juju. A
+                                # previous 'resolved' call make cause a
+                                # subsequent one to fail if it is still
+                                # being processed. However, we need to
+                                # keep retrying because after a
+                                # successful resolution a subsequent hook
+                                # may cause an error state.
+                                pass
             if not found_services:
                 break
             time.sleep(1)
 
         self._deployed_services = set()
 
-        # We need to wait for dying services
-        # to die before we can continue.
-        if found_services:
-            self.wait_until_ready(0)
-
         # We shouldn't reuse machines, as we have no guarantee they are
         # still in a usable state, so tear them down too. Per
         # Bug #1190492 (INVALID), in the future this will be much nicer
         # when we can use containers for isolation and can happily reuse
         # machines.
-        if not self.reuse_machines:
+        if self.reuse_machines:
+            # If we are reusing machines, wait until pending machines
+            # are ready and dying machines are dead.
+            while True:
+                for k, machine in self.status['machines'].items():
+                    if (k != 0 and machine.get('agent-state', 'pending')
+                            not in ('ready', 'started')):
+                        time.sleep(1)
+                        self.refresh_status()
+                        continue
+                break
+        else:
             self.do(['terminate-machine'] + list(self._free_machines))
 
 
