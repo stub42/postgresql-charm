@@ -357,15 +357,23 @@ def create_postgresql_config(postgresql_config):
             else:
                 config_data["shared_buffers"] = \
                     "%sMB" % (int(int(total_ram) * 0.15),)
-        # XXX: This is very messy - should probably be a subordinate charm
-        conf_file = open("/etc/sysctl.d/50-postgresql.conf", "w")
-        conf_file.write("kernel.sem = 250 32000 100 1024\n")
-        conf_file.write("kernel.shmall = %s\n" %
-                        ((int(total_ram) * 1024 * 1024) + 1024),)
-        conf_file.write("kernel.shmmax = %s\n" %
-                        ((int(total_ram) * 1024 * 1024) + 1024),)
-        conf_file.close()
-        run("sysctl -p /etc/sysctl.d/50-postgresql.conf")
+        config_data["kernel_shmmax"] = int(total_ram) * 1024 * 1024) + 1024
+        config_data["kernel_shmall"] = config_data["kernel_shmmax"]
+
+    # XXX: This is very messy - should probably be a subordinate charm
+    conf_file = open("/etc/sysctl.d/50-postgresql.conf", "w")
+    conf_file.write("kernel.sem = 250 32000 100 1024\n")
+    if config_data["kernel_shmall"] > 0:
+        # Convert config kernel_shmall (bytes) to pages
+        page_size = int(run("getconf PAGE_SIZE"))   # frequently 4096
+        num_pages = config_data["kernel_shmall"] / page_size
+        if (config_data["kernel_shmall"] % page_size) > 0:
+            num_pages += 1
+        conf_file.write("kernel.shmall = %s\n" % num_pages)
+    if config_data["kernel_shmmax"] > 0:
+        conf_file.write("kernel.shmmax = %s\n" % config_data["kernel_shmmax"])
+    conf_file.close()
+    run("sysctl -p /etc/sysctl.d/50-postgresql.conf")
 
     # If we are replicating, some settings may need to be overridden to
     # certain minimum levels.
@@ -1259,7 +1267,8 @@ def update_repos_and_packages():
     # It might have been better for debversion and plpython to only get
     # installed if they were listed in the extra-packages config item,
     # but they predate this feature.
-    packages = ["postgresql-%s" % config_data["version"],
+    packages = ["libc-bin",  # for getconf
+                "postgresql-%s" % config_data["version"],
                 "postgresql-contrib-%s" % config_data["version"],
                 "postgresql-plpython-%s" % config_data["version"],
                 "postgresql-%s-debversion" % config_data["version"],
