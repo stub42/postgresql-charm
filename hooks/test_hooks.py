@@ -48,10 +48,10 @@ class TestJuju(object):
     """
 
     _relation_data = {}
+    _relation_ids = {}
     _relation_list = ("postgres/0",)
 
     def __init__(self):
-        self._relation_ids = {}
         self._config = {
             "admin_addresses": "",
             "locale": "C",
@@ -126,8 +126,16 @@ class TestJuju(object):
         Return expected relation_ids for tests.  Feel free to expand
         as more tests are added.
         """
-        return [relation_id for relation_name in self._relation_ids.keys()
-                if relation_id.find(relation_name) == 0]
+        return [self._relation_ids[name] for name in self._relation_ids.keys()
+                if name.find(relation_name) == 0]
+
+    def related_units(self, relid="db-admin:5"):
+        """
+        Return expected relation_ids for tests.  Feel free to expand
+        as more tests are added.
+        """
+        return [name for name, value in self._relation_ids.iteritems()
+                if value == relid]
 
     def relation_list(self):
         """
@@ -219,6 +227,59 @@ class TestHooksService(TestHooks):
             config_outfile,
             ["wal_buffers = -1", "wal_level = minimal", "max_wal_senders = 0",
              "wal_keep_segments = 0"])
+
+    def test_create_postgresql_config_wal_with_replication(self):
+        """
+        When postgresql is in C{replicated} mode, and participates in a
+        C{replication} relation, C{hot_standby} will be set to C{on},
+        C{wal_level} will be enabled as C{hot_standby} and the
+        C{max_wall_senders} will match the count of replication relations.
+        The value of C{wal_keep_segments} will be the maximum of the configured
+        C{wal_keep_segments} and C{replicated_wal_keep_segments}.
+        """
+        self.addCleanup(
+            setattr, hooks.hookenv, "_relation_ids", {})
+        hooks.hookenv._relation_ids = {
+            "replication/0": "db-admin:5", "replication/1": "db-admin:6"}
+        config_outfile = self.makeFile()
+        run = self.mocker.replace(hooks.run)
+        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        self.mocker.result(True)
+        self.mocker.replay()
+        hooks.create_postgresql_config(config_outfile)
+        self.assertFileContains(
+            config_outfile,
+            ["hot_standby = on", "wal_buffers = -1", "wal_level = hot_standby",
+             "max_wal_senders = 2", "wal_keep_segments = 5000"])
+
+    def test_create_postgresql_config_wal_with_replication_max_override(self):
+        """
+        When postgresql is in C{replicated} mode, and participates in a
+        C{replication} relation, C{hot_standby} will be set to C{on},
+        C{wal_level} will be enabled as C{hot_standby}. The written value for
+        C{max_wal_senders} will be the maximum of replication slave count and
+        the configuration value for C{max_wal_senders}.
+        The written value of C{wal_keep_segments} will be
+        the maximum of the configuration C{wal_keep_segments} and
+        C{replicated_wal_keep_segments}.
+        """
+        self.addCleanup(
+            setattr, hooks.hookenv, "_relation_ids", ())
+        hooks.hookenv._relation_ids = {
+            "replication/0": "db-admin:5", "replication/1": "db-admin:6"}
+        hooks.hookenv._config["max_wal_senders"] = "3"
+        hooks.hookenv._config["wal_keep_segments"] = 1000
+        hooks.hookenv._config["replicated_wal_keep_segments"] = 999
+        config_outfile = self.makeFile()
+        run = self.mocker.replace(hooks.run)
+        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        self.mocker.result(True)
+        self.mocker.replay()
+        hooks.create_postgresql_config(config_outfile)
+        self.assertFileContains(
+            config_outfile,
+            ["hot_standby = on", "wal_buffers = -1", "wal_level = hot_standby",
+             "max_wal_senders = 3", "wal_keep_segments = 1000"])
 
     def test_create_postgresql_config_performance_tune_auto_large_ram(self):
         """
