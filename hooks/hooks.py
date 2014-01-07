@@ -1314,8 +1314,8 @@ def update_repos_and_packages(version):
     # It might have been better for debversion and plpython to only get
     # installed if they were listed in the extra-packages config item,
     # but they predate this feature.
-    packages = ["python-psutil"  # to obtain system RAM from python
-                "libc-bin",  # for getconf
+    packages = ["python-psutil",  # to obtain system RAM from python
+                "libc-bin",       # for getconf
                 "postgresql-%s" % version,
                 "postgresql-contrib-%s" % version,
                 "postgresql-plpython-%s" % version,
