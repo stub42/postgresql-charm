@@ -104,16 +104,21 @@ PostgreSQL superuser.
 
 - `database`: Optional. The name of the database to use. The postgresql
               service will create it if necessary.
+- `roles`: Optional. A comma separated list of database roles to grant
+           the database user. Typically these roles will have been granted
+           permissions to access the tables and other database objects.
+           Do not grant permissions directly to juju generated database
+           users, as the charm may revoke them.
 
 ## During db-relation-changed
 
 ### the postgresql service provides:
 
-- `host`: the host to contact
-- `database`: a regular database
-- `port`: the port PostgreSQL is listening on
-- `user`: a regular user authorized to read the database
-- `password`: the password for `user`
+- `host`: the host to contact.
+- `database`: a regular database.
+- `port`: the port PostgreSQL is listening on.
+- `user`: a regular user authorized to read the database.
+- `password`: the password for `user`.
 - `state`: 'standalone', 'master' or 'hot standby'.
 - `allowed-units`: space separated list of allowed clients (unit name).
   You should check this to determine if you can connect to the database yet.
