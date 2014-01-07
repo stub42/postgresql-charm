@@ -7,6 +7,7 @@ import cPickle as pickle
 import glob
 from grp import getgrnam
 import os.path
+import psutil
 from pwd import getpwnam
 import re
 import shutil
@@ -48,7 +49,7 @@ def log(msg, lvl=INFO):
     '''
     myname = hookenv.local_unit().replace('/', '-')
     ts = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime())
-    with open('/var/log/juju/{}-debug.log'.format(myname), 'a') as f:
+    with open('{}/{}-debug.log'.format(juju_log_dir, myname), 'a') as f:
         f.write('{} {}: {}\n'.format(ts, lvl, msg))
     hookenv.log(msg, lvl)
 
@@ -121,7 +122,7 @@ class State(dict):
 def volume_get_volid_from_volume_map():
     volume_map = {}
     try:
-        volume_map = yaml.load(config_data['volume-map'].strip())
+        volume_map = yaml.load(hookenv.config('volume-map').strip())
         if volume_map:
             return volume_map.get(os.environ['JUJU_UNIT_NAME'])
     except ConstructorError as e:
@@ -154,7 +155,7 @@ def volume_mount_point_from_volid(volid):
 # @returns  volid
 #           None    config state is invalid - we should not serve
 def volume_get_volume_id():
-    ephemeral_storage = config_data['volume-ephemeral-storage']
+    ephemeral_storage = hookenv.config('volume-ephemeral-storage')
     volid = volume_get_volid_from_volume_map()
     juju_unit_name = hookenv.local_unit()
     if ephemeral_storage in [True, 'yes', 'Yes', 'true', 'True']:
@@ -195,6 +196,7 @@ def volume_get_all_mounted():
 
 
 def postgresql_autostart(enabled):
+    postgresql_config_dir = _get_postgresql_config_dir()
     startup_file = os.path.join(postgresql_config_dir, 'start.conf')
     if enabled:
         log("Enabling PostgreSQL startup in {}".format(startup_file))
@@ -202,8 +204,8 @@ def postgresql_autostart(enabled):
     else:
         log("Disabling PostgreSQL startup in {}".format(startup_file))
         mode = 'manual'
-    contents = Template(open("templates/start_conf.tmpl").read()).render(
-        {'mode': mode})
+    template_file = "{}/templates/start_conf.tmpl".format(hookenv.charm_dir())
+    contents = Template(open(template_file).read()).render({'mode': mode})
     host.write_file(
         startup_file, contents, 'postgres', 'postgres', perms=0o644)
 
@@ -229,7 +231,7 @@ def postgresql_is_running():
     if status != 0:
         return False
     # e.g. output: "Running clusters: 9.1/main"
-    vc = "%s/%s" % (config_data["version"], config_data["cluster_name"])
+    vc = "%s/%s" % (hookenv.config("version"), hookenv.config("cluster_name"))
     return vc in output.decode('utf8').split()
 
 
@@ -253,7 +255,7 @@ def postgresql_restart():
             # success = host.service_restart('postgresql')
             try:
                 run('pg_ctlcluster -force {version} {cluster_name} '
-                    'restart'.format(**config_data))
+                    'restart'.format(**hookenv.config()))
                 success = True
             except subprocess.CalledProcessError:
                 success = False
@@ -327,11 +329,11 @@ def postgresql_reload_or_restart():
     return success
 
 
-def get_service_port(postgresql_config):
+def get_service_port(config_file):
     '''Return the port PostgreSQL is listening on.'''
-    if not os.path.exists(postgresql_config):
+    if not os.path.exists(config_file):
         return None
-    postgresql_config = open(postgresql_config, 'r').read()
+    postgresql_config = open(config_file, 'r').read()
     port = re.search("port.*=(.*)", postgresql_config).group(1).strip()
     try:
         return int(port)
@@ -339,14 +341,25 @@ def get_service_port(postgresql_config):
         return None
 
 
-def create_postgresql_config(postgresql_config):
+def _get_system_ram():
+    """ Return the system ram in Megabytes """
+    return psutil.phymem_usage()[0] / (1024 ** 2)
+
+
+def _get_page_size():
+    """ Return the operating system's configured PAGE_SIZE """
+    return int(run("getconf PAGE_SIZE"))   # frequently 4096
+
+
+def create_postgresql_config(config_file):
     '''Create the postgresql.conf file'''
+    config_data = hookenv.config()
     if config_data["performance_tuning"] == "auto":
         # Taken from:
         # http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
         # num_cpus is not being used ... commenting it out ... negronjl
         #num_cpus = run("cat /proc/cpuinfo | grep processor | wc -l")
-        total_ram = run("free -m | grep Mem | awk '{print $2}'")
+        total_ram = _get_system_ram()
         if not config_data["effective_cache_size"]:
             config_data["effective_cache_size"] = \
                 "%sMB" % (int(int(total_ram) * 0.75),)
@@ -357,23 +370,22 @@ def create_postgresql_config(postgresql_config):
             else:
                 config_data["shared_buffers"] = \
                     "%sMB" % (int(int(total_ram) * 0.15),)
-        config_data["kernel_shmmax"] = int(total_ram) * 1024 * 1024) + 1024
+        config_data["kernel_shmmax"] = (int(total_ram) * 1024 * 1024) + 1024
         config_data["kernel_shmall"] = config_data["kernel_shmmax"]
 
     # XXX: This is very messy - should probably be a subordinate charm
-    conf_file = open("/etc/sysctl.d/50-postgresql.conf", "w")
-    conf_file.write("kernel.sem = 250 32000 100 1024\n")
+    lines = ["kernel.sem = 250 32000 100 1024\n"]
     if config_data["kernel_shmall"] > 0:
         # Convert config kernel_shmall (bytes) to pages
-        page_size = int(run("getconf PAGE_SIZE"))   # frequently 4096
+        page_size = _get_page_size()
         num_pages = config_data["kernel_shmall"] / page_size
         if (config_data["kernel_shmall"] % page_size) > 0:
             num_pages += 1
-        conf_file.write("kernel.shmall = %s\n" % num_pages)
+        lines.append("kernel.shmall = %s\n" % num_pages)
     if config_data["kernel_shmmax"] > 0:
-        conf_file.write("kernel.shmmax = %s\n" % config_data["kernel_shmmax"])
-    conf_file.close()
-    run("sysctl -p /etc/sysctl.d/50-postgresql.conf")
+        lines.append("kernel.shmmax = %s\n" % config_data["kernel_shmmax"])
+    host.write_file(postgresql_sysctl, ''.join(lines), perms=0600)
+    run("sysctl -p {}".format(postgresql_sysctl))
 
     # If we are replicating, some settings may need to be overridden to
     # certain minimum levels.
@@ -391,28 +403,31 @@ def create_postgresql_config(postgresql_config):
 
     # Send config data to the template
     # Return it as pg_config
+    charm_dir = hookenv.charm_dir()
+    template_file = "{}/templates/postgresql.conf.tmpl".format(charm_dir)
     pg_config = Template(
-        open("templates/postgresql.conf.tmpl").read()).render(config_data)
+        open(template_file).read()).render(config_data)
     host.write_file(
-        postgresql_config, pg_config,
+        config_file, pg_config,
         owner="postgres",  group="postgres", perms=0600)
 
     local_state['saved_config'] = config_data
     local_state.save()
 
 
-def create_postgresql_ident(postgresql_ident):
+def create_postgresql_ident(output_file):
     '''Create the pg_ident.conf file.'''
     ident_data = {}
-    pg_ident_template = Template(
-        open("templates/pg_ident.conf.tmpl").read())
+    charm_dir = hookenv.charm_dir()
+    template_file = "{}/templates/pg_ident.conf.tmpl".format(charm_dir)
+    pg_ident_template = Template(open(template_file).read())
     host.write_file(
-        postgresql_ident, pg_ident_template.render(ident_data),
+        output_file, pg_ident_template.render(ident_data),
         owner="postgres", group="postgres", perms=0600)
 
 
 def generate_postgresql_hba(
-        postgresql_hba, user=None, schema_user=None, database=None):
+        output_file, user=None, schema_user=None, database=None):
     '''Create the pg_hba.conf file.'''
 
     # Per Bug #1117542, when generating the postgresql_hba file we
@@ -434,9 +449,10 @@ def generate_postgresql_hba(
             except:
                 return addr
             if len(output) != 0:
-                return output.rstrip(".") # trailing dot
+                return output.rstrip(".")  # trailing dot
             return addr
 
+    config_data = hookenv.config()
     allowed_units = set()
     relation_data = []
     relids = hookenv.relation_ids('db') + hookenv.relation_ids('db-admin')
@@ -533,9 +549,10 @@ def generate_postgresql_hba(
                 'private-address': munge_address(admin_ip)}
             relation_data.append(admin_host)
 
-    pg_hba_template = Template(open("templates/pg_hba.conf.tmpl").read())
+    template_file = "{}/templates/pg_hba.conf.tmpl".format(hookenv.charm_dir())
+    pg_hba_template = Template(open(template_file).read())
     host.write_file(
-        postgresql_hba, pg_hba_template.render(access_list=relation_data),
+        output_file, pg_hba_template.render(access_list=relation_data),
         owner="postgres", group="postgres", perms=0600)
     postgresql_reload()
 
@@ -547,27 +564,36 @@ def generate_postgresql_hba(
             relid, {"allowed-units": " ".join(unit_sorted(allowed_units))})
 
 
-def install_postgresql_crontab(postgresql_ident):
+def install_postgresql_crontab(output_file):
     '''Create the postgres user's crontab'''
+    config_data = hookenv.config()
     crontab_data = {
         'backup_schedule': config_data["backup_schedule"],
         'scripts_dir': postgresql_scripts_dir,
         'backup_days': config_data["backup_retention_count"],
     }
+    charm_dir = hookenv.charm_dir()
+    template_file = "{}/templates/postgres.cron.tmpl".format(charm_dir)
     crontab_template = Template(
-        open("templates/postgres.cron.tmpl").read()).render(crontab_data)
-    host.write_file('/etc/cron.d/postgres', crontab_template, perms=0600)
+        open(template_file).read()).render(crontab_data)
+    host.write_file(output_file, crontab_template, perms=0600)
 
 
 def create_recovery_conf(master_host, restart_on_change=False):
+    version = hookenv.config('version')
+    cluster_name = hookenv.config('cluster_name')
+    postgresql_cluster_dir = os.path.join(
+        postgresql_data_dir, version, cluster_name)
+
     recovery_conf_path = os.path.join(postgresql_cluster_dir, 'recovery.conf')
     if os.path.exists(recovery_conf_path):
         old_recovery_conf = open(recovery_conf_path, 'r').read()
     else:
         old_recovery_conf = None
 
-    recovery_conf = Template(
-        open("templates/recovery.conf.tmpl").read()).render({
+    charm_dir = hookenv.charm_dir()
+    template_file = "{}/templates/recovery.conf.tmpl".format(charm_dir)
+    recovery_conf = Template(open(template_file).read()).render({
         'host': master_host,
         'password': local_state['replication_password']})
     log(recovery_conf, DEBUG)
@@ -586,9 +612,9 @@ def create_recovery_conf(master_host, restart_on_change=False):
 #                          Returns a string containing the postgresql config or
 #                          None
 #------------------------------------------------------------------------------
-def load_postgresql_config(postgresql_config):
-    if os.path.isfile(postgresql_config):
-        return(open(postgresql_config).read())
+def load_postgresql_config(config_file):
+    if os.path.isfile(config_file):
+        return(open(config_file).read())
     else:
         return(None)
 
@@ -685,7 +711,11 @@ def run_select_as_postgres(sql, *parameters):
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
 #------------------------------------------------------------------------------
 def config_changed_volume_apply():
-    data_directory_path = postgresql_cluster_dir
+    version = hookenv.config('version')
+    cluster_name = hookenv.config('cluster_name')
+    data_directory_path = os.path.join(
+        postgresql_data_dir, version, cluster_name)
+
     assert(data_directory_path)
     volid = volume_get_volume_id()
     if volid:
@@ -706,7 +736,7 @@ def config_changed_volume_apply():
         mount_point = volume_mount_point_from_volid(volid)
         new_pg_dir = os.path.join(mount_point, "postgresql")
         new_pg_version_cluster_dir = os.path.join(
-            new_pg_dir, config_data["version"], config_data["cluster_name"])
+            new_pg_dir, version, cluster_name)
         if not mount_point:
             log(
                 "invalid mount point from volid = {}, "
@@ -732,7 +762,7 @@ def config_changed_volume_apply():
         #   /var/lib/postgresql/9.1/main
         curr_dir_stat = os.stat(data_directory_path)
         for new_dir in [new_pg_dir,
-                        os.path.join(new_pg_dir, config_data["version"]),
+                        os.path.join(new_pg_dir, version),
                         new_pg_version_cluster_dir]:
             if not os.path.isdir(new_dir):
                 log("mkdir %s".format(new_dir))
@@ -789,7 +819,8 @@ def token_sql_safe(value):
 
 @hooks.hook()
 def config_changed(force_restart=False):
-    update_repos_and_packages()
+    config_data = hookenv.config()
+    update_repos_and_packages(config_data["version"])
 
     # Trigger volume initialization logic for permanent storage
     volid = volume_get_volume_id()
@@ -821,10 +852,17 @@ def config_changed(force_restart=False):
                 "Disabled and stopped postgresql service "
                 "(config_changed_volume_apply failure)", ERROR)
             sys.exit(1)
+
+    postgresql_config_dir = _get_postgresql_config_dir(config_data)
+    postgresql_config = os.path.join(postgresql_config_dir, "postgresql.conf")
+    postgresql_hba = os.path.join(postgresql_config_dir, "pg_hba.conf")
+    postgresql_ident = os.path.join(postgresql_config_dir, "pg_ident.conf")
+
     current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
     generate_postgresql_hba(postgresql_hba)
     create_postgresql_ident(postgresql_ident)
+
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
     update_nrpe_checks()
@@ -840,8 +878,8 @@ def install(run_pre=True):
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 subprocess.check_call(['sh', '-c', f])
 
-    update_repos_and_packages()
-
+    config_data = hookenv.config()
+    update_repos_and_packages(config_data["version"])
     if not 'state' in local_state:
         # Fresh installation. Because this function is invoked by both
         # the install hook and the upgrade-charm hook, we need to guard
@@ -856,6 +894,10 @@ def install(run_pre=True):
         run("pg_createcluster --locale='{}' --encoding='{}' 9.1 main".format(
             config_data['locale'], config_data['encoding']))
 
+    postgresql_backups_dir = (
+        config_data['backup_dir'].strip() or
+        os.path.join(postgresql_data_dir, 'backups'))
+
     host.mkdir(postgresql_backups_dir, owner="postgres", perms=0o755)
     host.mkdir(postgresql_scripts_dir, owner="postgres", perms=0o755)
     host.mkdir(postgresql_logs_dir, owner="postgres", perms=0o755)
@@ -865,10 +907,11 @@ def install(run_pre=True):
         'scripts_dir': postgresql_scripts_dir,
         'logs_dir': postgresql_logs_dir,
     }
-    dump_script = Template(
-        open("templates/dump-pg-db.tmpl").read()).render(paths)
-    backup_job = Template(
-        open("templates/pg_backup_job.tmpl").read()).render(paths)
+    charm_dir = hookenv.charm_dir()
+    template_file = "{}/templates/dump-pg-db.tmpl".format(charm_dir)
+    dump_script = Template(open(template_file).read()).render(paths)
+    template_file = "{}/templates/pg_backup_job.tmpl".format(charm_dir)
+    backup_job = Template(open(template_file).read()).render(paths)
     host.write_file(
         '{}/dump-pg-db'.format(postgresql_scripts_dir),
         dump_script, perms=0755)
@@ -1159,6 +1202,7 @@ def db_relation_joined_changed():
     log("Client relations {}".format(local_state['client_relations']))
     local_state.publish()
 
+    postgresql_hba = os.path.join(_get_postgresql_config_dir(), "pg_hba.conf")
     generate_postgresql_hba(postgresql_hba, user=user,
                             schema_user=schema_user,
                             database=database)
@@ -1196,6 +1240,7 @@ def db_admin_relation_joined_changed():
     log("Client relations {}".format(local_state['client_relations']))
     local_state.publish()
 
+    postgresql_hba = os.path.join(_get_postgresql_config_dir(), "pg_hba.conf")
     generate_postgresql_hba(postgresql_hba)
 
     snapshot_relations()
@@ -1228,6 +1273,7 @@ def db_relation_broken():
         run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
                             AsIs(quote_identifier(user + "_schema")))
 
+    postgresql_hba = os.path.join(_get_postgresql_config_dir(), "pg_hba.conf")
     generate_postgresql_hba(postgresql_hba)
 
     # Cleanup our local state.
@@ -1244,13 +1290,14 @@ def db_admin_relation_broken():
             sql = "ALTER USER %s NOSUPERUSER"
             run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
 
+    postgresql_hba = os.path.join(_get_postgresql_config_dir(), "pg_hba.conf")
     generate_postgresql_hba(postgresql_hba)
 
     # Cleanup our local state.
     snapshot_relations()
 
 
-def update_repos_and_packages():
+def update_repos_and_packages(version):
     extra_repos = hookenv.config('extra_archives')
     extra_repos_added = local_state.setdefault('extra_repos_added', set())
     if extra_repos:
@@ -1268,10 +1315,10 @@ def update_repos_and_packages():
     # installed if they were listed in the extra-packages config item,
     # but they predate this feature.
     packages = ["libc-bin",  # for getconf
-                "postgresql-%s" % config_data["version"],
-                "postgresql-contrib-%s" % config_data["version"],
-                "postgresql-plpython-%s" % config_data["version"],
-                "postgresql-%s-debversion" % config_data["version"],
+                "postgresql-%s" % version,
+                "postgresql-contrib-%s" % version,
+                "postgresql-plpython-%s" % version,
+                "postgresql-%s-debversion" % version,
                 "python-jinja2", "syslinux", "python-psycopg2"]
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
@@ -1335,6 +1382,11 @@ def authorized_by(unit):
 
 def promote_database():
     '''Take the database out of recovery mode.'''
+    config_data = hookenv.config()
+    version = config_data['version']
+    cluster_name = config_data['cluster_name']
+    postgresql_cluster_dir = os.path.join(
+        postgresql_data_dir, version, cluster_name)
     recovery_conf = os.path.join(postgresql_cluster_dir, 'recovery.conf')
     if os.path.exists(recovery_conf):
         # Rather than using 'pg_ctl promote', we do the promotion
@@ -1538,6 +1590,8 @@ def replication_relation_joined_changed():
             del local_state['paused_at_failover']
 
         publish_hot_standby_credentials()
+        postgresql_hba = os.path.join(
+            _get_postgresql_config_dir(), "pg_hba.conf")
         generate_postgresql_hba(postgresql_hba)
 
     local_state.publish()
@@ -1690,7 +1744,7 @@ def restart_lock(unit, exclusive):
     lock.
     '''
     import psycopg2
-    key = long(config_data['advisory_lock_restart_key'])
+    key = long(hookenv.config('advisory_lock_restart_key'))
     if exclusive:
         lock_function = 'pg_advisory_lock'
     else:
@@ -1733,6 +1787,12 @@ def clone_database(master_unit, master_host):
         postgresql_stop()
         log("Cloning master {}".format(master_unit))
 
+        config_data = hookenv.config()
+        version = config_data['version']
+        cluster_name = config_data['cluster_name']
+        postgresql_cluster_dir = os.path.join(
+            postgresql_data_dir, version, cluster_name)
+        postgresql_config_dir = _get_postgresql_config_dir(config_data)
         cmd = [
             'sudo', '-E',  # -E needed to locate pgpass file.
             '-u', 'postgres', 'pg_basebackup', '-D', postgresql_cluster_dir,
@@ -1786,6 +1846,11 @@ def slave_count():
 
 
 def postgresql_is_in_backup_mode():
+    version = hookenv.config('version')
+    cluster_name = hookenv.config('cluster_name')
+    postgresql_cluster_dir = os.path.join(
+        postgresql_data_dir, version, cluster_name)
+
     return os.path.exists(
         os.path.join(postgresql_cluster_dir, 'backup_label'))
 
@@ -1903,30 +1968,28 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
         host.service_reload('nagios-nrpe-server')
 
 
+def _get_postgresql_config_dir(config_data=None):
+    """ Return the directory path of the postgresql configuration files. """
+    if config_data == None:
+        config_data = hookenv.config()
+    version = config_data['version']
+    cluster_name = config_data['cluster_name']
+    return os.path.join("/etc/postgresql", version, cluster_name)
+
 ###############################################################################
 # Global variables
 ###############################################################################
-config_data = hookenv.config()
-version = config_data['version']
-cluster_name = config_data['cluster_name']
 postgresql_data_dir = "/var/lib/postgresql"
-postgresql_cluster_dir = os.path.join(
-    postgresql_data_dir, version, cluster_name)
-postgresql_bin_dir = os.path.join('/usr/lib/postgresql', version, 'bin')
-postgresql_config_dir = os.path.join("/etc/postgresql", version, cluster_name)
-postgresql_config = os.path.join(postgresql_config_dir, "postgresql.conf")
-postgresql_ident = os.path.join(postgresql_config_dir, "pg_ident.conf")
-postgresql_hba = os.path.join(postgresql_config_dir, "pg_hba.conf")
+postgresql_scripts_dir = os.path.join(postgresql_data_dir, 'scripts')
+postgresql_logs_dir = os.path.join(postgresql_data_dir, 'logs')
+
+postgresql_sysctl = "/etc/sysctl.d/50-postgresql.conf"
 postgresql_crontab = "/etc/cron.d/postgresql"
 postgresql_service_config_dir = "/var/run/postgresql"
-postgresql_scripts_dir = os.path.join(postgresql_data_dir, 'scripts')
-postgresql_backups_dir = (
-    config_data['backup_dir'].strip() or
-    os.path.join(postgresql_data_dir, 'backups'))
-postgresql_logs_dir = os.path.join(postgresql_data_dir, 'logs')
-hook_name = os.path.basename(sys.argv[0])
 replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')
+hook_name = os.path.basename(sys.argv[0])
+juju_log_dir = "/var/log/juju"
 
 
 if __name__ == '__main__':
