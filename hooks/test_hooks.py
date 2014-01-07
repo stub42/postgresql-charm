@@ -1,9 +1,4 @@
-import yaml
-import os
-import pycurl
-import base64
 import mocker
-from ConfigParser import RawConfigParser
 import hooks
 
 
