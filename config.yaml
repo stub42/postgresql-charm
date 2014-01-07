@@ -251,13 +251,14 @@ options:
     type: string
     description: |
         The amount of memory the database server uses for shared memory
-        buffers.
+        buffers. This string should be of the format "###MB".
   effective_cache_size:
     default: ""
     type: string
     description: |
         Effective cache size is an estimate of how much memory is available for
-        disk caching within the database. (50% to 75% of system memory)
+        disk caching within the database. (50% to 75% of system memory). This
+        string should be of the format "###MB".
   temp_buffers:
     default: "1MB"
     type: string
