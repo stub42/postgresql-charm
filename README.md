@@ -131,8 +131,8 @@ PostgreSQL superuser.
   You should check this to determine if you can connect to the database yet.
 
 ### For clustered support
-In order for client charms to support replication:
-  - client will need to be aware when relation-list reports > 1 unit of postgresql related
+In order for client charms to support replication the client will need to be
+aware when relation-list reports > 1 unit of postgresql related:
   - When > 1 postgresql units are related:
     - if the client charm needs database write access, they will ignore
       all "standalone", "hot standby" and "failover" states as those will
