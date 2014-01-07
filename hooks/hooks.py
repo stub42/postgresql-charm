@@ -7,7 +7,6 @@ import cPickle as pickle
 import glob
 from grp import getgrnam
 import os.path
-import psutil
 from pwd import getpwnam
 import re
 import shutil
@@ -343,6 +342,7 @@ def get_service_port(config_file):
 
 def _get_system_ram():
     """ Return the system ram in Megabytes """
+    import psutil
     return psutil.phymem_usage()[0] / (1024 ** 2)
 
 
@@ -1314,7 +1314,8 @@ def update_repos_and_packages(version):
     # It might have been better for debversion and plpython to only get
     # installed if they were listed in the extra-packages config item,
     # but they predate this feature.
-    packages = ["libc-bin",  # for getconf
+    packages = ["python-psutil"  # to obtain system RAM from python
+                "libc-bin",  # for getconf
                 "postgresql-%s" % version,
                 "postgresql-contrib-%s" % version,
                 "postgresql-plpython-%s" % version,
