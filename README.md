@@ -135,16 +135,30 @@ PostgreSQL superuser.
 - `allowed-units`: space separated list of allowed clients (unit name).
   You should check this to determine if you can connect to the database yet.
 
-### For clustered support
-In order for client charms to support replication the client will need to be
-aware when relation-list reports > 1 unit of postgresql related:
-  - When > 1 postgresql units are related:
-    - if the client charm needs database write access, they will ignore
-      all "standalone", "hot standby" and "failover" states as those will
-      likely come from a standby unit (read-only) during standby install,
-      setup or teardown
-    - If read-only access is needed for a client, acting on
-      db-admin-relation-changed "hot standby" state will provide you with a
-      readonly replicated copy of the db
-  - When 1 postgresql unit is related:
-    - watch for updates to the db-admin-relation-changed with "standalone" state
+## For replicated database support
+
+A PostgreSQL service may contain multiple units (a single master, and
+optionally one or more hot standbys). The client charm can tell which
+unit in a relation is the master and which are hot standbys by
+inspecting the 'state' property on the relation, and it needs to be
+aware of how many units are in the relation by using the 'relation-list'
+hook tool.
+
+If there is a single PostgreSQL unit related, the state will be
+'standalone'. All database connections of course go to this unit.
+
+If there are more than one PostgreSQL unit related, the client charm
+must only use units with state set to 'master' or 'hot standby'.
+The unit with 'master' state can accept read and write connections. The
+units with 'hot standby' state can accept read-only connections, and
+any attempted writes will fail. Units with any other state must not be
+used and should be ignored ('standalone' units are new units joining the
+service that are not yet setup, and 'failover' state will occur when the
+master unit is being shutdown and a new master is being elected).
+
+The client charm needs to watch for state changes in it's
+relation-changed hook. New units may be added to a single unit service,
+and the client charm must stop using existing 'standalone' unit and wait
+for 'master' and 'hot standby' units to appear. Units may be removed,
+possibly causing a 'hot standby' unit to be promoted to a master, or
+even having the service revert to a single 'standalone' unit.
