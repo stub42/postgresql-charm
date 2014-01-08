@@ -134,3 +134,17 @@ PostgreSQL superuser.
 - `state`: 'standalone', 'master' or 'hot standby'
 - `allowed-units`: space separated list of allowed clients (unit name).
   You should check this to determine if you can connect to the database yet.
+
+### For clustered support
+In order for client charms to support replication the client will need to be
+aware when relation-list reports > 1 unit of postgresql related:
+  - When > 1 postgresql units are related:
+    - if the client charm needs database write access, they will ignore
+      all "standalone", "hot standby" and "failover" states as those will
+      likely come from a standby unit (read-only) during standby install,
+      setup or teardown
+    - If read-only access is needed for a client, acting on
+      db-admin-relation-changed "hot standby" state will provide you with a
+      readonly replicated copy of the db
+  - When 1 postgresql unit is related:
+    - watch for updates to the db-admin-relation-changed with "standalone" state
