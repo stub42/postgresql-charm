@@ -1996,7 +1996,7 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
 
 def _get_postgresql_config_dir(config_data=None):
     """ Return the directory path of the postgresql configuration files. """
-    if config_data == None:
+    if config_data is None:
         config_data = hookenv.config()
     version = config_data['version']
     cluster_name = config_data['cluster_name']

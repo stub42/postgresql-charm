@@ -147,7 +147,7 @@ hook tool.
 If there is a single PostgreSQL unit related, the state will be
 'standalone'. All database connections of course go to this unit.
 
-If there are more than one PostgreSQL unit related, the client charm
+If there is more than one PostgreSQL unit related, the client charm
 must only use units with state set to 'master' or 'hot standby'.
 The unit with 'master' state can accept read and write connections. The
 units with 'hot standby' state can accept read-only connections, and
@@ -156,7 +156,7 @@ used and should be ignored ('standalone' units are new units joining the
 service that are not yet setup, and 'failover' state will occur when the
 master unit is being shutdown and a new master is being elected).
 
-The client charm needs to watch for state changes in it's
+The client charm needs to watch for state changes in its
 relation-changed hook. New units may be added to a single unit service,
 and the client charm must stop using existing 'standalone' unit and wait
 for 'master' and 'hot standby' units to appear. Units may be removed,
