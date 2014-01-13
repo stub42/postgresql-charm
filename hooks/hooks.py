@@ -710,7 +710,7 @@ def run_select_as_postgres(sql, *parameters):
 #     - if fresh new storage dir: rsync existing data
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
 #------------------------------------------------------------------------------
-def config_changed_volume_apply(volid=None):
+def config_changed_volume_apply(mount_point=None):
     version = hookenv.config('version')
     cluster_name = hookenv.config('cluster_name')
     data_directory_path = os.path.join(
@@ -718,8 +718,7 @@ def config_changed_volume_apply(volid=None):
 
     assert(data_directory_path)
 
-    volid = volid if volid is not None else volume_get_volume_id()
-    if volid:
+    if mount_point:
         if not os.path.exists(data_directory_path):
             log(
                 "postgresql data dir {} not found, "
@@ -727,13 +726,12 @@ def config_changed_volume_apply(volid=None):
                 CRITICAL)
             return False
 
-        mount_point = volume_mount_point_from_volid(volid)
         new_pg_dir = os.path.join(mount_point, "postgresql")
         new_pg_version_cluster_dir = os.path.join(
             new_pg_dir, version, cluster_name)
         if not mount_point:
             log(
-                "invalid mount point from volid = {}, "
+                "invalid mount point = {}, "
                 "not applying changes.".format(mount_point), ERROR)
             return False
 
@@ -812,29 +810,14 @@ def token_sql_safe(value):
 
 
 @hooks.hook()
-def config_changed(force_restart=False, volume_config={}):
+def config_changed(force_restart=False, mount_point=None):
     config_data = hookenv.config()
     update_repos_and_packages(config_data["version"])
 
-    # Trigger volume initialization logic for permanent storage
-    volid = volume_config.get("volume-id", volume_get_volume_id())
-    if not volid:
-        ## Invalid configuration (whether ephemeral, or permanent)
-        postgresql_autostart(False)
-        postgresql_stop()
-        mounts = volume_get_all_mounted()
-        if mounts:
-            log("current mounted volumes: {}".format(mounts))
-        log(
-            "Disabled and stopped postgresql service, "
-            "because of broken volume configuration - check "
-            "'volume-ephemeral-storage' and 'volume-map'", ERROR)
-        sys.exit(1)
-
-    if volume_is_permanent(volid):
+    if mount_point is not None:
         ## config_changed_volume_apply will stop the service if it founds
         ## it necessary, ie: new volume setup
-        if config_changed_volume_apply(volid):
+        if config_changed_volume_apply(mount_point=mount_point):
             postgresql_autostart(True)
         else:
             postgresql_autostart(False)
@@ -1996,9 +1979,11 @@ def use_volume():
 
 @hooks.hook('data-relation-joined')
 def set_mount_point():
-    hookenv.log("Setting mount point: Fooo.", hookenv.DEBUG)
-    hookenv.relation_set(mountpoint="/srv/juju/vol-00001")
-    
+    mount_point = hookenv.relation_get("mountpoint")
+    if not mount_point:
+        sys.exit(0)
+    config_changed(mount_point=mount_point)
+
 
 def _get_postgresql_config_dir(config_data=None):
     """ Return the directory path of the postgresql configuration files. """
