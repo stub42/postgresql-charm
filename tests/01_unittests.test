@@ -1,3 +1,3 @@
-#!/bin/sh
+#!/bin/bash
 
-cd ../hooks && trial test_hooks.py
+cd $(dirname $0)/../hooks && trial test_hooks.py

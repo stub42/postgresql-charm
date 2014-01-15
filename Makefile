@@ -1,6 +1,6 @@
 CHARM_DIR := $(shell pwd)
 
-test: unit_test integration_test
+test: lint unit_test integration_test
 
 unit_test:
 	cd hooks && trial test_hooks.py
@@ -10,4 +10,4 @@ integration_test:
 	TEST_TIMEOUT=900 ./test.py -v
 
 lint:
-	bzr ls-lint
+	@flake8 --exclude hooks/charmhelpers hooks # requires python-flakes8
