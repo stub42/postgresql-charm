@@ -1323,18 +1323,10 @@ def db_admin_relation_broken():
 
 
 def update_repos_and_packages(version):
-    extra_repos = hookenv.config('extra_archives')
-    extra_repos_added = local_state.setdefault('extra_repos_added', set())
-    if extra_repos:
-        repos_added = False
-        for repo in extra_repos.split(','):
-            if repo not in extra_repos_added:
-                fetch.add_source(repo)
-                extra_repos_added.add(repo)
-                repos_added = True
-        if repos_added:
-            fetch.apt_update(fatal=True)
-            local_state.save()
+    # Support the standard mechanism implemented by charm-helpers. Pulls
+    # from the default 'install_sources' and 'install_keys' config
+    # options.
+    fetch.configure_sources(True)
 
     # It might have been better for debversion and plpython to only get
     # installed if they were listed in the extra-packages config item,

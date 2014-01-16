@@ -329,13 +329,22 @@ options:
             juju-postgresql-0
         If you're running multiple environments with the same services in them
         this allows you to differentiate between them.
+  install_sources:
+    description: |
+        List of extra package sources, per charmhelpers standard. YAML format.
+    type: string
+    default: ""
+  install_keys:
+    description: |
+        List of signing keys for install_sources package sources, per
+        charmhelpers standard. YAML format.
+    type: string
+    default: ""
   extra_archives:
     default: ""
     type: string
     description: |
-        Extra archives to add, comma separated. Supports ppa:, http:, cloud:
-        URIs, as well as other schemes and keywords supported by
-        charmhelpers.fetch.add_source() such as "proposed". 
+        DEPRECATED & IGNORED. Use install_sources and install_keys. 
   advisory_lock_restart_key:
     default: 765
     type: int
