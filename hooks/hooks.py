@@ -1327,7 +1327,7 @@ def update_repos_and_packages(version):
     extra_repos_added = local_state.setdefault('extra_repos_added', set())
     if extra_repos:
         repos_added = False
-        for repo in extra_repos.split():
+        for repo in extra_repos.split(','):
             if repo not in extra_repos_added:
                 fetch.add_source(repo)
                 extra_repos_added.add(repo)
