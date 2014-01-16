@@ -1973,16 +1973,24 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
 
 @hooks.hook('data-relation-changed')
 def use_volume():
-    # Grab volume info from the relation and pass it down to config_changed.
-    sys.exit(0)
+    config_data = hookenv.config()
+    storage_mount_point = config_data["storage_mount_point"]
+    if not hookenv.relation_get("mountpoint"):
+        hookenv.log("Setting mount point in the relation: %s"
+                    % storage_mount_point, hookenv.DEBUG)
+        hookenv.relation_set(mountpoint=storage_mount_point)
+    if hookenv.relation_get("storage_ready"):
+        hookenv.log("Storage ready and mounted", hookenv.DEBUG)
+        config_changed(mount_point=storage_mount_point)
 
 
 @hooks.hook('data-relation-joined')
 def set_mount_point():
-    mount_point = hookenv.relation_get("mountpoint")
-    if not mount_point:
-        sys.exit(0)
-    config_changed(mount_point=mount_point)
+    config_data = hookenv.config()
+    storage_mount_point = config_data["storage_mount_point"]
+    hookenv.log("Setting mount point in the relation: %s"
+                % storage_mount_point, hookenv.DEBUG)
+    hookenv.relation_set(mountpoint=storage_mount_point)
 
 
 def _get_postgresql_config_dir(config_data=None):
