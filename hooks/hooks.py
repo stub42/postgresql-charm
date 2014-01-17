@@ -1985,12 +1985,19 @@ def use_volume():
 
 
 @hooks.hook('data-relation-joined')
-def set_mount_point():
+def request_mount_point():
     config_data = hookenv.config()
     storage_mount_point = config_data["storage_mount_point"]
     hookenv.log("Setting mount point in the relation: %s"
                 % storage_mount_point, hookenv.DEBUG)
     hookenv.relation_set(mountpoint=storage_mount_point)
+
+
+@hooks.hook('data-relation-departed')
+def stop_postgres_on_data_relation_departed():
+    hookenv.log("Data relation departing. Stopping PostgreSQL",
+                hookenv.DEBUG)    
+    postgresql_stop()
 
 
 def _get_postgresql_config_dir(config_data=None):
