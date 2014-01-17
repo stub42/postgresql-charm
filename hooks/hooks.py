@@ -16,6 +16,7 @@ import sys
 from tempfile import NamedTemporaryFile
 import time
 import yaml
+import apt
 from yaml.constructor import ConstructorError
 
 from charmhelpers import fetch
@@ -51,6 +52,31 @@ def log(msg, lvl=INFO):
     with open('{}/{}-debug.log'.format(juju_log_dir, myname), 'a') as f:
         f.write('{} {}: {}\n'.format(ts, lvl, msg))
     hookenv.log(msg, lvl)
+
+
+def pg_version():
+    '''Return pg_version to use.
+
+    Return "version" config item if set, else use version from "postgresql"
+    package candidate, saving it in local_state for later.
+    '''
+    config_data = hookenv.config()
+    if config_data['version']:
+        version = config_data['version']
+    elif 'pg_version' in local_state:
+        version = local_state['pg_version']
+    else:
+        cache = apt.Cache()
+        # get postgresql candidate version from cache, e.g. 9.1+129ubuntu1
+        version = cache['postgresql'].candidate.version
+        # version=N.N, as used for versioned pkg names, and PG commands
+        version = re.match(r'^\d+\.\d+', version).group(0)
+        # expensive operation, save it
+        local_state.setdefault('pg_version', version)
+        local_state.save()
+
+    assert version, "pg_version couldn't determine find a version to use"
+    return version
 
 
 class State(dict):
@@ -230,7 +256,7 @@ def postgresql_is_running():
     if status != 0:
         return False
     # e.g. output: "Running clusters: 9.1/main"
-    vc = "%s/%s" % (hookenv.config("version"), hookenv.config("cluster_name"))
+    vc = "%s/%s" % (pg_version(), hookenv.config("cluster_name"))
     return vc in output.decode('utf8').split()
 
 
@@ -253,8 +279,9 @@ def postgresql_restart():
             # 'service postgresql restart' fails; it only does a reload.
             # success = host.service_restart('postgresql')
             try:
-                run('pg_ctlcluster -force {version} {cluster_name} '
-                    'restart'.format(**hookenv.config()))
+                run('pg_ctlcluster -force {} {} '
+                    'restart'.format(pg_version(),
+                                     hookenv.config('cluster_name')))
                 success = True
             except subprocess.CalledProcessError:
                 success = False
@@ -405,6 +432,8 @@ def create_postgresql_config(config_file):
     # Return it as pg_config
     charm_dir = hookenv.charm_dir()
     template_file = "{}/templates/postgresql.conf.tmpl".format(charm_dir)
+    if not config_data['version']:
+        config_data['version'] = pg_version()
     pg_config = Template(
         open(template_file).read()).render(config_data)
     host.write_file(
@@ -580,7 +609,7 @@ def install_postgresql_crontab(output_file):
 
 
 def create_recovery_conf(master_host, restart_on_change=False):
-    version = hookenv.config('version')
+    version = pg_version()
     cluster_name = hookenv.config('cluster_name')
     postgresql_cluster_dir = os.path.join(
         postgresql_data_dir, version, cluster_name)
@@ -630,6 +659,18 @@ def update_service_port(old_service_port=None, new_service_port=None):
     if new_service_port != old_service_port:
         hookenv.close_port(old_service_port)
         hookenv.open_port(new_service_port)
+
+
+def create_ssl_cert(cluster_dir):
+    # Debian by default expects SSL certificates in the datadir.
+    server_crt = os.path.join(cluster_dir, 'server.crt')
+    server_key = os.path.join(cluster_dir, 'server.key')
+    if not os.path.exists(server_crt):
+        os.symlink('/etc/ssl/certs/ssl-cert-snakeoil.pem',
+                   server_crt)
+    if not os.path.exists(server_key):
+        os.symlink('/etc/ssl/private/ssl-cert-snakeoil.key',
+                   server_key)
 
 
 def set_password(user, password):
@@ -711,7 +752,7 @@ def run_select_as_postgres(sql, *parameters):
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
 #------------------------------------------------------------------------------
 def config_changed_volume_apply():
-    version = hookenv.config('version')
+    version = pg_version()
     cluster_name = hookenv.config('cluster_name')
     data_directory_path = os.path.join(
         postgresql_data_dir, version, cluster_name)
@@ -820,7 +861,7 @@ def token_sql_safe(value):
 @hooks.hook()
 def config_changed(force_restart=False):
     config_data = hookenv.config()
-    update_repos_and_packages(config_data["version"])
+    update_repos_and_packages()
 
     # Trigger volume initialization logic for permanent storage
     volid = volume_get_volume_id()
@@ -862,6 +903,8 @@ def config_changed(force_restart=False):
     create_postgresql_config(postgresql_config)
     generate_postgresql_hba(postgresql_hba)
     create_postgresql_ident(postgresql_ident)
+    create_ssl_cert(os.path.join(
+        postgresql_data_dir, pg_version(), config_data['cluster_name']))
 
     updated_service_port = config_data["listen_port"]
     update_service_port(current_service_port, updated_service_port)
@@ -879,7 +922,7 @@ def install(run_pre=True):
                 subprocess.check_call(['sh', '-c', f])
 
     config_data = hookenv.config()
-    update_repos_and_packages(config_data["version"])
+    update_repos_and_packages()
     if not 'state' in local_state:
         # Fresh installation. Because this function is invoked by both
         # the install hook and the upgrade-charm hook, we need to guard
@@ -890,9 +933,10 @@ def install(run_pre=True):
 
         # Drop the cluster created when the postgresql package was
         # installed, and rebuild it with the requested locale and encoding.
-        run("pg_dropcluster --stop 9.1 main")
-        run("pg_createcluster --locale='{}' --encoding='{}' 9.1 main".format(
-            config_data['locale'], config_data['encoding']))
+        version = pg_version()
+        run("pg_dropcluster --stop {} main".format(version))
+        run("pg_createcluster --locale='{}' --encoding='{}' {} main".format(
+            config_data['locale'], config_data['encoding'], version))
 
     postgresql_backups_dir = (
         config_data['backup_dir'].strip() or
@@ -1322,7 +1366,7 @@ def db_admin_relation_broken():
     snapshot_relations()
 
 
-def update_repos_and_packages(version):
+def update_repos_and_packages():
     extra_repos = hookenv.config('extra_archives')
     extra_repos_added = local_state.setdefault('extra_repos_added', set())
     if extra_repos:
@@ -1336,6 +1380,7 @@ def update_repos_and_packages(version):
             fetch.apt_update(fatal=True)
             local_state.save()
 
+    version = pg_version()
     # It might have been better for debversion and plpython to only get
     # installed if they were listed in the extra-packages config item,
     # but they predate this feature.
@@ -1409,7 +1454,7 @@ def authorized_by(unit):
 def promote_database():
     '''Take the database out of recovery mode.'''
     config_data = hookenv.config()
-    version = config_data['version']
+    version = pg_version()
     cluster_name = config_data['cluster_name']
     postgresql_cluster_dir = os.path.join(
         postgresql_data_dir, version, cluster_name)
@@ -1814,7 +1859,7 @@ def clone_database(master_unit, master_host):
         log("Cloning master {}".format(master_unit))
 
         config_data = hookenv.config()
-        version = config_data['version']
+        version = pg_version()
         cluster_name = config_data['cluster_name']
         postgresql_cluster_dir = os.path.join(
             postgresql_data_dir, version, cluster_name)
@@ -1837,12 +1882,7 @@ def clone_database(master_unit, master_host):
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             log(output, DEBUG)
             # Debian by default expects SSL certificates in the datadir.
-            os.symlink(
-                '/etc/ssl/certs/ssl-cert-snakeoil.pem',
-                os.path.join(postgresql_cluster_dir, 'server.crt'))
-            os.symlink(
-                '/etc/ssl/private/ssl-cert-snakeoil.key',
-                os.path.join(postgresql_cluster_dir, 'server.key'))
+            create_ssl_cert(postgresql_cluster_dir)
             create_recovery_conf(master_host)
         except subprocess.CalledProcessError as x:
             # We failed, and this cluster is broken. Rebuild a
@@ -1872,7 +1912,7 @@ def slave_count():
 
 
 def postgresql_is_in_backup_mode():
-    version = hookenv.config('version')
+    version = pg_version()
     cluster_name = hookenv.config('cluster_name')
     postgresql_cluster_dir = os.path.join(
         postgresql_data_dir, version, cluster_name)
@@ -1998,7 +2038,7 @@ def _get_postgresql_config_dir(config_data=None):
     """ Return the directory path of the postgresql configuration files. """
     if config_data is None:
         config_data = hookenv.config()
-    version = config_data['version']
+    version = pg_version()
     cluster_name = config_data['cluster_name']
     return os.path.join("/etc/postgresql", version, cluster_name)
 
