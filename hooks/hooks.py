@@ -66,16 +66,19 @@ def pg_version():
     elif 'pg_version' in local_state:
         version = local_state['pg_version']
     else:
+        log("no explicit version, find it from apt-cache candidate")
         cache = apt.Cache()
         # get postgresql candidate version from cache, e.g. 9.1+129ubuntu1
-        version = cache['postgresql'].candidate.version
+        canditate_version = cache['postgresql'].candidate.version
         # version=N.N, as used for versioned pkg names, and PG commands
-        version = re.match(r'^\d+\.\d+', version).group(0)
+        version = re.match(r'^\d+\.\d+', canditate_version).group(0)
+        log("version={} from canditate_version={}".format(
+            version, canditate_version))
         # expensive operation, save it
         local_state.setdefault('pg_version', version)
         local_state.save()
 
-    assert version, "pg_version couldn't determine find a version to use"
+    assert version, "pg_version couldn't find a version to use"
     return version
 
 
