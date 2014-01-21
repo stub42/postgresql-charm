@@ -65,17 +65,17 @@ def pg_version():
     elif 'pg_version' in local_state:
         version = local_state['pg_version']
     else:
-        log("no explicit version, map it from distro release")
+        log("map version from distro release ...")
         distro_release = run("lsb_release -sc")
         version_map = {'precise': '9.1',
                        'trusty': '9.3'}
-        version = version_map.get(distro_release)
+        version = version_map.get(distro_release.rstrip())
         if not version:
             log("No PG version map for distro_release={}, "
                 "you'll need to explicitly set it".format(distro_release),
                 CRITICAL)
             sys.exit(1)
-        log("version={} from distro_release={}".format(
+        log("version={} from distro_release='{}'".format(
             version, distro_release))
         # save it for later
         local_state.setdefault('pg_version', version)
