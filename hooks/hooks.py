@@ -16,7 +16,6 @@ import sys
 from tempfile import NamedTemporaryFile
 import time
 import yaml
-import apt
 from yaml.constructor import ConstructorError
 
 from charmhelpers import fetch
@@ -66,15 +65,19 @@ def pg_version():
     elif 'pg_version' in local_state:
         version = local_state['pg_version']
     else:
-        log("no explicit version, find it from apt-cache candidate")
-        cache = apt.Cache()
-        # get postgresql candidate version from cache, e.g. 9.1+129ubuntu1
-        candidate_version = cache['postgresql'].candidate.version
-        # version=N.N, as used for versioned pkg names, and PG commands
-        version = re.match(r'^\d+\.\d+', candidate_version).group(0)
-        log("version={} from candidate_version={}".format(
-            version, candidate_version))
-        # apt.Cache is an expensive operation, save it
+        log("no explicit version, map it from distro release")
+        distro_release = run("lsb_release -sc")
+        version_map = {'precise': '9.1',
+                       'trusty': '9.3'}
+        version = version_map.get(distro_release)
+        if not version:
+            log("No PG version map for distro_release={}, "
+                "you'll need to explicitly set it".format(distro_release),
+                CRITICAL)
+            sys.exit(1)
+        log("version={} from distro_release={}".format(
+            version, distro_release))
+        # save it for later
         local_state.setdefault('pg_version', version)
         local_state.save()
 
