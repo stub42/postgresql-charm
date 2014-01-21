@@ -67,9 +67,10 @@ def pg_version():
     else:
         log("map version from distro release ...")
         distro_release = run("lsb_release -sc")
+        distro_release = distro_release.rstrip()
         version_map = {'precise': '9.1',
                        'trusty': '9.3'}
-        version = version_map.get(distro_release.rstrip())
+        version = version_map.get(distro_release)
         if not version:
             log("No PG version map for distro_release={}, "
                 "you'll need to explicitly set it".format(distro_release),
