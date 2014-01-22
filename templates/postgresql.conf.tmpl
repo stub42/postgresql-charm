@@ -17,7 +17,11 @@ external_pid_file = '/var/run/postgresql/{{version}}-{{cluster_name}}.pid'
 # CONNECTIONS AND AUTHENTICATION
 #------------------------------------------------------------------------------
 
+{% if version >= "9.3" -%}
+unix_socket_directories = '/var/run/postgresql'
+{% else -%}
 unix_socket_directory = '/var/run/postgresql'
+{% endif -%}
 
 {% if listen_ip != "" -%}
 listen_addresses = '{{listen_ip}}'
