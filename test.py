@@ -306,8 +306,9 @@ class PostgreSQLCharmBaseTestCase(object):
             "ALTER USER postgres ENCRYPTED PASSWORD 'foo'", dbname='postgres')
 
         # Direct connection string to the unit's database.
-        conn_str = 'dbname=postgres user=postgres password=foo host={}'.format(
-            unit_ip)
+        conn_str = (
+            'dbname=postgres user=postgres password=foo '
+            'host={} port={}'.format(unit_ip, self.PORT))
 
         # Direct database connections should fail at the moment.
         self.assertRaises(
