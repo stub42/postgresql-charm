@@ -29,15 +29,6 @@ TEST_CHARM = 'local:postgresql'
 PSQL_CHARM = 'local:postgresql-psql'
 
 
-PGDB_APT_CONFIG = {
-    'install_sources': '''\
-            - deb http://apt.postgresql.org/pub/repos/apt/ precise-pgdb main
-            ''',
-    'install_keys': '''\
-            - ACCC4CF8
-            '''}
-
-
 class PostgreSQLCharmBaseTestCase(object):
 
     VERSION = '9.1'
@@ -48,21 +39,16 @@ class PostgreSQLCharmBaseTestCase(object):
         # Generate a basic config for all PostgreSQL charm deploys.
         # Tests may add or change options.
         self.pg_config = {'version': self.VERSION}
+        # If we are not using the default version of PostgreSQL for
+        # the Ubuntu release we are testing on, add the PostgreSQL
+        # Global Development Group APT archive to make the official
+        # backports available.
         if SERIES == 'precise' and self.VERSION == '9.1':
-            pass
+            self.pg_config['pgdg'] = False
         elif SERIES == 'trusty' and self.VERSION == '9.3':
-            pass
+            self.pg_config['pgdg'] = False
         else:
-            # If we are not using the default version of PostgreSQL for
-            # the Ubuntu release we are testing on, add the PostgreSQL
-            # Global Development Group APT archive to make the official
-            # backports available.
-            self.pg_config['install_sources'] = yaml.safe_dump([
-                'deb {} {}-pgdg main'.format(
-                    'http://apt.postgresql.org/pub/repos/apt/', SERIES)],
-                default_flow_style=False)
-            self.pg_config['install_keys'] = yaml.safe_dump(
-                ['ACCC4CF8'], default_flow_style=False)
+            self.pg_config['pgdg'] = True
 
         self.juju = self.useFixture(JujuFixture(
             reuse_machines=True,

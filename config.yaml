@@ -329,6 +329,14 @@ options:
             juju-postgresql-0
         If you're running multiple environments with the same services in them
         this allows you to differentiate between them.
+  pgdg:
+    description: |
+        Enable the PostgreSQL Global Development Group APT repository
+        (https://wiki.postgresql.org/wiki/Apt). This package source provides
+        official PostgreSQL packages for Ubuntu LTS releases beyond those
+        provided by the main Ubuntu archive.
+    type: boolean
+    default: false
   install_sources:
     description: |
         List of extra package sources, per charmhelpers standard. YAML format.

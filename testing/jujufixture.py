@@ -211,6 +211,8 @@ def run(detail_collector, cmd, input=''):
         raise
 
     (out, err) = proc.communicate(input)
+    detail_collector.addDetail(
+        'cmd', text_content('{}: {}'.format(proc.returncode, ' '.join(cmd))))
     if out:
         detail_collector.addDetail('stdout', text_content(out))
     if err:

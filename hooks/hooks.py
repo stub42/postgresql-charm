@@ -66,24 +66,27 @@ def pg_version():
         version = local_state['pg_version']
     else:
         log("map version from distro release ...")
-        distro_release = run("lsb_release -sc")
-        distro_release = distro_release.rstrip()
         version_map = {'precise': '9.1',
                        'trusty': '9.3'}
-        version = version_map.get(distro_release)
+        version = version_map.get(distro_release())
         if not version:
             log("No PG version map for distro_release={}, "
-                "you'll need to explicitly set it".format(distro_release),
+                "you'll need to explicitly set it".format(distro_release()),
                 CRITICAL)
             sys.exit(1)
         log("version={} from distro_release='{}'".format(
-            version, distro_release))
+            version, distro_release()))
         # save it for later
         local_state.setdefault('pg_version', version)
         local_state.save()
 
     assert version, "pg_version couldn't find a version to use"
     return version
+
+
+def distro_release():
+    """Return the distro release code name, eg. 'precise' or 'trusty'."""
+    return run("lsb_release -sc").rstrip()
 
 
 class State(dict):
@@ -1373,10 +1376,29 @@ def db_admin_relation_broken():
     snapshot_relations()
 
 
-def update_repos_and_packages(version):
+def update_repos_and_packages():
+    # Add the PGDG APT repository if it is enabled. Setting this boolean
+    # is simpler than requiring the magic URL and key be added to
+    # install_sources and install_keys. In addition, per Bug #1271148,
+    # install_keys is likely a security hole for this sort of remote
+    # archive. Instead, we keep a copy of the signing key in the charm
+    # and can add it securely.
+    pgdg_list = '/etc/apt/sources.list.d/pgdg.list'
+    pgdg_key = 'ACCC4CF8'
+    if hookenv.config('pgdg'):
+        if not os.path.exists(pgdg_list):
+            run("apt-key add lib/{}.asc".format(pgdg_key))
+            open(pgdg_list, 'w').write('deb {} {}-pgdg main'.format(
+                'http://apt.postgresql.org/pub/repos/apt/', distro_release()))
+    elif os.path.exists(pgdg_list):
+        if pgdg_key in run("apt-key list"):
+            run("apt-key del {}".format(pgdg_key))
+        os.unlink(pgdg_list)
+
     # Support the standard mechanism implemented by charm-helpers. Pulls
     # from the default 'install_sources' and 'install_keys' config
-    # options.
+    # options. Also updates the apt database, making any changes
+    # made for the pgdg configuration option take effect.
     fetch.configure_sources(True)
 
     version = pg_version()
@@ -1388,8 +1410,11 @@ def update_repos_and_packages(version):
                 "postgresql-%s" % version,
                 "postgresql-contrib-%s" % version,
                 "postgresql-plpython-%s" % version,
-                "postgresql-%s-debversion" % version,
                 "python-jinja2", "syslinux", "python-psycopg2"]
+    # PGDG currently doesn't have debversion for 9.3. Put this back when
+    # it does.
+    if not (hookenv.config('pgdg') and version == '9.3'):
+        "postgresql-%s-debversion" % version
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
     fetch.apt_install(packages, fatal=True)
