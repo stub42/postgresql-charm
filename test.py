@@ -33,12 +33,19 @@ class PostgreSQLCharmBaseTestCase(object):
 
     VERSION = '9.1'
 
+    # We don't destroy databases (and their data) when destroying a unit
+    # or service. We may end up with old PG databases still configured,
+    # from tests of previous PG versions run on the same machine.
+    # To work around this, we specify a unique port per PG version.
+    PORT = 5432
+
     def setUp(self):
         super(PostgreSQLCharmBaseTestCase, self).setUp()
 
         # Generate a basic config for all PostgreSQL charm deploys.
         # Tests may add or change options.
-        self.pg_config = {'version': self.VERSION}
+        self.pg_config = dict(version=self.VERSION, listen_port=self.PORT)
+
         # If we are not using the default version of PostgreSQL for
         # the Ubuntu release we are testing on, add the PostgreSQL
         # Global Development Group APT archive to make the official
@@ -290,7 +297,7 @@ class PostgreSQLCharmBaseTestCase(object):
         unit_ip = self.juju.status['services']['postgresql']['units'][
             unit]['public-address']
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect((unit_ip, 5432))
+        s.connect((unit_ip, self.PORT))
         my_ip = s.getsockname()[0]
         del s
 
@@ -389,18 +396,21 @@ class PG91Tests(
         PostgreSQLCharmBaseTestCase,
         testtools.TestCase, fixtures.TestWithFixtures):
     VERSION = '9.1'
+    PORT = 5431
 
 
 class PG92Tests(
         PostgreSQLCharmBaseTestCase,
         testtools.TestCase, fixtures.TestWithFixtures):
     VERSION = '9.2'
+    PORT = 5432
 
 
 class PG93Tests(
         PostgreSQLCharmBaseTestCase,
         testtools.TestCase, fixtures.TestWithFixtures):
     VERSION = '9.3'
+    PORT = 5433
 
 
 def unit_sorted(units):

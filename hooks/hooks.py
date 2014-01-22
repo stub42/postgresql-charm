@@ -365,16 +365,15 @@ def postgresql_reload_or_restart():
     return success
 
 
-def get_service_port(config_file):
+def get_service_port():
     '''Return the port PostgreSQL is listening on.'''
-    if not os.path.exists(config_file):
-        return None
-    postgresql_config = open(config_file, 'r').read()
-    port = re.search("port.*=(.*)", postgresql_config).group(1).strip()
-    try:
-        return int(port)
-    except (ValueError, TypeError):
-        return None
+    for line in run('pg_lsclusters').splitlines():
+        version, name, port = line.split()[:3]
+        if (version, name) == (pg_version(), hookenv.config('cluster_name')):
+            return int(port)
+
+    assert False, 'No port found for {!r} {!r}'.format(
+        pg_version(), hookenv.config['cluster_name'])
 
 
 def _get_system_ram():
@@ -703,12 +702,15 @@ def get_password(user):
 
 
 def db_cursor(autocommit=False, db='template1', user='postgres',
-              host=None, timeout=30):
+              host=None, port=None, timeout=30):
     import psycopg2
+    if port is None:
+        port = get_service_port()
     if host:
-        conn_str = "dbname={} host={} user={}".format(db, host, user)
+        conn_str = "dbname={} host={} port={} user={}".format(
+            db, host, port, user)
     else:
-        conn_str = "dbname={} user={}".format(db, user)
+        conn_str = "dbname={} port={} user={}".format(db, port, user)
     # There are often race conditions in opening database connections,
     # such as a reload having just happened to change pg_hba.conf
     # settings or a hot standby being restarted and needing to catch up
@@ -909,7 +911,7 @@ def config_changed(force_restart=False):
     postgresql_hba = os.path.join(postgresql_config_dir, "pg_hba.conf")
     postgresql_ident = os.path.join(postgresql_config_dir, "pg_ident.conf")
 
-    current_service_port = get_service_port(postgresql_config)
+    current_service_port = get_service_port()
     create_postgresql_config(postgresql_config)
     generate_postgresql_hba(postgresql_hba)
     create_postgresql_ident(postgresql_ident)
@@ -945,8 +947,14 @@ def install(run_pre=True):
         # installed, and rebuild it with the requested locale and encoding.
         version = pg_version()
         run("pg_dropcluster --stop {} main".format(version))
-        run("pg_createcluster --locale='{}' --encoding='{}' {} main".format(
-            config_data['locale'], config_data['encoding'], version))
+        run(
+            "pg_createcluster --locale='{}' --encoding='{}' --port='{}' "
+            "{} main".format(
+                config_data['locale'], config_data['encoding'],
+                config_data['listen_port'], version))
+        assert get_service_port() == config_data['listen_port'], (
+            'actual port {!r} != configured port {!r}'.format(
+                get_service_port(), config_data['listen_port']))
 
     postgresql_backups_dir = (
         config_data['backup_dir'].strip() or
@@ -973,7 +981,7 @@ def install(run_pre=True):
         '{}/pg_backup_job'.format(postgresql_scripts_dir),
         backup_job, perms=0755)
     install_postgresql_crontab(postgresql_crontab)
-    hookenv.open_port(5432)
+    hookenv.open_port(get_service_port())
 
     # Ensure at least minimal access granted for hooks to run.
     # Reload because we are using the default cluster setup and started
@@ -1377,6 +1385,8 @@ def db_admin_relation_broken():
 
 
 def update_repos_and_packages():
+    need_upgrade = False
+
     # Add the PGDG APT repository if it is enabled. Setting this boolean
     # is simpler than requiring the magic URL and key be added to
     # install_sources and install_keys. In addition, per Bug #1271148,
@@ -1385,21 +1395,24 @@ def update_repos_and_packages():
     # and can add it securely.
     pgdg_list = '/etc/apt/sources.list.d/pgdg.list'
     pgdg_key = 'ACCC4CF8'
-    if hookenv.config('pgdg'):
-        if not os.path.exists(pgdg_list):
-            run("apt-key add lib/{}.asc".format(pgdg_key))
-            open(pgdg_list, 'w').write('deb {} {}-pgdg main'.format(
-                'http://apt.postgresql.org/pub/repos/apt/', distro_release()))
-    elif os.path.exists(pgdg_list):
-        if pgdg_key in run("apt-key list"):
-            run("apt-key del {}".format(pgdg_key))
-        os.unlink(pgdg_list)
+    if hookenv.config('pgdg') and not os.path.exists(pgdg_list):
+        # We need to upgrade, as if we have Ubuntu main packages
+        # installed they may be incompatible with the PGDG ones.
+        # This is unlikely to ever happen outside of the test suite,
+        # and never if you don't reuse machines.
+        need_upgrade = True
+        run("apt-key add lib/{}.asc".format(pgdg_key))
+        open(pgdg_list, 'w').write('deb {} {}-pgdg main'.format(
+            'http://apt.postgresql.org/pub/repos/apt/', distro_release()))
 
     # Support the standard mechanism implemented by charm-helpers. Pulls
     # from the default 'install_sources' and 'install_keys' config
-    # options. Also updates the apt database, making any changes
-    # made for the pgdg configuration option take effect.
+    # options. This also does 'apt-get update', pulling in the PGDG data
+    # if we just configured it.
     fetch.configure_sources(True)
+
+    if need_upgrade:
+        run("apt-get -y upgrade")
 
     version = pg_version()
     # It might have been better for debversion and plpython to only get
@@ -1407,14 +1420,14 @@ def update_repos_and_packages():
     # but they predate this feature.
     packages = ["python-psutil",  # to obtain system RAM from python
                 "libc-bin",       # for getconf
-                "postgresql-%s" % version,
-                "postgresql-contrib-%s" % version,
-                "postgresql-plpython-%s" % version,
+                "postgresql-{}".format(version),
+                "postgresql-contrib-{}".format(version),
+                "postgresql-plpython-{}".format(version),
                 "python-jinja2", "syslinux", "python-psycopg2"]
     # PGDG currently doesn't have debversion for 9.3. Put this back when
     # it does.
     if not (hookenv.config('pgdg') and version == '9.3'):
-        "postgresql-%s-debversion" % version
+        "postgresql-{}-debversion".format(version)
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
     fetch.apt_install(packages, fatal=True)
@@ -1659,8 +1672,9 @@ def replication_relation_joined_changed():
                 master))
 
             master_ip = hookenv.relation_get('private-address', master)
+            master_port = hookenv.relation_get('port', master)
 
-            clone_database(master, master_ip)
+            clone_database(master, master_ip, master_port)
 
             local_state['state'] = 'hot standby'
             local_state['following'] = master
@@ -1857,9 +1871,10 @@ def restart_lock(unit, exclusive):
                 cur = db_cursor(autocommit=True)
             else:
                 host = hookenv.relation_get('private-address', unit)
+                port = hookenv.relation_get('port', unit)
                 cur = db_cursor(
-                    autocommit=True, db='postgres',
-                    user='juju_replication', host=host)
+                    autocommit=True, db='postgres', user='juju_replication',
+                    host=host, port=port)
             cur.execute(q)
             break
         except psycopg2.Error:
@@ -1877,7 +1892,7 @@ def restart_lock(unit, exclusive):
             pass
 
 
-def clone_database(master_unit, master_host):
+def clone_database(master_unit, master_host, master_port):
     with restart_lock(master_unit, False):
         postgresql_stop()
         log("Cloning master {}".format(master_unit))
@@ -1892,7 +1907,8 @@ def clone_database(master_unit, master_host):
             'sudo', '-E',  # -E needed to locate pgpass file.
             '-u', 'postgres', 'pg_basebackup', '-D', postgresql_cluster_dir,
             '--xlog', '--checkpoint=fast', '--no-password',
-            '-h', master_host, '-p', '5432', '--username=juju_replication']
+            '-h', master_host, '-p', master_port,
+            '--username=juju_replication']
         log(' '.join(cmd), DEBUG)
 
         if os.path.isdir(postgresql_cluster_dir):
@@ -1979,9 +1995,10 @@ def wal_location_to_bytes(wal_location):
     return int(logid, 16) * 16 * 1024 * 1024 * 255 + int(offset, 16)
 
 
-def wait_for_db(timeout=120, db='template1', user='postgres', host=None):
+def wait_for_db(
+    timeout=120, db='template1', user='postgres', host=None, port=None):
     '''Wait until the db is fully up.'''
-    db_cursor(db=db, user=user, host=host, timeout=timeout)
+    db_cursor(db=db, user=user, host=host, port=port, timeout=timeout)
 
 
 def unit_sorted(units):
