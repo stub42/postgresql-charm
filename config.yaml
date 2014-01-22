@@ -43,7 +43,7 @@ options:
         access details are updated, so disabling either doesn't mean PostgreSQL
         will never be reloaded.
   version:
-    default: "9.1"
+    default: ""
     type: string
     description: Version of PostgreSQL that we want to install
   cluster_name:
