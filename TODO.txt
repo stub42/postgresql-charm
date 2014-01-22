@@ -1,2 +1,0 @@
-Scheduled base backups and pruning
-    - Ensure backups only run on standalone or master
