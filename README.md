@@ -62,9 +62,12 @@ clients adjust::
 To setup a client using a PostgreSQL database, in this case a vanilla Django
 installation listening on port 8080::
 
-    juju deploy postgresql juju deploy python-django juju deploy gunicorn juju
-add-relation python-django postgresql:db juju add-relation python-django
-gunicorn juju expose python-django
+    juju deploy postgresql
+    juju deploy python-django
+    juju deploy gunicorn
+    juju add-relation python-django postgresql:db
+    juju add-relation python-django gunicorn
+    juju expose python-django
 
 
 ## Known Limitations and Issues
