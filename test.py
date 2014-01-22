@@ -19,6 +19,7 @@ import fixtures
 import psycopg2
 import testtools
 from testtools.content import text_content
+import yaml
 
 from testing.jujufixture import JujuFixture, run
 
@@ -28,10 +29,40 @@ TEST_CHARM = 'local:postgresql'
 PSQL_CHARM = 'local:postgresql-psql'
 
 
-class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
+PGDB_APT_CONFIG = {
+    'install_sources': '''\
+            - deb http://apt.postgresql.org/pub/repos/apt/ precise-pgdb main
+            ''',
+    'install_keys': '''\
+            - ACCC4CF8
+            '''}
+
+
+class PostgreSQLCharmBaseTestCase(object):
+
+    VERSION = '9.1'
 
     def setUp(self):
-        super(PostgreSQLCharmTestCase, self).setUp()
+        super(PostgreSQLCharmBaseTestCase, self).setUp()
+
+        # Generate a basic config for all PostgreSQL charm deploys.
+        # Tests may add or change options.
+        self.pg_config = {'version': self.VERSION}
+        if SERIES == 'precise' and self.VERSION == '9.1':
+            pass
+        elif SERIES == 'trusty' and self.VERSION == '9.3':
+            pass
+        else:
+            # If we are not using the default version of PostgreSQL for
+            # the Ubuntu release we are testing on, add the PostgreSQL
+            # Global Development Group APT archive to make the official
+            # backports available.
+            self.pg_config['install_sources'] = yaml.safe_dump([
+                'deb {} {}-pgdg main'.format(
+                    'http://apt.postgresql.org/pub/repos/apt/', SERIES)],
+                default_flow_style=False)
+            self.pg_config['install_keys'] = yaml.safe_dump(
+                ['ACCC4CF8'], default_flow_style=False)
 
         self.juju = self.useFixture(JujuFixture(
             reuse_machines=True,
@@ -99,7 +130,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
     def test_basic(self):
         '''Connect to a a single unit service via the db relationship.'''
-        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
@@ -109,7 +140,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
     def test_basic_admin(self):
         '''Connect to a single unit service via the db-admin relationship.'''
-        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
         self.juju.wait_until_ready()
@@ -125,7 +156,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
     def test_failover(self):
         """Set up a multi-unit service and perform failovers."""
-        self.juju.deploy(TEST_CHARM, 'postgresql', num_units=3)
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=3, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
@@ -213,7 +245,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
     def test_failover_election(self):
         """Ensure master elected in a failover is the best choice"""
-        self.juju.deploy(TEST_CHARM, 'postgresql', num_units=3)
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=3, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
         self.juju.wait_until_ready()
@@ -261,7 +294,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.assertIs(False, self.is_master(standby_unit_1, 'postgres'))
 
     def test_admin_addresses(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
         self.juju.wait_until_ready()
@@ -297,7 +330,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.assertEquals(1, cur.fetchone()[0])
 
     def test_explicit_database(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['set', 'psql', 'database=explicit'])
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
@@ -308,7 +341,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
 
     def test_roles_granted(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['set', 'psql', 'roles=role_a'])
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
@@ -330,7 +363,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.assertEqual(result, [['t', 't']])
 
     def test_roles_revoked(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['set', 'psql', 'roles=role_a,role_b'])
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
@@ -364,6 +397,24 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
                 pg_has_role(current_user, 'role_c', 'MEMBER')
             ''')
         self.assertEqual(result, [['f', 'f', 'f']])
+
+
+class PG91Tests(
+        PostgreSQLCharmBaseTestCase,
+        testtools.TestCase, fixtures.TestWithFixtures):
+    VERSION = '9.1'
+
+
+class PG92Tests(
+        PostgreSQLCharmBaseTestCase,
+        testtools.TestCase, fixtures.TestWithFixtures):
+    VERSION = '9.2'
+
+
+class PG93Tests(
+        PostgreSQLCharmBaseTestCase,
+        testtools.TestCase, fixtures.TestWithFixtures):
+    VERSION = '9.3'
 
 
 def unit_sorted(units):

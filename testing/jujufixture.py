@@ -1,9 +1,11 @@
 import json
+import os.path
 import subprocess
 import time
 
 import fixtures
 from testtools.content import text_content
+import yaml
 
 
 __all__ = ['JujuFixture', 'run']
@@ -42,7 +44,7 @@ class JujuFixture(fixtures.Fixture):
             return json.loads(out)
         return None
 
-    def deploy(self, charm, name=None, num_units=1):
+    def deploy(self, charm, name=None, num_units=1, config=None):
         # The first time we deploy a local: charm in the test run, it
         # needs to deploy with --update to ensure we are testing the
         # desired revision of the charm. Subsequent deploys we do not
@@ -53,6 +55,14 @@ class JujuFixture(fixtures.Fixture):
         else:
             cmd = ['deploy', '-u']
             self._deployed_charms.add(charm)
+
+        if config:
+            config_path = os.path.join(
+                self.useFixture(fixtures.TempDir()).path, 'config.yaml')
+            cmd.append('--config={}'.format(config_path))
+            config = yaml.safe_dump({name: config}, default_flow_style=False)
+            open(config_path, 'w').write(config)
+            self.addDetail('pgconfig', text_content(config))
 
         cmd.append(charm)
 
