@@ -1,4 +1,5 @@
 import mocker
+import os.path
 import hooks
 
 
@@ -177,6 +178,8 @@ class TestHooks(mocker.MockerTestCase):
         hooks.hookenv.config = lambda: hooks.hookenv._config
         #hooks.hookenv.localunit = lambda: "localhost"
         hooks.os.environ["JUJU_UNIT_NAME"] = "landscape/1"
+        hooks.os.environ["CHARM_DIR"] = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), os.pardir))
         hooks.postgresql_sysctl = self.makeFile()
         hooks._get_system_ram = lambda: 1024   # MB
         hooks._get_page_size = lambda: 1024 * 1024  # bytes
@@ -220,7 +223,7 @@ class TestHooksService(TestHooks):
         hooks.create_postgresql_config(config_outfile)
         self.assertFileContains(
             config_outfile,
-            ["wal_buffers = -1", "wal_level = minimal", "max_wal_senders = 0",
+            ["wal_level = minimal", "max_wal_senders = 0",
              "wal_keep_segments = 0"])
 
     def test_create_postgresql_config_wal_with_replication(self):
@@ -244,7 +247,7 @@ class TestHooksService(TestHooks):
         hooks.create_postgresql_config(config_outfile)
         self.assertFileContains(
             config_outfile,
-            ["hot_standby = on", "wal_buffers = -1", "wal_level = hot_standby",
+            ["hot_standby = True", "wal_level = hot_standby",
              "max_wal_senders = 2", "wal_keep_segments = 5000"])
 
     def test_create_postgresql_config_wal_with_replication_max_override(self):
@@ -273,7 +276,7 @@ class TestHooksService(TestHooks):
         hooks.create_postgresql_config(config_outfile)
         self.assertFileContains(
             config_outfile,
-            ["hot_standby = on", "wal_buffers = -1", "wal_level = hot_standby",
+            ["hot_standby = True", "wal_level = hot_standby",
              "max_wal_senders = 3", "wal_keep_segments = 1000"])
 
     def test_create_postgresql_config_performance_tune_auto_large_ram(self):
