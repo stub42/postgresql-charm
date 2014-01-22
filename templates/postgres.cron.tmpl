@@ -1,2 +1,14 @@
 {{backup_schedule}} postgres {{scripts_dir}}/pg_backup_job {{backup_days}}
-
+{% if swiftwal_container -%}
+{% if swiftwal_backup_schedule -%}
+{% if swiftwal_log_shipping -%}
+{{swiftwal_backup_schedule}} postgres \
+  swiftwal --config={{swiftwal_config}} backup && \
+  swiftwal --config={{swiftwal_config}} prune -n {{swiftwal_backup_retention}}
+{% else -%}
+{{swiftwal_backup_schedule}} postgres \
+  swiftwal --config={{swiftwal_config}} backup --xlog && \
+  swiftwal --config={{swiftwal_config}} prune -n {{swiftwal_backup_retention}}
+{% endif -%}
+{% endif -%}
+{% endif -%}
