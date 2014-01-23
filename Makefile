@@ -9,7 +9,9 @@ unit_test:
 	@echo "Unit tests of hooks"
 	cd hooks && trial test_hooks.py
 
-integration_test: integration_test_91 integration_test_92 integration_test_93
+integration_test:
+	@echo "PostgreSQL integration tests, all versions"
+	trial test
 
 integration_test_91:
 	@echo "PostgreSQL 9.1 integration tests"
