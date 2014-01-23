@@ -290,7 +290,7 @@ class PostgreSQLCharmBaseTestCase(object):
         # a different port for each PostgreSQL version we might be
         # testing, because clusters from previous tests of different
         # versions may be hanging around.
-        port = 7400 + int(self.VERSION.replace('.', ''))
+        port = 7400 + int((self.VERSION or '66').replace('.', ''))
         self.pg_config['listen_port'] = port
 
         self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
