@@ -753,6 +753,39 @@ def run_select_as_postgres(sql, *parameters):
     return (cur.rowcount, results)
 
 
+def validate_config():
+    """
+    Sanity check charm configuration, aborting the script if
+    we have bogus config values or config changes the charm does not yet
+    (or cannot) support.
+    """
+    valid = True
+    config_data = hookenv.config()
+    version = config_data['version']
+    if version not in ('', '9.1', '9.2', '9.3'):
+        valid = False
+        log("Invalid or unsupported version {!r} requested".format(
+            version), CRITICAL)
+
+    if version and version != pg_version():
+        valid = False
+        log("Cannot change PG version from {!r} to {!r}".format(
+            version, pg_version()), CRITICAL)
+
+    if config_data['cluster_name'] != 'main':
+        valid = False
+        log("Cluster names other than 'main' do not work per LP:1271835",
+            CRITICAL)
+
+    if config_data['listen_ip'] != '*':
+        valid = False
+        log("listen_ip values other than '*' do not work per LP:1271837",
+            CRITICAL)
+
+    if not valid:
+        sys.exit(99)
+
+
 #------------------------------------------------------------------------------
 # Core logic for permanent storage changes:
 # NOTE the only 2 "True" return points:
@@ -872,6 +905,7 @@ def token_sql_safe(value):
 
 @hooks.hook()
 def config_changed(force_restart=False):
+    validate_config()
     config_data = hookenv.config()
     update_repos_and_packages()
 
@@ -932,6 +966,8 @@ def install(run_pre=True):
         for f in glob.glob('exec.d/*/charm-pre-install'):
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 subprocess.check_call(['sh', '-c', f])
+
+    validate_config()
 
     config_data = hookenv.config()
     update_repos_and_packages()

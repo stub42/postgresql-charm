@@ -120,7 +120,9 @@ options:
   autovacuum:
     default: True
     type: boolean
-    description: Autovacuum should almost always be running.
+    description: |
+        Autovacuum should almost always be running. If you want to turn this
+        off, you are probably following out of date documentation.
   log_autovacuum_min_duration:
     default: -1
     type: int
