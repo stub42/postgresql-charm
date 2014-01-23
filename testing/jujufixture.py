@@ -103,10 +103,10 @@ class JujuFixture(fixtures.Fixture):
         self.status = self.get_result(['status'])
 
         self._free_machines = set(
-            int(k) for k, m in self.status['machines'].items() if
-                k != '0'
-                and m.get('life', None) not in ('dead', 'dying')
-                and m.get('agent-state', 'pending') in ('started', 'ready'))
+            int(k) for k, m in self.status['machines'].items()
+            if k != '0'
+            and m.get('life', None) not in ('dead', 'dying')
+            and m.get('agent-state', 'pending') in ('started', 'ready'))
         for service in self.status.get('services', {}).values():
             for unit in service.get('units', []):
                 if 'machine' in unit:
