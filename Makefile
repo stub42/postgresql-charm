@@ -3,8 +3,6 @@ TEST_TIMEOUT := 900
 
 test: lint unit_test integration_test
 
-auto_test: test
-
 unit_test:
 	@echo "Unit tests of hooks"
 	cd hooks && trial test_hooks.py
