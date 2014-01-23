@@ -1436,7 +1436,9 @@ def update_repos_and_packages():
     # install_keys is likely a security hole for this sort of remote
     # archive. Instead, we keep a copy of the signing key in the charm
     # and can add it securely.
-    pgdg_list = '/etc/apt/sources.list.d/pgdg.list'
+    pgdg_list = '/etc/apt/sources.list.d/pgdg_{}.list'.format(
+        sanitize(hookenv.local_unit()))
+
     pgdg_key = 'ACCC4CF8'
     if hookenv.config('pgdg') and not os.path.exists(pgdg_list):
         # We need to upgrade, as if we have Ubuntu main packages
