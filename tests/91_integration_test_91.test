@@ -1,0 +1,3 @@
+#!/bin/bash
+
+make --quiet -C $(dirname $0)/.. integration_test_91
