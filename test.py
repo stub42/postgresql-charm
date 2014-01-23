@@ -32,28 +32,24 @@ PSQL_CHARM = 'local:postgresql-psql'
 class PostgreSQLCharmBaseTestCase(object):
 
     # Override these in subclasses to run these tests multiple times
-    # for different PostgreSQL versions. At least one of the subclasses
-    # leaves the VERSION as None to test automatic version selection.
+    # for different PostgreSQL versions.
+
+    # PostgreSQL version for tests. One of the subclasses leaves the
+    # VERSION as None to test automatic version selection.
     VERSION = None
-    EXPLICIT_PORT = None
+
+    # Use the PGDG Apt archive or not. One of the subclasses sets this
+    # to False to test the Ubuntu main packages. The rest set this to
+    # True to pull packages from the PGDG (only one PostgreSQL version
+    # exists in main).
+    PGDG = None
 
     def setUp(self):
         super(PostgreSQLCharmBaseTestCase, self).setUp()
 
         # Generate a basic config for all PostgreSQL charm deploys.
         # Tests may add or change options.
-        self.pg_config = dict(version=self.VERSION)
-
-        # If we are not using the default version of PostgreSQL for
-        # the Ubuntu release we are testing on, add the PostgreSQL
-        # Global Development Group APT archive to make the official
-        # backports available.
-        if SERIES == 'precise' and self.VERSION == '9.1':
-            self.pg_config['pgdg'] = False
-        elif SERIES == 'trusty' and self.VERSION == '9.3':
-            self.pg_config['pgdg'] = False
-        else:
-            self.pg_config['pgdg'] = True
+        self.pg_config = dict(version=self.VERSION, pgdg=self.PGDG)
 
         self.juju = self.useFixture(JujuFixture(
             reuse_machines=True,
@@ -403,6 +399,7 @@ class PG91Tests(
         testtools.TestCase, fixtures.TestWithFixtures):
     # Test automatic version selection under precise.
     VERSION = None if SERIES == 'precise' else '9.1'
+    PGDG = False if SERIES == 'precise' else True
 
 
 class PG92Tests(
@@ -416,6 +413,7 @@ class PG93Tests(
         testtools.TestCase, fixtures.TestWithFixtures):
     # Test automatic version selection under trusty.
     VERSION = None if SERIES == 'trusty' else '9.3'
+    PGDB = False if SERIES == 'trusty' else True
 
 
 def unit_sorted(units):
