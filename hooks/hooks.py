@@ -60,10 +60,10 @@ def pg_version():
     package candidate, saving it in local_state for later.
     '''
     config_data = hookenv.config()
-    if config_data['version']:
-        version = config_data['version']
-    elif 'pg_version' in local_state:
+    if 'pg_version' in local_state:
         version = local_state['pg_version']
+    elif 'version' in config_data:
+        version = config_data['version']
     else:
         log("map version from distro release ...")
         version_map = {'precise': '9.1',
@@ -390,6 +390,8 @@ def _get_page_size():
 def create_postgresql_config(config_file):
     '''Create the postgresql.conf file'''
     config_data = hookenv.config()
+    if not config_data.get('listen_port', None):
+        config_data['listen_port'] = get_service_port()
     if config_data["performance_tuning"] == "auto":
         # Taken from:
         # http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
@@ -441,7 +443,7 @@ def create_postgresql_config(config_file):
     # Return it as pg_config
     charm_dir = hookenv.charm_dir()
     template_file = "{}/templates/postgresql.conf.tmpl".format(charm_dir)
-    if not config_data['version']:
+    if not config_data.get('version', None):
         config_data['version'] = pg_version()
     pg_config = Template(
         open(template_file).read()).render(config_data)
@@ -657,17 +659,16 @@ def load_postgresql_config(config_file):
         return(None)
 
 
-#------------------------------------------------------------------------------
-# update_service_ports:  Convenience function that evaluate the old and new
-#                        service ports to decide which ports need to be
-#                        opened and which to close
-#------------------------------------------------------------------------------
-def update_service_port(old_service_port=None, new_service_port=None):
-    if old_service_port is None or new_service_port is None:
-        return(None)
-    if new_service_port != old_service_port:
-        hookenv.close_port(old_service_port)
-        hookenv.open_port(new_service_port)
+def update_service_port():
+    old_port = local_state.get('listen_port', None)
+    new_port = get_service_port()
+    if old_port != new_port:
+        if new_port:
+            hookenv.open_port(new_port)
+        if old_port:
+            hookenv.close_port(old_port)
+        local_state['listen_port'] = new_port
+        local_state.save()
 
 
 def create_ssl_cert(cluster_dir):
@@ -761,16 +762,18 @@ def validate_config():
     """
     valid = True
     config_data = hookenv.config()
-    version = config_data['version']
-    if version not in ('', '9.1', '9.2', '9.3'):
-        valid = False
-        log("Invalid or unsupported version {!r} requested".format(
-            version), CRITICAL)
 
-    if version and version != pg_version():
-        valid = False
-        log("Cannot change PG version from {!r} to {!r}".format(
-            version, pg_version()), CRITICAL)
+    version = config_data.get('version', None)
+    if version:
+        if version not in ('9.1', '9.2', '9.3'):
+            valid = False
+            log("Invalid or unsupported version {!r} requested".format(
+                version), CRITICAL)
+
+        if version != pg_version():
+            valid = False
+            log("Cannot change PG version from {!r} to {!r}".format(
+                version, pg_version()), CRITICAL)
 
     if config_data['cluster_name'] != 'main':
         valid = False
@@ -945,15 +948,12 @@ def config_changed(force_restart=False):
     postgresql_hba = os.path.join(postgresql_config_dir, "pg_hba.conf")
     postgresql_ident = os.path.join(postgresql_config_dir, "pg_ident.conf")
 
-    current_service_port = get_service_port()
     create_postgresql_config(postgresql_config)
     generate_postgresql_hba(postgresql_hba)
     create_postgresql_ident(postgresql_ident)
     create_ssl_cert(os.path.join(
         postgresql_data_dir, pg_version(), config_data['cluster_name']))
-
-    updated_service_port = config_data["listen_port"]
-    update_service_port(current_service_port, updated_service_port)
+    update_service_port()
     update_nrpe_checks()
     if force_restart:
         return postgresql_restart()
@@ -983,13 +983,20 @@ def install(run_pre=True):
         # installed, and rebuild it with the requested locale and encoding.
         version = pg_version()
         run("pg_dropcluster --stop {} main".format(version))
+        listen_port = config_data.get('listen_port', None)
+        if listen_port:
+            port_opt = "--port='{}'".format(config_data['listen_port'])
+        else:
+            port_opt = ''
         run(
-            "pg_createcluster --locale='{}' --encoding='{}' --port='{}' "
+            "pg_createcluster --locale='{}' --encoding='{}' {} "
             "{} main".format(
                 config_data['locale'], config_data['encoding'],
-                config_data['listen_port'], version))
-        assert get_service_port() == config_data['listen_port'], (
-            'actual port {!r} != configured port {!r}'.format(
+                port_opt, version))
+        assert (
+            not port_opt
+            or get_service_port() == config_data['listen_port']), (
+            'allocated port {!r} != {!r}'.format(
                 get_service_port(), config_data['listen_port']))
 
     postgresql_backups_dir = (
@@ -1307,7 +1314,7 @@ def db_relation_joined_changed():
     schema_password = create_user(schema_user)
     ensure_database(user, schema_user, database)
     host = hookenv.unit_private_ip()
-    port = hookenv.config('listen_port')
+    port = get_service_port()
     state = local_state['state']  # master, hot standby, standalone
 
     # Publish connection details.
@@ -1346,7 +1353,7 @@ def db_admin_relation_joined_changed():
 
     password = create_user(user, admin=True)
     host = hookenv.unit_private_ip()
-    port = hookenv.config('listen_port')
+    port = get_service_port()
     state = local_state['state']  # master, hot standby, standalone
 
     # Publish connection details.
@@ -1785,7 +1792,7 @@ def publish_hot_standby_credentials():
 
         # Override unit specific connection details
         connection_settings['host'] = hookenv.unit_private_ip()
-        connection_settings['port'] = hookenv.config('listen_port')
+        connection_settings['port'] = get_service_port()
         connection_settings['state'] = local_state['state']
 
         # Block until users and database has replicated, so we know the
@@ -2093,7 +2100,7 @@ def update_nrpe_checks():
         nrpe_check_config.write("# check pgsql\n")
         nrpe_check_config.write(
             "command[check_pgsql]=/usr/lib/nagios/plugins/check_pgsql -P {}"
-            .format(config_data['listen_port']))
+            .format(get_service_port()))
     # pgsql backups
     nrpe_check_file = '/etc/nagios/nrpe.d/check_pgsql_backups.cfg'
     backup_log = "{}/backups.log".format(postgresql_logs_dir)

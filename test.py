@@ -31,20 +31,18 @@ PSQL_CHARM = 'local:postgresql-psql'
 
 class PostgreSQLCharmBaseTestCase(object):
 
-    VERSION = '9.1'
-
-    # We don't destroy databases (and their data) when destroying a unit
-    # or service. We may end up with old PG databases still configured,
-    # from tests of previous PG versions run on the same machine.
-    # To work around this, we specify a unique port per PG version.
-    PORT = 5432
+    # Override these in subclasses to run these tests multiple times
+    # for different PostgreSQL versions. At least one of the subclasses
+    # leaves the VERSION as None to test automatic version selection.
+    VERSION = None
+    EXPLICIT_PORT = None
 
     def setUp(self):
         super(PostgreSQLCharmBaseTestCase, self).setUp()
 
         # Generate a basic config for all PostgreSQL charm deploys.
         # Tests may add or change options.
-        self.pg_config = dict(version=self.VERSION, listen_port=self.PORT)
+        self.pg_config = dict(version=self.VERSION)
 
         # If we are not using the default version of PostgreSQL for
         # the Ubuntu release we are testing on, add the PostgreSQL
@@ -287,6 +285,14 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertIs(False, self.is_master(standby_unit_1, 'postgres'))
 
     def test_admin_addresses(self):
+
+        # This test also tests explicit port assignment. We need
+        # a different port for each PostgreSQL version we might be
+        # testing, because clusters from previous tests of different
+        # versions may be hanging around.
+        port = 7400 + int(self.VERSION.replace('.', ''))
+        self.pg_config['listen_port'] = port
+
         self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
@@ -297,7 +303,7 @@ class PostgreSQLCharmBaseTestCase(object):
         unit_ip = self.juju.status['services']['postgresql']['units'][
             unit]['public-address']
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect((unit_ip, self.PORT))
+        s.connect((unit_ip, port))
         my_ip = s.getsockname()[0]
         del s
 
@@ -308,7 +314,7 @@ class PostgreSQLCharmBaseTestCase(object):
         # Direct connection string to the unit's database.
         conn_str = (
             'dbname=postgres user=postgres password=foo '
-            'host={} port={}'.format(unit_ip, self.PORT))
+            'host={} port={}'.format(unit_ip, port))
 
         # Direct database connections should fail at the moment.
         self.assertRaises(
@@ -332,7 +338,6 @@ class PostgreSQLCharmBaseTestCase(object):
 
         result = self.sql('SELECT current_database()')
         self.assertEqual(result, [['explicit']])
-
 
     def test_roles_granted(self):
         self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
@@ -396,22 +401,21 @@ class PostgreSQLCharmBaseTestCase(object):
 class PG91Tests(
         PostgreSQLCharmBaseTestCase,
         testtools.TestCase, fixtures.TestWithFixtures):
-    VERSION = '9.1'
-    PORT = 5431
+    # Test automatic version selection under precise.
+    VERSION = None if SERIES == 'precise' else '9.1'
 
 
 class PG92Tests(
         PostgreSQLCharmBaseTestCase,
         testtools.TestCase, fixtures.TestWithFixtures):
     VERSION = '9.2'
-    PORT = 5432
 
 
 class PG93Tests(
         PostgreSQLCharmBaseTestCase,
         testtools.TestCase, fixtures.TestWithFixtures):
-    VERSION = '9.3'
-    PORT = 5433
+    # Test automatic version selection under trusty.
+    VERSION = None if SERIES == 'trusty' else '9.3'
 
 
 def unit_sorted(units):

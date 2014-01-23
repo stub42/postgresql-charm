@@ -43,9 +43,12 @@ options:
         access details are updated, so disabling either doesn't mean PostgreSQL
         will never be reloaded.
   version:
-    default: ""
+    default: null
     type: string
-    description: Version of PostgreSQL that we want to install
+    description: |
+        Version of PostgreSQL that we want to install. Supported versions
+        are "9.1", "9.2", "9.3". The default version for the deployed Ubuntu
+        release is used when the version is not specified.
   cluster_name:
     default: "main"
     type: string
@@ -55,9 +58,9 @@ options:
     type: string
     description: IP to listen on
   listen_port:
-    default: 5432
+    default: null
     type: int
-    description: Port to listen on
+    description: Port to listen on. Default is automatically assigned.
   max_connections:
     default: 100
     type: int

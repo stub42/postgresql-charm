@@ -114,7 +114,7 @@ class JujuFixture(fixtures.Fixture):
 
         return self.status
 
-    def wait_until_ready(self, extra=60):
+    def wait_until_ready(self, extra=20):
         ready = False
         while not ready:
             self.refresh_status()
