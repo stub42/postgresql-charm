@@ -6,8 +6,9 @@ unit_test:
 	cd hooks && trial test_hooks.py
 
 integration_test:
-	echo "Integration tests using Juju deployed units"
-	TEST_TIMEOUT=900 ./test.py -v
+	@echo "Integration tests using Juju deployed units"
+	TEST_TIMEOUT=900 trial test.py
 
 lint:
-	@flake8 --exclude hooks/charmhelpers hooks # requires python-flakes8
+	@echo "Lint check (flake8)"
+	@flake8 -v --exclude hooks/charmhelpers,hooks/_trial_temp hooks
