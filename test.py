@@ -406,6 +406,7 @@ class PG92Tests(
         PostgreSQLCharmBaseTestCase,
         testtools.TestCase, fixtures.TestWithFixtures):
     VERSION = '9.2'
+    PGDG = True
 
 
 class PG93Tests(
