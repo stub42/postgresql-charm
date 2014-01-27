@@ -19,14 +19,13 @@ import fixtures
 import psycopg2
 import testtools
 from testtools.content import text_content
-import yaml
 
 from testing.jujufixture import JujuFixture, run
 
 
 SERIES = 'precise'
 TEST_CHARM = 'local:postgresql'
-PSQL_CHARM = 'local:postgresql-psql'
+PSQL_CHARM = 'cs:postgresql-psql'
 
 
 class PostgreSQLCharmBaseTestCase(object):
@@ -123,6 +122,19 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.wait_until_ready()
 
         result = self.sql('SELECT TRUE')
+        self.assertEqual(result, [['t']])
+
+    def test_basic_replication(self):
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
+        self.juju.wait_until_ready()
+
+        result = self.sql(
+            'CREATE TABLE Foo AS SELECT TRUE', postgres_unit='master')
+
+        result = self.sql('SELECT * FROM Foo', postgres_unit='hot standby')
         self.assertEqual(result, [['t']])
 
     def test_basic_admin(self):
@@ -336,9 +348,11 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertEqual(result, [['explicit']])
 
     def test_roles_granted(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
-        self.juju.deploy(PSQL_CHARM, 'psql')
-        self.juju.do(['set', 'psql', 'roles=role_a'])
+        # We use two units to confirm that there is no attempts to
+        # grant roles on the hot standby.
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
+        self.juju.deploy(PSQL_CHARM, 'psql', config={'roles': 'role_a'})
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
 
@@ -358,9 +372,11 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertEqual(result, [['t', 't']])
 
     def test_roles_revoked(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
-        self.juju.deploy(PSQL_CHARM, 'psql')
-        self.juju.do(['set', 'psql', 'roles=role_a,role_b'])
+        # We use two units to confirm that there is no attempts to
+        # grant roles on the hot standby.
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
+        self.juju.deploy(PSQL_CHARM, 'psql', config={'roles': 'role_a,role_b'})
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
 

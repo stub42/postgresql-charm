@@ -27,4 +27,4 @@ lint:
 	@echo "Lint check (flake8)"
 	@flake8 -v \
 	    --exclude hooks/charmhelpers,hooks/_trial_temp \
-	    hooks testing tests
+	    hooks testing tests test.py

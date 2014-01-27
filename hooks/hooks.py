@@ -131,6 +131,7 @@ class State(dict):
         replication_state = dict(client_state)
 
         add(replication_state, 'replication_password')
+        add(replication_state, 'port')
         add(replication_state, 'wal_received_offset')
         add(replication_state, 'following')
         add(replication_state, 'client_relations')
@@ -619,7 +620,7 @@ def install_postgresql_crontab(output_file):
     host.write_file(output_file, crontab_template, perms=0600)
 
 
-def create_recovery_conf(master_host, restart_on_change=False):
+def create_recovery_conf(master_host, master_port, restart_on_change=False):
     version = pg_version()
     cluster_name = hookenv.config('cluster_name')
     postgresql_cluster_dir = os.path.join(
@@ -635,7 +636,9 @@ def create_recovery_conf(master_host, restart_on_change=False):
     template_file = "{}/templates/recovery.conf.tmpl".format(charm_dir)
     recovery_conf = Template(open(template_file).read()).render({
         'host': master_host,
-        'password': local_state['replication_password']})
+        'port': master_port,
+        'password': local_state['replication_password'],
+        'streaming_replication': hookenv.config('streaming_replication')})
     log(recovery_conf, DEBUG)
     host.write_file(
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
@@ -977,7 +980,6 @@ def install(run_pre=True):
         # any non-idempotent setup. We should probably fix this; it
         # seems rather fragile.
         local_state.setdefault('state', 'standalone')
-        local_state.publish()
 
         # Drop the cluster created when the postgresql package was
         # installed, and rebuild it with the requested locale and encoding.
@@ -998,6 +1000,8 @@ def install(run_pre=True):
             or get_service_port() == config_data['listen_port']), (
             'allocated port {!r} != {!r}'.format(
                 get_service_port(), config_data['listen_port']))
+        local_state['port'] = get_service_port()
+        local_state.publish()
 
     postgresql_backups_dir = (
         config_data['backup_dir'].strip() or
@@ -1450,11 +1454,21 @@ def update_repos_and_packages():
         open(pgdg_list, 'w').write('deb {} {}-pgdg main'.format(
             'http://apt.postgresql.org/pub/repos/apt/', distro_release()))
 
-    # Support the standard mechanism implemented by charm-helpers. Pulls
-    # from the default 'install_sources' and 'install_keys' config
-    # options. This also does 'apt-get update', pulling in the PGDG data
-    # if we just configured it.
-    fetch.configure_sources(True)
+    # Try to optimize our calls to fetch.configure_sources(), as it
+    # cannot do this itself due to lack of state.
+    if (need_upgrade
+        or local_state.get('install_sources', None)
+            != hookenv.config('install_sources')
+        or local_state.get('install_keys', None)
+            != hookenv.config('install_keys')):
+        # Support the standard mechanism implemented by charm-helpers. Pulls
+        # from the default 'install_sources' and 'install_keys' config
+        # options. This also does 'apt-get update', pulling in the PGDG data
+        # if we just configured it.
+        fetch.configure_sources(True)
+        local_state['install_sources'] = hookenv.config('install_sources')
+        local_state['install_keys'] = hookenv.config('install_keys')
+        local_state.save()
 
     if need_upgrade:
         run("apt-get -y upgrade")
@@ -1554,7 +1568,8 @@ def follow_database(master):
     '''Connect the database as a streaming replica of the master.'''
     master_relation = hookenv.relation_get(unit=master)
     create_recovery_conf(
-        master_relation['private-address'], restart_on_change=True)
+        master_relation['private-address'],
+        master_relation['port'], restart_on_change=True)
 
 
 def elected_master():
@@ -1700,6 +1715,7 @@ def replication_relation_joined_changed():
             local_state['replication_password'] = replication_password
             local_state['client_relations'] = ' '.join(
                 hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
+            local_state.publish()
 
         else:
             log("I am master and remain master")
@@ -1718,6 +1734,7 @@ def replication_relation_joined_changed():
 
             master_ip = hookenv.relation_get('private-address', master)
             master_port = hookenv.relation_get('port', master)
+            assert master_port is not None, 'No master port set'
 
             clone_database(master, master_ip, master_port)
 
@@ -1968,7 +1985,7 @@ def clone_database(master_unit, master_host, master_port):
             log(output, DEBUG)
             # Debian by default expects SSL certificates in the datadir.
             create_ssl_cert(postgresql_cluster_dir)
-            create_recovery_conf(master_host)
+            create_recovery_conf(master_host, master_port)
         except subprocess.CalledProcessError as x:
             # We failed, and this cluster is broken. Rebuild a
             # working cluster so start/stop etc. works and we
