@@ -86,7 +86,7 @@ def pg_version():
 
 def distro_release():
     """Return the distro release code name, eg. 'precise' or 'trusty'."""
-    return run("lsb_release -sc").rstrip()
+    return host.lsb_release()['DISTRIB_CODENAME']
 
 
 class State(dict):
