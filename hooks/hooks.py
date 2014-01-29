@@ -1432,25 +1432,6 @@ def pgpass():
             os.environ['PGPASSFILE'] = org_pgpassfile
 
 
-def drop_database(dbname, warn=True):
-    import psycopg2
-    timeout = 120
-    now = time.time()
-    while True:
-        try:
-            db_cursor(autocommit=True).execute(
-                'DROP DATABASE IF EXISTS "{}"'.format(dbname))
-        except psycopg2.Error:
-            if time.time() > now + timeout:
-                if warn:
-                    log("Unable to drop database {}".format(dbname), WARNING)
-                else:
-                    raise
-            time.sleep(0.5)
-        else:
-            break
-
-
 def authorized_by(unit):
     '''Return True if the peer has authorized our database connections.'''
     relation = hookenv.relation_get(unit=unit)
