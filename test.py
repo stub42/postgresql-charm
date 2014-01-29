@@ -142,6 +142,7 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
+        self.juju.do(['expose', 'postgresql'])
         self.juju.wait_until_ready()
 
         result = self.sql('SELECT TRUE', dbname='postgres')
