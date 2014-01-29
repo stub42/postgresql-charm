@@ -68,14 +68,14 @@ def pg_version():
         log("map version from distro release ...")
         version_map = {'precise': '9.1',
                        'trusty': '9.3'}
-        version = version_map.get(distro_release())
+        version = version_map.get(distro_codename())
         if not version:
-            log("No PG version map for distro_release={}, "
-                "you'll need to explicitly set it".format(distro_release()),
+            log("No PG version map for distro_codename={}, "
+                "you'll need to explicitly set it".format(distro_codename()),
                 CRITICAL)
             sys.exit(1)
-        log("version={} from distro_release='{}'".format(
-            version, distro_release()))
+        log("version={} from distro_codename='{}'".format(
+            version, distro_codename()))
         # save it for later
         local_state.setdefault('pg_version', version)
         local_state.save()
@@ -84,7 +84,7 @@ def pg_version():
     return version
 
 
-def distro_release():
+def distro_codename():
     """Return the distro release code name, eg. 'precise' or 'trusty'."""
     return host.lsb_release()['DISTRIB_CODENAME']
 
@@ -1452,7 +1452,7 @@ def update_repos_and_packages():
         need_upgrade = True
         run("apt-key add lib/{}.asc".format(pgdg_key))
         open(pgdg_list, 'w').write('deb {} {}-pgdg main'.format(
-            'http://apt.postgresql.org/pub/repos/apt/', distro_release()))
+            'http://apt.postgresql.org/pub/repos/apt/', distro_codename()))
 
     # Try to optimize our calls to fetch.configure_sources(), as it
     # cannot do this itself due to lack of state.
