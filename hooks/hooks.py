@@ -1343,11 +1343,16 @@ def db_relation_broken():
         user = unit_relation_data.get('user', None)
         database = unit_relation_data['database']
 
-        sql = "REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s"
-        run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
-                            AsIs(quote_identifier(user)))
-        run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
-                            AsIs(quote_identifier(user + "_schema")))
+        # We need to check that the database still exists before
+        # attempting to revoke privileges because the local PostgreSQL
+        # cluster may have been rebuilt by another hook.
+        sql = "SELECT datname FROM pg_database WHERE datname = %s"
+        if run_select_as_postgres(sql, database)[0] != 0:
+            sql = "REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s"
+            run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                                AsIs(quote_identifier(user)))
+            run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                                AsIs(quote_identifier(user + "_schema")))
 
     postgresql_hba = os.path.join(_get_postgresql_config_dir(), "pg_hba.conf")
     generate_postgresql_hba(postgresql_hba)
@@ -1363,8 +1368,13 @@ def db_admin_relation_broken():
     if local_state['state'] in ('master', 'standalone'):
         user = hookenv.relation_get('user', unit=hookenv.local_unit())
         if user:
-            sql = "ALTER USER %s NOSUPERUSER"
-            run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
+            # We need to check that the user still exists before
+            # attempting to revoke privileges because the local PostgreSQL
+            # cluster may have been rebuilt by another hook.
+            sql = "SELECT usename FROM pg_user WHERE usename = %s"
+            if run_select_as_postgres(sql, user)[0] != 0:
+                sql = "ALTER USER %s NOSUPERUSER"
+                run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
 
     postgresql_hba = os.path.join(_get_postgresql_config_dir(), "pg_hba.conf")
     generate_postgresql_hba(postgresql_hba)
@@ -1430,25 +1440,6 @@ def pgpass():
             del os.environ['PGPASSFILE']
         else:
             os.environ['PGPASSFILE'] = org_pgpassfile
-
-
-def drop_database(dbname, warn=True):
-    import psycopg2
-    timeout = 120
-    now = time.time()
-    while True:
-        try:
-            db_cursor(autocommit=True).execute(
-                'DROP DATABASE IF EXISTS "{}"'.format(dbname))
-        except psycopg2.Error:
-            if time.time() > now + timeout:
-                if warn:
-                    log("Unable to drop database {}".format(dbname), WARNING)
-                else:
-                    raise
-            time.sleep(0.5)
-        else:
-            break
 
 
 def authorized_by(unit):
