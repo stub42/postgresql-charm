@@ -431,7 +431,7 @@ class PG93Tests(
         testtools.TestCase, fixtures.TestWithFixtures):
     # Test automatic version selection under trusty.
     VERSION = None if SERIES == 'trusty' else '9.3'
-    PGDB = False if SERIES == 'trusty' else True
+    PGDG = False if SERIES == 'trusty' else True
 
 
 def unit_sorted(units):

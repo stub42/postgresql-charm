@@ -246,73 +246,98 @@ def postgresql_autostart(enabled):
         startup_file, contents, 'postgres', 'postgres', perms=0o644)
 
 
-def run(command, exit_on_error=True):
+def run(command, exit_on_error=True, quiet=False):
     '''Run a command and return the output.'''
-    try:
-        log(command, DEBUG)
-        return subprocess.check_output(
-            command, stderr=subprocess.STDOUT, shell=True)
-    except subprocess.CalledProcessError, e:
-        log("status=%d, output=%s" % (e.returncode, e.output), ERROR)
-        if exit_on_error:
-            sys.exit(e.returncode)
-        else:
-            raise
+    log("Running {!r}".format(command), DEBUG)
+    p = subprocess.Popen(
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        shell=isinstance(command, basestring))
+    p.stdin.close()
+    lines = []
+    for line in p.stdout:
+        if line:
+            # LP:1274460 & LP:1259490 mean juju-log is no where near as
+            # useful as we would like, so just shove a copy of the
+            # output to stdout for logging.
+            # log("> {}".format(line), DEBUG)
+            if not quiet:
+                print line
+            lines.append(line)
+        elif p.poll() is not None:
+            break
+
+    p.wait()
+
+    if p.returncode == 0:
+        return '\n'.join(lines)
+
+    if p.returncode != 0 and exit_on_error:
+        log("ERROR: {}".format(p.returncode), ERROR)
+        sys.exit(p.returncode)
+
+    raise subprocess.CalledProcessError(
+        p.returncode, command, '\n'.join(lines))
 
 
 def postgresql_is_running():
     '''Return true if PostgreSQL is running.'''
-    # init script always return true (9.1), add extra check to make it useful
-    status, output = commands.getstatusoutput("invoke-rc.d postgresql status")
-    if status != 0:
-        return False
-    # e.g. output: "Running clusters: 9.1/main"
-    vc = "%s/%s" % (pg_version(), hookenv.config("cluster_name"))
-    return vc in output.decode('utf8').split()
+    for version, name, _, status in lsclusters(slice(4)):
+        if (version, name) == (pg_version(), hookenv.config('cluster_name')):
+            if status == 'online':
+                log('PostgreSQL is running', DEBUG)
+                return True
+            else:
+                log('PostgreSQL is not running', DEBUG)
+                return False
+    assert False, 'Cluster {} {} not found'.format(
+        pg_version(), hookenv.config('cluster_name'))
 
 
 def postgresql_stop():
     '''Shutdown PostgreSQL.'''
-    success = host.service_stop('postgresql')
-    return not (success and postgresql_is_running())
+    if postgresql_is_running():
+        run('pg_ctlcluster --mode fast {} {} stop'.format(
+            pg_version(), hookenv.config('cluster_name')))
+        log('PostgreSQL shut down')
 
 
 def postgresql_start():
     '''Start PostgreSQL if it is not already running.'''
-    success = host.service_start('postgresql')
-    return success and postgresql_is_running()
+    if not postgresql_is_running():
+        run('pg_ctlcluster {} {} start'.format(
+            pg_version(), hookenv.config('cluster_name')))
+        log('PostgreSQL started')
 
 
 def postgresql_restart():
     '''Restart PostgreSQL, or start it if it is not already running.'''
     if postgresql_is_running():
         with restart_lock(hookenv.local_unit(), True):
-            # 'service postgresql restart' fails; it only does a reload.
-            # success = host.service_restart('postgresql')
-            try:
-                run('pg_ctlcluster -force {} {} '
-                    'restart'.format(pg_version(),
-                                     hookenv.config('cluster_name')))
-                success = True
-            except subprocess.CalledProcessError:
-                success = False
+            run('pg_ctlcluster --mode fast {} {} restart'.format(
+                pg_version(), hookenv.config('cluster_name')))
+            log('PostgreSQL restarted')
     else:
-        success = host.service_start('postgresql')
+        postgresql_start()
+
+    assert postgresql_is_running()
 
     # Store a copy of our known live configuration so
     # postgresql_reload_or_restart() can make good choices.
-    if success and 'saved_config' in local_state:
+    if 'saved_config' in local_state:
         local_state['live_config'] = local_state['saved_config']
         local_state.save()
-
-    return success and postgresql_is_running()
 
 
 def postgresql_reload():
     '''Make PostgreSQL reload its configuration.'''
     # reload returns a reliable exit status
-    status, output = commands.getstatusoutput("invoke-rc.d postgresql reload")
-    return (status == 0)
+    if postgresql_is_running():
+        # I'm using the PostgreSQL function to avoid as much indirection
+        # as possible.
+        success = run_select_as_postgres('SELECT pg_reload_conf()')[1][0][0]
+        assert success, 'Failed to reload PostgreSQL configuration'
+        log('PostgreSQL configuration reloaded')
+    return postgresql_start()
 
 
 def requires_restart():
@@ -344,37 +369,38 @@ def requires_restart():
                 # A setting has changed that requires PostgreSQL to be
                 # restarted before it will take effect.
                 restart = True
+                log('{} changed from {} to {}. Restart required.'.format(
+                    name, live_value, new_value), DEBUG)
     return restart
 
 
 def postgresql_reload_or_restart():
     """Reload PostgreSQL configuration, restarting if necessary."""
     if requires_restart():
-        log("Configuration change requires PostgreSQL restart. Restarting.",
-            WARNING)
-        success = postgresql_restart()
-        if not success or requires_restart():
-            log("Configuration changes failed to apply", WARNING)
-            success = False
+        log("Configuration change requires PostgreSQL restart", WARNING)
+        postgresql_restart()
+        assert not requires_restart(), "Configuration changes failed to apply"
     else:
-        success = host.service_reload('postgresql')
+        postgresql_reload()
 
-    if success:
-        local_state['saved_config'] = local_state['live_config']
-        local_state.save()
-
-    return success
+    local_state['saved_config'] = local_state['live_config']
+    local_state.save()
 
 
 def get_service_port():
     '''Return the port PostgreSQL is listening on.'''
-    for line in run('pg_lsclusters').splitlines():
-        version, name, port = line.split()[:3]
+    for version, name, port in lsclusters(slice(3)):
         if (version, name) == (pg_version(), hookenv.config('cluster_name')):
             return int(port)
 
     assert False, 'No port found for {!r} {!r}'.format(
         pg_version(), hookenv.config['cluster_name'])
+
+
+def lsclusters(s=slice(0, -1)):
+    for line in run('pg_lsclusters', quiet=True).splitlines()[1:]:
+        if line:
+            yield line.split()[s]
 
 
 def _get_system_ram():
@@ -952,15 +978,15 @@ def config_changed(force_restart=False):
     postgresql_ident = os.path.join(postgresql_config_dir, "pg_ident.conf")
 
     create_postgresql_config(postgresql_config)
+    create_postgresql_ident(postgresql_ident)  # Do this before pg_hba.conf.
     generate_postgresql_hba(postgresql_hba)
-    create_postgresql_ident(postgresql_ident)
     create_ssl_cert(os.path.join(
         postgresql_data_dir, pg_version(), config_data['cluster_name']))
     update_service_port()
     update_nrpe_checks()
     if force_restart:
-        return postgresql_restart()
-    return postgresql_reload_or_restart()
+        postgresql_restart()
+    postgresql_reload_or_restart()
 
 
 @hooks.hook()
@@ -984,17 +1010,20 @@ def install(run_pre=True):
         # Drop the cluster created when the postgresql package was
         # installed, and rebuild it with the requested locale and encoding.
         version = pg_version()
-        run("pg_dropcluster --stop {} main".format(version))
+        for ver, name in lsclusters(slice(2)):
+            if version == ver and name == 'main':
+                run("pg_dropcluster --stop {} main".format(version))
         listen_port = config_data.get('listen_port', None)
         if listen_port:
             port_opt = "--port='{}'".format(config_data['listen_port'])
         else:
             port_opt = ''
-        run(
-            "pg_createcluster --locale='{}' --encoding='{}' {} "
-            "{} main".format(
-                config_data['locale'], config_data['encoding'],
-                port_opt, version))
+        with switch_cwd('/tmp'):
+            run(
+                "pg_createcluster --locale='{}' --encoding='{}' {} "
+                "{} main".format(
+                    config_data['locale'], config_data['encoding'],
+                    port_opt, version))
         assert (
             not port_opt
             or get_service_port() == config_data['listen_port']), (
@@ -1046,16 +1075,14 @@ def upgrade_charm():
 
 @hooks.hook()
 def start():
-    if not postgresql_reload_or_restart():
-        raise SystemExit(1)
+    postgresql_reload_or_restart()
 
 
 @hooks.hook()
 def stop():
     if postgresql_is_running():
         with restart_lock(hookenv.local_unit(), True):
-            if not postgresql_stop():
-                raise SystemExit(1)
+            postgresql_stop()
 
 
 def quote_identifier(identifier):
@@ -1479,6 +1506,11 @@ def update_repos_and_packages():
         local_state['install_sources'] = hookenv.config('install_sources')
         local_state['install_keys'] = hookenv.config('install_keys')
         local_state.save()
+
+    # Ensure that the desired database locale is possible.
+    if hookenv.config('locale') != 'C':
+        run(["locale-gen", "{}.{}".format(
+            hookenv.config('locale'), hookenv.config('encoding'))])
 
     if need_upgrade:
         run("apt-get -y upgrade")
