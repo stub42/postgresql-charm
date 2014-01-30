@@ -296,16 +296,18 @@ def postgresql_is_running():
 def postgresql_stop():
     '''Shutdown PostgreSQL.'''
     if postgresql_is_running():
-        run('pg_ctlcluster --mode fast {} {} stop'.format(
-            pg_version(), hookenv.config('cluster_name')))
+        run([
+            'pg_ctlcluster', '--force',
+            pg_version(), hookenv.config('cluster_name'), 'stop'])
         log('PostgreSQL shut down')
 
 
 def postgresql_start():
     '''Start PostgreSQL if it is not already running.'''
     if not postgresql_is_running():
-        run('pg_ctlcluster {} {} start'.format(
-            pg_version(), hookenv.config('cluster_name')))
+        run([
+            'pg_ctlcluster', pg_version(),
+            hookenv.config('cluster_name'), 'start'])
         log('PostgreSQL started')
 
 
@@ -313,8 +315,9 @@ def postgresql_restart():
     '''Restart PostgreSQL, or start it if it is not already running.'''
     if postgresql_is_running():
         with restart_lock(hookenv.local_unit(), True):
-            run('pg_ctlcluster --mode fast {} {} restart'.format(
-                pg_version(), hookenv.config('cluster_name')))
+            run([
+                'pg_ctlcluster', '--force',
+                pg_version(), hookenv.config('cluster_name'), 'restart'])
             log('PostgreSQL restarted')
     else:
         postgresql_start()
@@ -1015,15 +1018,19 @@ def install(run_pre=True):
                 run("pg_dropcluster --stop {} main".format(version))
         listen_port = config_data.get('listen_port', None)
         if listen_port:
-            port_opt = "--port='{}'".format(config_data['listen_port'])
+            port_opt = "--port={}".format(config_data['listen_port'])
         else:
             port_opt = ''
         with switch_cwd('/tmp'):
-            run(
-                "pg_createcluster --locale='{}' --encoding='{}' {} "
-                "{} main".format(
-                    config_data['locale'], config_data['encoding'],
-                    port_opt, version))
+            create_cmd = [
+                "pg_createcluster",
+                "--locale", config_data['locale'],
+                "-e", config_data['encoding']]
+            if listen_port:
+                create_cmd.extend(["-p", str(config_data['listen_port'])])
+            create_cmd.append(pg_version())
+            create_cmd.append(config_data['cluster_name'])
+            run(create_cmd)
         assert (
             not port_opt
             or get_service_port() == config_data['listen_port']), (
@@ -1479,17 +1486,20 @@ def update_repos_and_packages():
     # and can add it securely.
     pgdg_list = '/etc/apt/sources.list.d/pgdg_{}.list'.format(
         sanitize(hookenv.local_unit()))
-
     pgdg_key = 'ACCC4CF8'
-    if hookenv.config('pgdg') and not os.path.exists(pgdg_list):
-        # We need to upgrade, as if we have Ubuntu main packages
-        # installed they may be incompatible with the PGDG ones.
-        # This is unlikely to ever happen outside of the test suite,
-        # and never if you don't reuse machines.
-        need_upgrade = True
-        run("apt-key add lib/{}.asc".format(pgdg_key))
-        open(pgdg_list, 'w').write('deb {} {}-pgdg main'.format(
-            'http://apt.postgresql.org/pub/repos/apt/', distro_codename()))
+
+    if hookenv.config('pgdg'):
+        if not os.path.exists(pgdg_list):
+            # We need to upgrade, as if we have Ubuntu main packages
+            # installed they may be incompatible with the PGDG ones.
+            # This is unlikely to ever happen outside of the test suite,
+            # and never if you don't reuse machines.
+            need_upgrade = True
+            run("apt-key add lib/{}.asc".format(pgdg_key))
+            open(pgdg_list, 'w').write('deb {} {}-pgdg main'.format(
+                'http://apt.postgresql.org/pub/repos/apt/', distro_codename()))
+    elif os.path.exists(pgdg_list):
+        os.unlink(pgdg_list)
 
     # Try to optimize our calls to fetch.configure_sources(), as it
     # cannot do this itself due to lack of state.
