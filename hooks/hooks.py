@@ -802,11 +802,6 @@ def validate_config():
             log("Invalid or unsupported version {!r} requested".format(
                 version), CRITICAL)
 
-        if version != pg_version():
-            valid = False
-            log("Cannot change PG version from {!r} to {!r}".format(
-                version, pg_version()), CRITICAL)
-
     if config_data['cluster_name'] != 'main':
         valid = False
         log("Cluster names other than 'main' do not work per LP:1271835",
@@ -816,6 +811,17 @@ def validate_config():
         valid = False
         log("listen_ip values other than '*' do not work per LP:1271837",
             CRITICAL)
+
+    unchangeable_config = [
+        'locale', 'encoding', 'version', 'cluster_name', 'pgdg']
+
+    for name in unchangeable_config:
+        if (name in local_state
+                and local_state[name] != config_data.get(name, None)):
+            valid = False
+            log("Cannot change {!r} setting after install.".format(name))
+        local_state[name] = config_data.get(name, None)
+    local_state.save()
 
     if not valid:
         sys.exit(99)
@@ -1499,7 +1505,15 @@ def update_repos_and_packages():
             open(pgdg_list, 'w').write('deb {} {}-pgdg main'.format(
                 'http://apt.postgresql.org/pub/repos/apt/', distro_codename()))
     elif os.path.exists(pgdg_list):
-        os.unlink(pgdg_list)
+        log(
+            "PGDG apt source not requested, but already in place in this "
+            "container", WARNING)
+        # We can't just remove a source, as we may have packages
+        # installed that conflict with ones from the other configured
+        # sources. In particular, if we have postgresql-common installed
+        # from the PGDG Apt source, PostgreSQL packages from Ubuntu main
+        # will fail to install.
+        # os.unlink(pgdg_list)
 
     # Try to optimize our calls to fetch.configure_sources(), as it
     # cannot do this itself due to lack of state.
