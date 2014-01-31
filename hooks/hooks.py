@@ -699,7 +699,7 @@ def get_password(user):
         return None
 
 
-def db_cursor(autocommit=False, db='template1', user='postgres',
+def db_cursor(autocommit=False, db='postgres', user='postgres',
               host=None, timeout=30):
     import psycopg2
     if host:
@@ -1962,7 +1962,7 @@ def wal_location_to_bytes(wal_location):
     return int(logid, 16) * 16 * 1024 * 1024 * 255 + int(offset, 16)
 
 
-def wait_for_db(timeout=120, db='template1', user='postgres', host=None):
+def wait_for_db(timeout=120, db='postgres', user='postgres', host=None):
     '''Wait until the db is fully up.'''
     db_cursor(db=db, user=user, host=host, timeout=timeout)
 
