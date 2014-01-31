@@ -283,7 +283,7 @@ def postgresql_is_running():
     '''Return true if PostgreSQL is running.'''
     for version, name, _, status in lsclusters(slice(4)):
         if (version, name) == (pg_version(), hookenv.config('cluster_name')):
-            if status == 'online':
+            if 'online' in status.split(','):
                 log('PostgreSQL is running', DEBUG)
                 return True
             else:
