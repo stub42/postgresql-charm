@@ -124,18 +124,20 @@ class PostgreSQLCharmBaseTestCase(object):
         result = self.sql('SELECT TRUE')
         self.assertEqual(result, [['t']])
 
-    def test_basic_replication(self):
+    def test_streaming_replication(self):
         self.juju.deploy(
             TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
 
-        result = self.sql(
-            'CREATE TABLE Foo AS SELECT TRUE', postgres_unit='master')
+        # Confirm that the slave has successfully opened a streaming
+        # replication connection.
+        num_slaves = self.sql(
+            'SELECT COUNT(*) FROM pg_stat_replication',
+            postgres_unit='master')[0][0]
 
-        result = self.sql('SELECT * FROM Foo', postgres_unit='hot standby')
-        self.assertEqual(result, [['t']])
+        self.assertEqual(num_slaves, '1', 'Slave not connected')
 
     def test_basic_admin(self):
         '''Connect to a single unit service via the db-admin relationship.'''
