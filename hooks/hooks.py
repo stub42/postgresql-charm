@@ -628,10 +628,12 @@ def create_recovery_conf(master_host, restart_on_change=False):
         old_recovery_conf = None
 
     charm_dir = hookenv.charm_dir()
+    streaming_replication = hookenv.config('streaming_replication')
     template_file = "{}/templates/recovery.conf.tmpl".format(charm_dir)
     recovery_conf = Template(open(template_file).read()).render({
         'host': master_host,
-        'password': local_state['replication_password']})
+        'password': local_state['replication_password'],
+        'streaming_replication': streaming_replication})
     log(recovery_conf, DEBUG)
     host.write_file(
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
