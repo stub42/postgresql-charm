@@ -662,12 +662,13 @@ def create_recovery_conf(master_host, master_port, restart_on_change=False):
         old_recovery_conf = None
 
     charm_dir = hookenv.charm_dir()
+    streaming_replication = hookenv.config('streaming_replication')
     template_file = "{}/templates/recovery.conf.tmpl".format(charm_dir)
     recovery_conf = Template(open(template_file).read()).render({
         'host': master_host,
         'port': master_port,
         'password': local_state['replication_password'],
-        'streaming_replication': hookenv.config('streaming_replication')})
+        'streaming_replication': streaming_replication})
     log(recovery_conf, DEBUG)
     host.write_file(
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
@@ -734,7 +735,7 @@ def get_password(user):
         return None
 
 
-def db_cursor(autocommit=False, db='template1', user='postgres',
+def db_cursor(autocommit=False, db='postgres', user='postgres',
               host=None, port=None, timeout=30):
     import psycopg2
     if port is None:
@@ -2105,7 +2106,7 @@ def wal_location_to_bytes(wal_location):
 
 
 def wait_for_db(
-        timeout=120, db='template1', user='postgres', host=None, port=None):
+    timeout=120, db='postgres', user='postgres', host=None, port=None):
     '''Wait until the db is fully up.'''
     db_cursor(db=db, user=user, host=host, port=port, timeout=timeout)
 
