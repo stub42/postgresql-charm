@@ -94,7 +94,9 @@ superuser.
 ### the client service provides:
 
 - `database`: Optional. The name of the database to use. The postgresql service
-  will create it if necessary.
+  will create it if necessary. If your charm sets this, then it must wait
+  until a matching `database` value is presented on the PostgreSQL side of
+  the relation (ie. `relation-get database` returns the value you set).
 - `roles`: Optional. A comma separated list of database roles to grant the
   database user. Typically these roles will have been granted permissions to
 access the tables and other database objects.  Do not grant permissions
@@ -152,6 +154,71 @@ and the client charm must stop using existing 'standalone' unit and wait
 for 'master' and 'hot standby' units to appear. Units may be removed,
 possibly causing a 'hot standby' unit to be promoted to a master, or
 even having the service revert to a single 'standalone' unit.
+
+
+## Example client hooks
+
+Python::
+
+    import sys
+    from charmhelpers.core.hookenv import (
+        Hooks, config, relation_set, relation_get,
+        local_unit, related_units, remote_unit)
+
+    hooks = Hooks()
+    hook = hooks.hook
+
+    @hook
+    def db_relation_joined():
+        relation_set('database', config('database'))  # Explicit database name
+        relation_set('roles', 'reporting,standard')  # DB roles required
+
+    @hook
+    def db_relation_changed():
+        db_changed(related_units())
+
+    @hook
+    def db_relation_departed():
+        # Note we currently have to explicitly filter the dying unit
+        # from our list of database units due to LP Bug #1192433
+        db_changed(
+            unit for unit in related_units() if unit != remote_unit())
+
+    @hook
+    def db_relation_broken():
+        db_changed([])
+
+    def db_changed(active_db_units):
+        # Rather than try to merge in just this particular database
+        # connection that triggered the hook into our existing connections,
+        # it is easier to iterate over all active related databases and
+        # reset the entire list of connections.
+        conn_str_tmpl = "dbname={dbname} user={user} host={host} port={port}"
+        master_conn_str = None
+        slave_conn_strs = []
+        for db_unit in active_db_units:
+            if relation_get('database', db_unit) != config('database'):
+                continue  # Not yet acknowledged requested database name.
+
+            allowed_units = relation_get('allowed-units', db_unit).split()
+            if local_unit() not in allowed_units:
+                continue  # Not yet authorized.
+
+            conn_str = conn_str_tmpl.format(**relation_get(unit=db_unit)
+            remote_state = relation_get('state', db_unit)
+
+            if remote_state == 'standalone' and len(active_db_units) == 1:
+                master_conn_str = conn_str
+            elif relation_state == 'master':
+                master_conn_str = conn_str
+            elif relation_state == 'hot standby':
+                slave_conn_strs.append(conn_str)
+
+        update_my_db_config(master=master_conn_str, slaves=slave_conn_strs)
+
+    if __name__ == '__main__':
+        hooks.execute(sys.argv)
+
 
 
 # Contact Information
