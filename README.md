@@ -200,8 +200,8 @@ Python::
             if relation_get('database', db_unit) != config('database'):
                 continue  # Not yet acknowledged requested database name.
 
-            allowed_units = relation_get('allowed-units', db_unit).split()
-            if local_unit() not in allowed_units:
+            allowed_units = relation_get('allowed-units') or ''  # May be None
+            if local_unit() not in allowed_units.split():
                 continue  # Not yet authorized.
 
             conn_str = conn_str_tmpl.format(**relation_get(unit=db_unit)
