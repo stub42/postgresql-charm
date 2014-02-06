@@ -94,7 +94,6 @@ class TestJuju(object):
             "wal_buffers": "-1",
             "checkpoint_segments": 3,
             "random_page_cost": 4.0,
-            "volume_ephemeral_storage": True,
             "volume_map": "",
             "volume_dev_regexp": "/dev/db[b-z]",
             "backup_dir": "/var/lib/postgresql/backups",

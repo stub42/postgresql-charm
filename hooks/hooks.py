@@ -113,12 +113,16 @@ class State(dict):
 # Volume managment
 ###############################################################################
 #------------------------------
-# Get volume-id from juju config "volume-map" dictionary as
-#     volume-map[JUJU_UNIT_NAME]
+# Get volume-id from juju config "volume_map" dictionary as
+#     volume_map[JUJU_UNIT_NAME]
 # @return  volid
 #
 #------------------------------
 def volume_get_volid_from_volume_map():
+    """Grab a designated volid from the configuration volume_map setting.
+    This value if present will be passed the the storage subordinate in order
+    to specify a preexisting volumid to mount.
+    """
     volume_map = {}
     try:
         volume_map = yaml.load(hookenv.config('volume-map').strip())
@@ -127,63 +131,6 @@ def volume_get_volid_from_volume_map():
     except ConstructorError as e:
         log("invalid YAML in 'volume-map': {}".format(e), WARNING)
     return None
-
-
-# Is this volume_id permanent ?
-# @returns  True if volid set and not --ephemeral, else:
-#           False
-def volume_is_permanent(volid):
-    if volid and volid != "--ephemeral":
-        return True
-    return False
-
-
-#------------------------------
-# Returns a mount point from passed vol-id, e.g. /srv/juju/vol-000012345
-#
-# @param  volid          volume id (as e.g. EBS volid)
-# @return mntpoint_path  eg /srv/juju/vol-000012345
-#------------------------------
-def volume_mount_point_from_volid(volid):
-    if volid and volume_is_permanent(volid):
-        return "/srv/juju/%s" % volid
-    return None
-
-
-# Do we have a valid storage state?
-# @returns  volid
-#           None    config state is invalid - we should not serve
-def volume_get_volume_id():
-    ephemeral_storage = hookenv.config('volume-ephemeral-storage')
-    volid = volume_get_volid_from_volume_map()
-    juju_unit_name = hookenv.local_unit()
-    if ephemeral_storage in [True, 'yes', 'Yes', 'true', 'True']:
-        if volid:
-            log(
-                "volume-ephemeral-storage is True, but " +
-                "volume-map[{!r}] -> {}".format(juju_unit_name, volid), ERROR)
-            return None
-        else:
-            return "--ephemeral"
-    else:
-        if not volid:
-            log(
-                "volume-ephemeral-storage is False, but "
-                "no volid found for volume-map[{!r}]".format(
-                    hookenv.local_unit()), ERROR)
-            return None
-    return volid
-
-
-# Initialize and/or mount permanent storage, it straightly calls
-# shell helper
-def volume_init_and_mount(volid):
-    command = ("scripts/volume-common.sh call " +
-               "volume_init_and_mount %s" % volid)
-    output = run(command)
-    if output.find("ERROR") >= 0:
-        return False
-    return True
 
 
 def volume_get_all_mounted():
@@ -1996,7 +1943,7 @@ def request_mount_point():
 @hooks.hook('data-relation-departed')
 def stop_postgres_on_data_relation_departed():
     hookenv.log("Data relation departing. Stopping PostgreSQL",
-                hookenv.DEBUG)    
+                hookenv.DEBUG)
     postgresql_stop()
 
 
