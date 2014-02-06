@@ -1979,7 +1979,7 @@ def use_volume():
         hookenv.log("Setting mount point in the relation: %s"
                     % storage_mount_point, hookenv.DEBUG)
         hookenv.relation_set(mountpoint=storage_mount_point)
-    if hookenv.relation_get("storage_ready"):
+    else:
         hookenv.log("Storage ready and mounted", hookenv.DEBUG)
         config_changed(mount_point=storage_mount_point)
 
