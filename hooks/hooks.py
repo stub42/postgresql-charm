@@ -732,7 +732,7 @@ def config_changed_volume_apply(mount_point=None):
             log("NOTICE: symlinking {} -> {}".format(
                 new_pg_version_cluster_dir, data_directory_path))
             os.symlink(new_pg_version_cluster_dir, data_directory_path)
-            run("chown postgres:postgres {}".format(data_directory_path))
+            run("chown -h postgres:postgres {}".format(data_directory_path))
             log(
                 "after-symlink: to fix/avoid UID changes from "
                 "previous units, doing: "
