@@ -2106,7 +2106,7 @@ def wal_location_to_bytes(wal_location):
 
 
 def wait_for_db(
-    timeout=120, db='postgres', user='postgres', host=None, port=None):
+        timeout=120, db='postgres', user='postgres', host=None, port=None):
     '''Wait until the db is fully up.'''
     db_cursor(db=db, user=user, host=host, port=port, timeout=timeout)
 
