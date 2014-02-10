@@ -134,7 +134,9 @@ def volume_get_volid_from_volume_map():
 
 
 def volume_get_all_mounted():
-    command = ("mount |egrep /srv/juju")
+    config_data = hookenv.config()
+    storage_mount_point = config_data["storage_mount_point"]
+    command = ("mount |egrep %s" % storage_mount_point)
     status, output = commands.getstatusoutput(command)
     if status != 0:
         return None
@@ -653,7 +655,7 @@ def run_select_as_postgres(sql, *parameters):
 #   1) symlink already pointing to existing storage (no-op)
 #   2) new storage properly initialized:
 #     - volume: initialized if not already (fdisk, mkfs),
-#       mounts it to e.g.:  /srv/juju/vol-000012345
+#       mounts it to e.g.:  %s/vol-000012345
 #     - if fresh new storage dir: rsync existing data
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
 #------------------------------------------------------------------------------
@@ -665,89 +667,88 @@ def config_changed_volume_apply(mount_point=None):
 
     assert(data_directory_path)
 
-    if mount_point:
-        if not os.path.exists(data_directory_path):
-            log(
-                "postgresql data dir {} not found, "
-                "not applying changes.".format(data_directory_path),
-                CRITICAL)
-            return False
-
-        new_pg_dir = os.path.join(mount_point, "postgresql")
-        new_pg_version_cluster_dir = os.path.join(
-            new_pg_dir, version, cluster_name)
-        if not mount_point:
-            log(
-                "invalid mount point = {}, "
-                "not applying changes.".format(mount_point), ERROR)
-            return False
-
-        if ((os.path.islink(data_directory_path) and
-             os.readlink(data_directory_path) == new_pg_version_cluster_dir and
-             os.path.isdir(new_pg_version_cluster_dir))):
-            log(
-                "postgresql data dir '%s' already points "
-                "to {}, skipping storage changes.".format(
-                    data_directory_path, new_pg_version_cluster_dir))
-            log(
-                "existing-symlink: to fix/avoid UID changes from "
-                "previous units, doing: "
-                "chown -R postgres:postgres {}".format(new_pg_dir))
-            run("chown -R postgres:postgres %s" % new_pg_dir)
-            return True
-
-        # Create a directory structure below "new" mount_point, as e.g.:
-        #   /srv/juju/vol-000012345/postgresql/9.1/main  , which "mimics":
-        #   /var/lib/postgresql/9.1/main
-        curr_dir_stat = os.stat(data_directory_path)
-        for new_dir in [new_pg_dir,
-                        os.path.join(new_pg_dir, version),
-                        new_pg_version_cluster_dir]:
-            if not os.path.isdir(new_dir):
-                log("mkdir %s".format(new_dir))
-                os.mkdir(new_dir)
-                # copy permissions from current data_directory_path
-                os.chown(new_dir, curr_dir_stat.st_uid, curr_dir_stat.st_gid)
-                os.chmod(new_dir, curr_dir_stat.st_mode)
-        # Carefully build this symlink, e.g.:
-        # /var/lib/postgresql/9.1/main ->
-        # /srv/juju/vol-000012345/postgresql/9.1/main
-        # but keep previous "main/"  directory, by renaming it to
-        # main-$TIMESTAMP
-        if not postgresql_stop():
-            log("postgresql_stop() failed - can't migrate data.", ERROR)
-            return False
-        if not os.path.exists(os.path.join(
-                new_pg_version_cluster_dir, "PG_VERSION")):
-            log("migrating PG data {}/ -> {}/".format(
-                data_directory_path, new_pg_version_cluster_dir), WARNING)
-            # void copying PID file to perm storage (shouldn't be any...)
-            command = "rsync -a --exclude postmaster.pid {}/ {}/".format(
-                data_directory_path, new_pg_version_cluster_dir)
-            log("run: {}".format(command))
-            run(command)
-        try:
-            os.rename(data_directory_path, "{}-{}".format(
-                data_directory_path, int(time.time())))
-            log("NOTICE: symlinking {} -> {}".format(
-                new_pg_version_cluster_dir, data_directory_path))
-            os.symlink(new_pg_version_cluster_dir, data_directory_path)
-            run("chown -h postgres:postgres {}".format(data_directory_path))
-            log(
-                "after-symlink: to fix/avoid UID changes from "
-                "previous units, doing: "
-                "chown -R postgres:postgres {}".format(new_pg_dir))
-            run("chown -R postgres:postgres {}".format(new_pg_dir))
-            return True
-        except OSError:
-            log("failed to symlink {} -> {}".format(
-                data_directory_path, mount_point), CRITICAL)
-            return False
-    else:
-        log(
-            "Invalid volume storage configuration, not applying changes",
+    if not mount_point:
+        log("Invalid volume storage configuration, not applying changes",
             ERROR)
-    return False
+        return False
+
+    if not os.path.exists(data_directory_path):
+        log(
+            "postgresql data dir {} not found, "
+            "not applying changes.".format(data_directory_path),
+            CRITICAL)
+        return False
+
+    new_pg_dir = os.path.join(mount_point, "postgresql")
+    new_pg_version_cluster_dir = os.path.join(
+        new_pg_dir, version, cluster_name)
+    if not mount_point:
+        log(
+            "invalid mount point = {}, "
+            "not applying changes.".format(mount_point), ERROR)
+        return False
+
+    if ((os.path.islink(data_directory_path) and
+         os.readlink(data_directory_path) == new_pg_version_cluster_dir and
+         os.path.isdir(new_pg_version_cluster_dir))):
+        log(
+            "postgresql data dir '%s' already points "
+            "to {}, skipping storage changes.".format(
+                data_directory_path, new_pg_version_cluster_dir))
+        log(
+            "existing-symlink: to fix/avoid UID changes from "
+            "previous units, doing: "
+            "chown -R postgres:postgres {}".format(new_pg_dir))
+        run("chown -R postgres:postgres %s" % new_pg_dir)
+        return True
+
+    # Create a directory structure below "new" mount_point, as e.g.:
+    #   /srv/juju/vol-000012345/postgresql/9.1/main  , which "mimics":
+    #   /var/lib/postgresql/9.1/main
+    curr_dir_stat = os.stat(data_directory_path)
+    for new_dir in [new_pg_dir,
+                    os.path.join(new_pg_dir, version),
+                    new_pg_version_cluster_dir]:
+        if not os.path.isdir(new_dir):
+            log("mkdir %s".format(new_dir))
+            os.mkdir(new_dir)
+            # copy permissions from current data_directory_path
+            os.chown(new_dir, curr_dir_stat.st_uid, curr_dir_stat.st_gid)
+            os.chmod(new_dir, curr_dir_stat.st_mode)
+    # Carefully build this symlink, e.g.:
+    # /var/lib/postgresql/9.1/main ->
+    # /srv/juju/vol-000012345/postgresql/9.1/main
+    # but keep previous "main/"  directory, by renaming it to
+    # main-$TIMESTAMP
+    if not postgresql_stop():
+        log("postgresql_stop() failed - can't migrate data.", ERROR)
+        return False
+    if not os.path.exists(os.path.join(
+            new_pg_version_cluster_dir, "PG_VERSION")):
+        log("migrating PG data {}/ -> {}/".format(
+            data_directory_path, new_pg_version_cluster_dir), WARNING)
+        # void copying PID file to perm storage (shouldn't be any...)
+        command = "rsync -a --exclude postmaster.pid {}/ {}/".format(
+            data_directory_path, new_pg_version_cluster_dir)
+        log("run: {}".format(command))
+        run(command)
+    try:
+        os.rename(data_directory_path, "{}-{}".format(
+            data_directory_path, int(time.time())))
+        log("NOTICE: symlinking {} -> {}".format(
+            new_pg_version_cluster_dir, data_directory_path))
+        os.symlink(new_pg_version_cluster_dir, data_directory_path)
+        run("chown -h postgres:postgres {}".format(data_directory_path))
+        log(
+            "after-symlink: to fix/avoid UID changes from "
+            "previous units, doing: "
+            "chown -R postgres:postgres {}".format(new_pg_dir))
+        run("chown -R postgres:postgres {}".format(new_pg_dir))
+        return True
+    except OSError:
+        log("failed to symlink {} -> {}".format(
+            data_directory_path, mount_point), CRITICAL)
+        return False
 
 
 def token_sql_safe(value):
@@ -1920,20 +1921,21 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
 
 
 @hooks.hook('data-relation-changed')
-def use_volume():
+def data_relation_changed():
+    """Listen for configured mountpoint from storage subordinate relation"""
     config_data = hookenv.config()
     storage_mount_point = config_data["storage_mount_point"]
     if not hookenv.relation_get("mountpoint"):
-        hookenv.log("Setting mount point in the relation: %s"
+        hookenv.log("Waiting for mountpoint from the relation: %s"
                     % storage_mount_point, hookenv.DEBUG)
-        hookenv.relation_set(mountpoint=storage_mount_point)
     else:
         hookenv.log("Storage ready and mounted", hookenv.DEBUG)
         config_changed(mount_point=storage_mount_point)
 
 
 @hooks.hook('data-relation-joined')
-def request_mount_point():
+def data_relation_joined():
+    """Request mountpoint from storage subordinate by setting mountpoint"""
     config_data = hookenv.config()
     storage_mount_point = config_data["storage_mount_point"]
     hookenv.log("Setting mount point in the relation: %s"
