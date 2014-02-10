@@ -227,6 +227,20 @@ class TestHooks(mocker.MockerTestCase):
 
 class TestHooksService(TestHooks):
 
+    def test_data_relation_departed_stops_postgresql(self):
+        """
+        When the storage subordinate charm relation departs firing the
+        C{data-relation-departed} hook, the charm stops the postgresql service
+        and logs a message.
+        """
+        postgresql_stop = self.mocker.replace(hooks.postgresql_stop)
+        postgresql_stop()
+        self.mocker.replay()
+        hooks.stop_postgres_on_data_relation_departed()
+        message = "Data relation departing. Stopping PostgreSQL"
+        self.assertIn(
+            message, hooks.hookenv._log_DEBUG, "Not logged- %s" % message)
+
     def test_data_relation_joined_requests_configured_mountpoint(self):
         """
         When postgresql is related to the storage subordinate charm via the
