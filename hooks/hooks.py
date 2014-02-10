@@ -15,8 +15,6 @@ import subprocess
 import sys
 from tempfile import NamedTemporaryFile
 import time
-import yaml
-from yaml.constructor import ConstructorError
 
 from charmhelpers import fetch
 from charmhelpers.core import hookenv, host
@@ -107,30 +105,6 @@ class State(dict):
             hookenv.relation_set(relid, replication_state)
 
         self.save()
-
-
-###############################################################################
-# Volume managment
-###############################################################################
-#------------------------------
-# Get volume-id from juju config "volume_map" dictionary as
-#     volume_map[JUJU_UNIT_NAME]
-# @return  volid
-#
-#------------------------------
-def volume_get_volid_from_volume_map():
-    """Grab a designated volid from the configuration volume_map setting.
-    This value if present will be passed the the storage subordinate in order
-    to specify a preexisting volumid to mount.
-    """
-    volume_map = {}
-    try:
-        volume_map = yaml.load(hookenv.config('volume-map').strip())
-        if volume_map:
-            return volume_map.get(os.environ['JUJU_UNIT_NAME'])
-    except ConstructorError as e:
-        log("invalid YAML in 'volume-map': {}".format(e), WARNING)
-    return None
 
 
 def volume_get_all_mounted():
@@ -764,7 +738,7 @@ def config_changed(force_restart=False, mount_point=None):
     update_repos_and_packages(config_data["version"])
 
     if mount_point is not None:
-        ## config_changed_volume_apply will stop the service if it founds
+        ## config_changed_volume_apply will stop the service if it finds
         ## it necessary, ie: new volume setup
         if config_changed_volume_apply(mount_point=mount_point):
             postgresql_autostart(True)

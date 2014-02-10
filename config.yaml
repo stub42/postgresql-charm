@@ -277,15 +277,6 @@ options:
     default: 4.0
     type: float
     description: Random page cost
-  volume_map:
-    type: string
-    default: ""
-    description: >
-      YAML map as e.g. "{ postgres/0: vol-0000010, postgres/1: vol-0000016 }".
-      A service unit to specific nova volume-id that should be attached to
-      each unit. This requires a storage relation setup with postgresql.
-      It is expected that a nova volume-list agree with the volume-ids
-      provided.
   backup_dir:
     default: "/var/lib/postgresql/backups"
     type: string
