@@ -1862,6 +1862,13 @@ def publish_hot_standby_credentials():
         connection_settings['host'] = hookenv.unit_private_ip()
         connection_settings['port'] = get_service_port()
         connection_settings['state'] = local_state['state']
+        requested_db = hookenv.relation_get('database')
+        # A hot standby might have seen a database name change before
+        # the master, so override. This is no problem because we block
+        # until this database has been created on the master and
+        # replicated through to this unit.
+        if requested_db:
+            connection_settings['database'] = requested_db
 
         # Block until users and database has replicated, so we know the
         # connection details we publish are actually valid. This will
