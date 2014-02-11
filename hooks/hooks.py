@@ -1373,8 +1373,8 @@ def db_relation_joined_changed():
 
     # Update the peer relation, notifying any hot standby units
     # to republish connection details to the client relation.
-    local_state['client_relations'] = ' '.join(
-        hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
+    local_state['client_relations'] = ' '.join(sorted(
+        hookenv.relation_ids('db') + hookenv.relation_ids('db-admin')))
     log("Client relations {}".format(local_state['client_relations']))
     local_state.publish()
 
