@@ -248,7 +248,8 @@ def postgresql_autostart(enabled):
 
 def run(command, exit_on_error=True, quiet=False):
     '''Run a command and return the output.'''
-    log("Running {!r}".format(command), DEBUG)
+    if not quiet:
+        log("Running {!r}".format(command), DEBUG)
     p = subprocess.Popen(
         command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         shell=isinstance(command, basestring))
@@ -1877,7 +1878,8 @@ def publish_hot_standby_credentials():
                 connection_settings['database']))
             time.sleep(10)
 
-        log("Connection settings {!r}".format(connection_settings), DEBUG)
+        log("Relation {} connection settings {!r}".format(
+            client_relation, connection_settings), DEBUG)
         hookenv.relation_set(
             client_relation, relation_settings=connection_settings)
 
