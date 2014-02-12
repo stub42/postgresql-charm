@@ -628,8 +628,6 @@ def run_select_as_postgres(sql, *parameters):
 # NOTE the only 2 "True" return points:
 #   1) symlink already pointing to existing storage (no-op)
 #   2) new storage properly initialized:
-#     - volume: initialized if not already (fdisk, mkfs),
-#       mounts it to e.g.:  %s/vol-000012345
 #     - if fresh new storage dir: rsync existing data
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
 #------------------------------------------------------------------------------
@@ -666,7 +664,7 @@ def config_changed_volume_apply(mount_point=None):
          os.readlink(data_directory_path) == new_pg_version_cluster_dir and
          os.path.isdir(new_pg_version_cluster_dir))):
         log(
-            "postgresql data dir '%s' already points "
+            "postgresql data dir '{}' already points "
             "to {}, skipping storage changes.".format(
                 data_directory_path, new_pg_version_cluster_dir))
         log(
