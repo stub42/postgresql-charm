@@ -2212,8 +2212,11 @@ def syslog_relation_changed():
     # This is required so consumers of the PostgreSQL logs can decode
     # them. Consumers not smart enough to cope with arbitrary prefixes
     # can at a minimum abort if they detect it is set to something they
-    # cannot support.
-    hookenv.relation_set(log_line_prefix=hookenv.config('log_line_prefix'))
+    # cannot support. Similarly, inform the consumer of the programname
+    # we are using so they can tell one units log messages from another.
+    hookenv.relation_set(
+        log_line_prefix=hookenv.config('log_line_prefix'),
+        programname=sanitize(hookenv.local_unit()))
 
     template_path = "{0}/templates/rsyslog_forward.conf".format(
         hookenv.charm_dir())
@@ -2228,7 +2231,7 @@ def syslog_relation_changed():
 
 @hooks.hook()
 def syslog_relation_departed():
-    configure_log_destination()
+    configure_log_destination(_get_postgresql_config_dir())
     postgresql_reload()
     os.unlink(rsyslog_conf_path(hookenv.remote_unit()))
     run(['service', 'rsyslog', 'restart'])
