@@ -14,6 +14,7 @@ import socket
 import subprocess
 import time
 import unittest
+import uuid
 
 import fixtures
 import psycopg2
@@ -424,6 +425,31 @@ class PostgreSQLCharmBaseTestCase(object):
                 pg_has_role(current_user, 'role_c', 'MEMBER')
             ''')
         self.assertEqual(result, [['f', 'f', 'f']])
+
+    def test_syslog(self):
+        # Deploy 2 PostgreSQL units and 2 rsyslog units to ensure that
+        # log messages from every source reach every sink.
+        self.pg_config['log_min_duration_statement'] = 0  # Log all statements
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
+        self.juju.deploy('cs:rsyslog', 'rsyslog', num_units=2)
+        self.juju.do([
+            'add-relation', 'postgresql:syslog', 'rsyslog:aggregator'])
+        self.juju.wait_until_ready()
+
+        token = str(uuid.uuid1())
+
+        self.sql("SELECT 'master {}'".format(token), 'master')
+        self.sql("SELECT 'hot standby {}'".format(token), 'hot standby')
+        time.sleep(2)
+
+        for runit in ['rsyslog/0', 'rsyslog/1']:
+            cmd = ['juju', 'ssh', runit, 'tail -100 /var/log/syslog']
+            out = run(self, cmd)
+            self.failUnless('master {}'.format(token) in out)
+            self.failUnless('hot standby {}'.format(token) in out)
 
 
 class PG91Tests(
