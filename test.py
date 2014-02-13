@@ -138,6 +138,10 @@ class PostgreSQLCharmBaseTestCase(object):
         result = self.sql('SELECT TRUE')
         self.assertEqual(result, [['t']])
 
+        # Confirm that the relation tears down without errors.
+        self.juju.do(['destroy-relation', 'postgresql:db', 'psql:db'])
+        self.juju.wait_until_ready()
+
     def test_streaming_replication(self):
         self.juju.deploy(
             TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
@@ -163,6 +167,11 @@ class PostgreSQLCharmBaseTestCase(object):
 
         result = self.sql('SELECT TRUE', dbname='postgres')
         self.assertEqual(result, [['t']])
+
+        # Confirm that the relation tears down without errors.
+        self.juju.do([
+            'destroy-relation', 'postgresql:db-admin', 'psql:db-admin'])
+        self.juju.wait_until_ready()
 
     def is_master(self, postgres_unit, dbname=None):
         is_master = self.sql(
@@ -450,6 +459,11 @@ class PostgreSQLCharmBaseTestCase(object):
             out = run(self, cmd)
             self.failUnless('master {}'.format(token) in out)
             self.failUnless('hot standby {}'.format(token) in out)
+
+        # Confirm that the relation tears down correctly.
+        self.juju.do([
+            'destroy-relation', 'postgresql:syslog', 'rsyslog:aggregator'])
+        self.juju.wait_until_ready()
 
 
 class PG91Tests(
