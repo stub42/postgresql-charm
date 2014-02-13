@@ -484,7 +484,7 @@ def create_postgresql_config(config_file):
         owner="postgres",  group="postgres", perms=0600)
 
     # Create or update files included from postgresql.conf.
-    configure_log_destination()
+    configure_log_destination(os.path.dirname(config_file))
 
     local_state['saved_config'] = config_data
     local_state.save()
@@ -1002,6 +1002,11 @@ def config_changed(force_restart=False):
     if force_restart:
         postgresql_restart()
     postgresql_reload_or_restart()
+
+    # In case the log_line_prefix has changed, inform syslog consumers.
+    for relid in hookenv.relation_ids('syslog'):
+        hookenv.relation_set(
+            relid, log_line_prefix=hookenv.config('log_line_prefix'))
 
 
 @hooks.hook()
@@ -2200,8 +2205,15 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
 
 @hooks.hook()
 def syslog_relation_changed():
-    configure_log_destination()
+    configure_log_destination(_get_postgresql_config_dir())
     postgresql_reload()
+
+    # We extend the syslog interface by exposing the log_line_prefix.
+    # This is required so consumers of the PostgreSQL logs can decode
+    # them. Consumers not smart enough to cope with arbitrary prefixes
+    # can at a minimum abort if they detect it is set to something they
+    # cannot support.
+    hookenv.relation_set(log_line_prefix=hookenv.config('log_line_prefix'))
 
     template_path = "{0}/templates/rsyslog_forward.conf".format(
         hookenv.charm_dir())
@@ -2222,7 +2234,7 @@ def syslog_relation_departed():
     run(['service', 'rsyslog', 'restart'])
 
 
-def configure_log_destination():
+def configure_log_destination(config_dir):
     """Set the log_destination PostgreSQL config flag appropriately"""
     # We currently support either 'standard' logs (the files in
     # /var/log/postgresql), or syslog + 'standard' logs. This should
@@ -2231,8 +2243,7 @@ def configure_log_destination():
     # probably want to add csvlog in the future. Note that csvlog
     # requires switching from 'Debian' log redirection and rotation to
     # the PostgreSQL builtin facilities.
-    logdest_conf_path = os.path.join(
-        _get_postgresql_config_dir(), 'juju_logdest.conf')
+    logdest_conf_path = os.path.join(config_dir, 'juju_logdest.conf')
     logdest_conf = open(logdest_conf_path, 'w')
     if hookenv.relation_ids('syslog'):
         # For syslog, we change the ident from the default of 'postgres'
