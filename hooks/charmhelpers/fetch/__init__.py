@@ -117,8 +117,8 @@ def configure_sources(update=False,
 
     Note that 'null' (a.k.a. None) should not be quoted.
     """
-    sources = safe_load(config(sources_var))
-    keys = safe_load(config(keys_var))
+    sources = safe_load(config(sources_var)) or []
+    keys = safe_load(config(keys_var)) or []
     if isinstance(sources, basestring) and isinstance(keys, basestring):
         add_source(sources, keys)
     else:

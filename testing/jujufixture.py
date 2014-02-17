@@ -1,9 +1,11 @@
 import json
+import os.path
 import subprocess
 import time
 
 import fixtures
 from testtools.content import text_content
+import yaml
 
 
 __all__ = ['JujuFixture', 'run']
@@ -42,7 +44,7 @@ class JujuFixture(fixtures.Fixture):
             return json.loads(out)
         return None
 
-    def deploy(self, charm, name=None, num_units=1):
+    def deploy(self, charm, name=None, num_units=1, config=None):
         # The first time we deploy a local: charm in the test run, it
         # needs to deploy with --update to ensure we are testing the
         # desired revision of the charm. Subsequent deploys we do not
@@ -53,6 +55,14 @@ class JujuFixture(fixtures.Fixture):
         else:
             cmd = ['deploy', '-u']
             self._deployed_charms.add(charm)
+
+        if config:
+            config_path = os.path.join(
+                self.useFixture(fixtures.TempDir()).path, 'config.yaml')
+            cmd.append('--config={}'.format(config_path))
+            config = yaml.safe_dump({name: config}, default_flow_style=False)
+            open(config_path, 'w').write(config)
+            self.addDetail('pgconfig', text_content(config))
 
         cmd.append(charm)
 
@@ -93,10 +103,10 @@ class JujuFixture(fixtures.Fixture):
         self.status = self.get_result(['status'])
 
         self._free_machines = set(
-            int(k) for k, m in self.status['machines'].items() if
-                k != '0'
-                and m.get('life', None) not in ('dead', 'dying')
-                and m.get('agent-state', 'pending') in ('started', 'ready'))
+            int(k) for k, m in self.status['machines'].items()
+            if k != '0'
+            and m.get('life', None) not in ('dead', 'dying')
+            and m.get('agent-state', 'pending') in ('started', 'ready'))
         for service in self.status.get('services', {}).values():
             for unit in service.get('units', []):
                 if 'machine' in unit:
@@ -201,6 +211,8 @@ def run(detail_collector, cmd, input=''):
         raise
 
     (out, err) = proc.communicate(input)
+    detail_collector.addDetail(
+        'cmd', text_content('{}: {}'.format(proc.returncode, ' '.join(cmd))))
     if out:
         detail_collector.addDetail('stdout', text_content(out))
     if err:

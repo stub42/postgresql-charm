@@ -35,17 +35,20 @@ options:
     default: "reload"
     type: string
     description: |
-        The command to run whenever config has changed. Accepted values are
-        "reload" or "restart" - any other value will mean neither is executed
-        after a config change (which may be desired, if you're running a
-        production server and would rather handle these out of band). Note that
-        postgresql will still need to be reloaded whenever authentication and
-        access details are updated, so disabling either doesn't mean PostgreSQL
-        will never be reloaded.
+        The command to run whenever config has changed. Accepted values
+        are "reload" or "restart" - any other value will mean neither is
+        executed after a config change (which may be desired, if you're
+        running a production server and would rather handle these out of
+        band). Note that postgresql will still need to be reloaded
+        whenever authentication and access details are updated, so
+        disabling either doesn't mean PostgreSQL will never be reloaded.
   version:
-    default: ""
+    default: null
     type: string
-    description: Version of PostgreSQL that we want to install
+    description: |
+        Version of PostgreSQL that we want to install. Supported versions
+        are "9.1", "9.2", "9.3". The default version for the deployed Ubuntu
+        release is used when the version is not specified.
   cluster_name:
     default: "main"
     type: string
@@ -55,9 +58,9 @@ options:
     type: string
     description: IP to listen on
   listen_port:
-    default: 5432
+    default: null
     type: int
-    description: Port to listen on
+    description: Port to listen on. Default is automatically assigned.
   max_connections:
     default: 100
     type: int
@@ -120,7 +123,9 @@ options:
   autovacuum:
     default: True
     type: boolean
-    description: Autovacuum should almost always be running.
+    description: |
+        Autovacuum should almost always be running. If you want to turn this
+        off, you are probably following out of date documentation.
   log_autovacuum_min_duration:
     default: -1
     type: int
@@ -329,13 +334,31 @@ options:
             juju-postgresql-0
         If you're running multiple environments with the same services in them
         this allows you to differentiate between them.
+  pgdg:
+    description: |
+        Enable the PostgreSQL Global Development Group APT repository
+        (https://wiki.postgresql.org/wiki/Apt). This package source provides
+        official PostgreSQL packages for Ubuntu LTS releases beyond those
+        provided by the main Ubuntu archive.
+    type: boolean
+    default: false
+  install_sources:
+    description: |
+        List of extra package sources, per charm-helpers standard.
+        YAML format.
+    type: string
+    default: ""
+  install_keys:
+    description: |
+        List of signing keys for install_sources package sources, per
+        charmhelpers standard. YAML format.
+    type: string
+    default: ""
   extra_archives:
     default: ""
     type: string
     description: |
-        Extra archives to add, space separated. Supports ppa:, http:, cloud:
-        URIs, as well as other schemes and keywords supported by
-        charmhelpers.fetch.add_source() such as "proposed".
+        DEPRECATED & IGNORED. Use install_sources and install_keys. 
   advisory_lock_restart_key:
     default: 765
     type: int
