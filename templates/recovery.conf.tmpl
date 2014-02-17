@@ -4,7 +4,7 @@
 standby_mode = on
 recovery_target_timeline = latest
 {% if streaming_replication %}
-primary_conninfo = 'host={{host}} user=juju_replication password={{password}} requirepeer=postgres'
+primary_conninfo = 'host={{host}} port={{port}} user=juju_replication password={{password}} requirepeer=postgres'
 {% endif %}
 {% if restore_command %}
 restore_command = '{{restore_command}}'

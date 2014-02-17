@@ -60,30 +60,33 @@ def pg_version():
     package candidate, saving it in local_state for later.
     '''
     config_data = hookenv.config()
-    if config_data['version']:
-        version = config_data['version']
-    elif 'pg_version' in local_state:
+    if 'pg_version' in local_state:
         version = local_state['pg_version']
+    elif 'version' in config_data:
+        version = config_data['version']
     else:
         log("map version from distro release ...")
-        distro_release = run("lsb_release -sc")
-        distro_release = distro_release.rstrip()
         version_map = {'precise': '9.1',
                        'trusty': '9.3'}
-        version = version_map.get(distro_release)
+        version = version_map.get(distro_codename())
         if not version:
-            log("No PG version map for distro_release={}, "
-                "you'll need to explicitly set it".format(distro_release),
+            log("No PG version map for distro_codename={}, "
+                "you'll need to explicitly set it".format(distro_codename()),
                 CRITICAL)
             sys.exit(1)
-        log("version={} from distro_release='{}'".format(
-            version, distro_release))
+        log("version={} from distro_codename='{}'".format(
+            version, distro_codename()))
         # save it for later
         local_state.setdefault('pg_version', version)
         local_state.save()
 
     assert version, "pg_version couldn't find a version to use"
     return version
+
+
+def distro_codename():
+    """Return the distro release code name, eg. 'precise' or 'trusty'."""
+    return host.lsb_release()['DISTRIB_CODENAME']
 
 
 class State(dict):
@@ -128,6 +131,7 @@ class State(dict):
         replication_state = dict(client_state)
 
         add(replication_state, 'replication_password')
+        add(replication_state, 'port')
         add(replication_state, 'wal_received_offset')
         add(replication_state, 'following')
         add(replication_state, 'client_relations')
@@ -242,73 +246,101 @@ def postgresql_autostart(enabled):
         startup_file, contents, 'postgres', 'postgres', perms=0o644)
 
 
-def run(command, exit_on_error=True):
+def run(command, exit_on_error=True, quiet=False):
     '''Run a command and return the output.'''
-    try:
-        log(command, DEBUG)
-        return subprocess.check_output(
-            command, stderr=subprocess.STDOUT, shell=True)
-    except subprocess.CalledProcessError, e:
-        log("status=%d, output=%s" % (e.returncode, e.output), ERROR)
-        if exit_on_error:
-            sys.exit(e.returncode)
-        else:
-            raise
+    log("Running {!r}".format(command), DEBUG)
+    p = subprocess.Popen(
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        shell=isinstance(command, basestring))
+    p.stdin.close()
+    lines = []
+    for line in p.stdout:
+        if line:
+            # LP:1274460 & LP:1259490 mean juju-log is no where near as
+            # useful as we would like, so just shove a copy of the
+            # output to stdout for logging.
+            # log("> {}".format(line), DEBUG)
+            if not quiet:
+                print line
+            lines.append(line)
+        elif p.poll() is not None:
+            break
+
+    p.wait()
+
+    if p.returncode == 0:
+        return '\n'.join(lines)
+
+    if p.returncode != 0 and exit_on_error:
+        log("ERROR: {}".format(p.returncode), ERROR)
+        sys.exit(p.returncode)
+
+    raise subprocess.CalledProcessError(
+        p.returncode, command, '\n'.join(lines))
 
 
 def postgresql_is_running():
     '''Return true if PostgreSQL is running.'''
-    # init script always return true (9.1), add extra check to make it useful
-    status, output = commands.getstatusoutput("invoke-rc.d postgresql status")
-    if status != 0:
-        return False
-    # e.g. output: "Running clusters: 9.1/main"
-    vc = "%s/%s" % (pg_version(), hookenv.config("cluster_name"))
-    return vc in output.decode('utf8').split()
+    for version, name, _, status in lsclusters(slice(4)):
+        if (version, name) == (pg_version(), hookenv.config('cluster_name')):
+            if 'online' in status.split(','):
+                log('PostgreSQL is running', DEBUG)
+                return True
+            else:
+                log('PostgreSQL is not running', DEBUG)
+                return False
+    assert False, 'Cluster {} {} not found'.format(
+        pg_version(), hookenv.config('cluster_name'))
 
 
 def postgresql_stop():
     '''Shutdown PostgreSQL.'''
-    success = host.service_stop('postgresql')
-    return not (success and postgresql_is_running())
+    if postgresql_is_running():
+        run([
+            'pg_ctlcluster', '--force',
+            pg_version(), hookenv.config('cluster_name'), 'stop'])
+        log('PostgreSQL shut down')
 
 
 def postgresql_start():
     '''Start PostgreSQL if it is not already running.'''
-    success = host.service_start('postgresql')
-    return success and postgresql_is_running()
+    if not postgresql_is_running():
+        run([
+            'pg_ctlcluster', pg_version(),
+            hookenv.config('cluster_name'), 'start'])
+        log('PostgreSQL started')
 
 
 def postgresql_restart():
     '''Restart PostgreSQL, or start it if it is not already running.'''
     if postgresql_is_running():
         with restart_lock(hookenv.local_unit(), True):
-            # 'service postgresql restart' fails; it only does a reload.
-            # success = host.service_restart('postgresql')
-            try:
-                run('pg_ctlcluster -force {} {} '
-                    'restart'.format(pg_version(),
-                                     hookenv.config('cluster_name')))
-                success = True
-            except subprocess.CalledProcessError:
-                success = False
+            run([
+                'pg_ctlcluster', '--force',
+                pg_version(), hookenv.config('cluster_name'), 'restart'])
+            log('PostgreSQL restarted')
     else:
-        success = host.service_start('postgresql')
+        postgresql_start()
+
+    assert postgresql_is_running()
 
     # Store a copy of our known live configuration so
     # postgresql_reload_or_restart() can make good choices.
-    if success and 'saved_config' in local_state:
+    if 'saved_config' in local_state:
         local_state['live_config'] = local_state['saved_config']
         local_state.save()
-
-    return success and postgresql_is_running()
 
 
 def postgresql_reload():
     '''Make PostgreSQL reload its configuration.'''
     # reload returns a reliable exit status
-    status, output = commands.getstatusoutput("invoke-rc.d postgresql reload")
-    return (status == 0)
+    if postgresql_is_running():
+        # I'm using the PostgreSQL function to avoid as much indirection
+        # as possible.
+        success = run_select_as_postgres('SELECT pg_reload_conf()')[1][0][0]
+        assert success, 'Failed to reload PostgreSQL configuration'
+        log('PostgreSQL configuration reloaded')
+    return postgresql_start()
 
 
 def requires_restart():
@@ -340,38 +372,38 @@ def requires_restart():
                 # A setting has changed that requires PostgreSQL to be
                 # restarted before it will take effect.
                 restart = True
+                log('{} changed from {} to {}. Restart required.'.format(
+                    name, live_value, new_value), DEBUG)
     return restart
 
 
 def postgresql_reload_or_restart():
     """Reload PostgreSQL configuration, restarting if necessary."""
     if requires_restart():
-        log("Configuration change requires PostgreSQL restart. Restarting.",
-            WARNING)
-        success = postgresql_restart()
-        if not success or requires_restart():
-            log("Configuration changes failed to apply", WARNING)
-            success = False
+        log("Configuration change requires PostgreSQL restart", WARNING)
+        postgresql_restart()
+        assert not requires_restart(), "Configuration changes failed to apply"
     else:
-        success = host.service_reload('postgresql')
+        postgresql_reload()
 
-    if success:
-        local_state['saved_config'] = local_state['live_config']
-        local_state.save()
-
-    return success
+    local_state['saved_config'] = local_state['live_config']
+    local_state.save()
 
 
-def get_service_port(config_file):
+def get_service_port():
     '''Return the port PostgreSQL is listening on.'''
-    if not os.path.exists(config_file):
-        return None
-    postgresql_config = open(config_file, 'r').read()
-    port = re.search("port.*=(.*)", postgresql_config).group(1).strip()
-    try:
-        return int(port)
-    except (ValueError, TypeError):
-        return None
+    for version, name, port in lsclusters(slice(3)):
+        if (version, name) == (pg_version(), hookenv.config('cluster_name')):
+            return int(port)
+
+    assert False, 'No port found for {!r} {!r}'.format(
+        pg_version(), hookenv.config['cluster_name'])
+
+
+def lsclusters(s=slice(0, -1)):
+    for line in run('pg_lsclusters', quiet=True).splitlines()[1:]:
+        if line:
+            yield line.split()[s]
 
 
 def _get_system_ram():
@@ -388,6 +420,8 @@ def _get_page_size():
 def create_postgresql_config(config_file):
     '''Create the postgresql.conf file'''
     config_data = hookenv.config()
+    if not config_data.get('listen_port', None):
+        config_data['listen_port'] = get_service_port()
     if config_data["performance_tuning"] == "auto":
         # Taken from:
         # http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
@@ -439,7 +473,7 @@ def create_postgresql_config(config_file):
     # Return it as pg_config
     charm_dir = hookenv.charm_dir()
     template_file = "{}/templates/postgresql.conf.tmpl".format(charm_dir)
-    if not config_data['version']:
+    if not config_data.get('version', None):
         config_data['version'] = pg_version()
     pg_config = Template(
         open(template_file).read()).render(config_data)
@@ -615,7 +649,7 @@ def install_postgresql_crontab(output_file):
     host.write_file(output_file, crontab_template, perms=0600)
 
 
-def create_recovery_conf(master_host, restart_on_change=False):
+def create_recovery_conf(master_host, master_port, restart_on_change=False):
     version = pg_version()
     cluster_name = hookenv.config('cluster_name')
     postgresql_cluster_dir = os.path.join(
@@ -632,6 +666,7 @@ def create_recovery_conf(master_host, restart_on_change=False):
     template_file = "{}/templates/recovery.conf.tmpl".format(charm_dir)
     recovery_conf = Template(open(template_file).read()).render({
         'host': master_host,
+        'port': master_port,
         'password': local_state['replication_password'],
         'streaming_replication': streaming_replication})
     log(recovery_conf, DEBUG)
@@ -657,17 +692,16 @@ def load_postgresql_config(config_file):
         return(None)
 
 
-#------------------------------------------------------------------------------
-# update_service_ports:  Convenience function that evaluate the old and new
-#                        service ports to decide which ports need to be
-#                        opened and which to close
-#------------------------------------------------------------------------------
-def update_service_port(old_service_port=None, new_service_port=None):
-    if old_service_port is None or new_service_port is None:
-        return(None)
-    if new_service_port != old_service_port:
-        hookenv.close_port(old_service_port)
-        hookenv.open_port(new_service_port)
+def update_service_port():
+    old_port = local_state.get('listen_port', None)
+    new_port = get_service_port()
+    if old_port != new_port:
+        if new_port:
+            hookenv.open_port(new_port)
+        if old_port:
+            hookenv.close_port(old_port)
+        local_state['listen_port'] = new_port
+        local_state.save()
 
 
 def create_ssl_cert(cluster_dir):
@@ -702,12 +736,15 @@ def get_password(user):
 
 
 def db_cursor(autocommit=False, db='postgres', user='postgres',
-              host=None, timeout=30):
+              host=None, port=None, timeout=30):
     import psycopg2
+    if port is None:
+        port = get_service_port()
     if host:
-        conn_str = "dbname={} host={} user={}".format(db, host, user)
+        conn_str = "dbname={} host={} port={} user={}".format(
+            db, host, port, user)
     else:
-        conn_str = "dbname={} user={}".format(db, user)
+        conn_str = "dbname={} port={} user={}".format(db, port, user)
     # There are often race conditions in opening database connections,
     # such as a reload having just happened to change pg_hba.conf
     # settings or a hot standby being restarted and needing to catch up
@@ -748,6 +785,47 @@ def run_select_as_postgres(sql, *parameters):
     # NB. Need to suck in the results before the rowcount is valid.
     results = cur.fetchall()
     return (cur.rowcount, results)
+
+
+def validate_config():
+    """
+    Sanity check charm configuration, aborting the script if
+    we have bogus config values or config changes the charm does not yet
+    (or cannot) support.
+    """
+    valid = True
+    config_data = hookenv.config()
+
+    version = config_data.get('version', None)
+    if version:
+        if version not in ('9.1', '9.2', '9.3'):
+            valid = False
+            log("Invalid or unsupported version {!r} requested".format(
+                version), CRITICAL)
+
+    if config_data['cluster_name'] != 'main':
+        valid = False
+        log("Cluster names other than 'main' do not work per LP:1271835",
+            CRITICAL)
+
+    if config_data['listen_ip'] != '*':
+        valid = False
+        log("listen_ip values other than '*' do not work per LP:1271837",
+            CRITICAL)
+
+    unchangeable_config = [
+        'locale', 'encoding', 'version', 'cluster_name', 'pgdg']
+
+    for name in unchangeable_config:
+        if (name in local_state
+                and local_state[name] != config_data.get(name, None)):
+            valid = False
+            log("Cannot change {!r} setting after install.".format(name))
+        local_state[name] = config_data.get(name, None)
+    local_state.save()
+
+    if not valid:
+        sys.exit(99)
 
 
 #------------------------------------------------------------------------------
@@ -869,6 +947,7 @@ def token_sql_safe(value):
 
 @hooks.hook()
 def config_changed(force_restart=False):
+    validate_config()
     config_data = hookenv.config()
     update_repos_and_packages()
 
@@ -908,19 +987,16 @@ def config_changed(force_restart=False):
     postgresql_hba = os.path.join(postgresql_config_dir, "pg_hba.conf")
     postgresql_ident = os.path.join(postgresql_config_dir, "pg_ident.conf")
 
-    current_service_port = get_service_port(postgresql_config)
     create_postgresql_config(postgresql_config)
+    create_postgresql_ident(postgresql_ident)  # Do this before pg_hba.conf.
     generate_postgresql_hba(postgresql_hba)
-    create_postgresql_ident(postgresql_ident)
     create_ssl_cert(os.path.join(
         postgresql_data_dir, pg_version(), config_data['cluster_name']))
-
-    updated_service_port = config_data["listen_port"]
-    update_service_port(current_service_port, updated_service_port)
+    update_service_port()
     update_nrpe_checks()
     if force_restart:
-        return postgresql_restart()
-    return postgresql_reload_or_restart()
+        postgresql_restart()
+    postgresql_reload_or_restart()
 
 
 @hooks.hook()
@@ -930,6 +1006,8 @@ def install(run_pre=True):
             if os.path.isfile(f) and os.access(f, os.X_OK):
                 subprocess.check_call(['sh', '-c', f])
 
+    validate_config()
+
     config_data = hookenv.config()
     update_repos_and_packages()
     if not 'state' in local_state:
@@ -938,14 +1016,35 @@ def install(run_pre=True):
         # any non-idempotent setup. We should probably fix this; it
         # seems rather fragile.
         local_state.setdefault('state', 'standalone')
-        local_state.publish()
 
         # Drop the cluster created when the postgresql package was
         # installed, and rebuild it with the requested locale and encoding.
         version = pg_version()
-        run("pg_dropcluster --stop {} main".format(version))
-        run("pg_createcluster --locale='{}' --encoding='{}' {} main".format(
-            config_data['locale'], config_data['encoding'], version))
+        for ver, name in lsclusters(slice(2)):
+            if version == ver and name == 'main':
+                run("pg_dropcluster --stop {} main".format(version))
+        listen_port = config_data.get('listen_port', None)
+        if listen_port:
+            port_opt = "--port={}".format(config_data['listen_port'])
+        else:
+            port_opt = ''
+        with switch_cwd('/tmp'):
+            create_cmd = [
+                "pg_createcluster",
+                "--locale", config_data['locale'],
+                "-e", config_data['encoding']]
+            if listen_port:
+                create_cmd.extend(["-p", str(config_data['listen_port'])])
+            create_cmd.append(pg_version())
+            create_cmd.append(config_data['cluster_name'])
+            run(create_cmd)
+        assert (
+            not port_opt
+            or get_service_port() == config_data['listen_port']), (
+            'allocated port {!r} != {!r}'.format(
+                get_service_port(), config_data['listen_port']))
+        local_state['port'] = get_service_port()
+        local_state.publish()
 
     postgresql_backups_dir = (
         config_data['backup_dir'].strip() or
@@ -972,7 +1071,7 @@ def install(run_pre=True):
         '{}/pg_backup_job'.format(postgresql_scripts_dir),
         backup_job, perms=0755)
     install_postgresql_crontab(postgresql_crontab)
-    hookenv.open_port(5432)
+    hookenv.open_port(get_service_port())
 
     # Ensure at least minimal access granted for hooks to run.
     # Reload because we are using the default cluster setup and started
@@ -990,16 +1089,14 @@ def upgrade_charm():
 
 @hooks.hook()
 def start():
-    if not postgresql_reload_or_restart():
-        raise SystemExit(1)
+    postgresql_reload_or_restart()
 
 
 @hooks.hook()
 def stop():
     if postgresql_is_running():
         with restart_lock(hookenv.local_unit(), True):
-            if not postgresql_stop():
-                raise SystemExit(1)
+            postgresql_stop()
 
 
 def quote_identifier(identifier):
@@ -1262,7 +1359,7 @@ def db_relation_joined_changed():
     schema_password = create_user(schema_user)
     ensure_database(user, schema_user, database)
     host = hookenv.unit_private_ip()
-    port = hookenv.config('listen_port')
+    port = get_service_port()
     state = local_state['state']  # master, hot standby, standalone
 
     # Publish connection details.
@@ -1301,7 +1398,7 @@ def db_admin_relation_joined_changed():
 
     password = create_user(user, admin=True)
     host = hookenv.unit_private_ip()
-    port = hookenv.config('listen_port')
+    port = get_service_port()
     state = local_state['state']  # master, hot standby, standalone
 
     # Publish connection details.
@@ -1345,11 +1442,16 @@ def db_relation_broken():
         user = unit_relation_data.get('user', None)
         database = unit_relation_data['database']
 
-        sql = "REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s"
-        run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
-                            AsIs(quote_identifier(user)))
-        run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
-                            AsIs(quote_identifier(user + "_schema")))
+        # We need to check that the database still exists before
+        # attempting to revoke privileges because the local PostgreSQL
+        # cluster may have been rebuilt by another hook.
+        sql = "SELECT datname FROM pg_database WHERE datname = %s"
+        if run_select_as_postgres(sql, database)[0] != 0:
+            sql = "REVOKE ALL PRIVILEGES ON DATABASE %s FROM %s"
+            run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                                AsIs(quote_identifier(user)))
+            run_sql_as_postgres(sql, AsIs(quote_identifier(database)),
+                                AsIs(quote_identifier(user + "_schema")))
 
     postgresql_hba = os.path.join(_get_postgresql_config_dir(), "pg_hba.conf")
     generate_postgresql_hba(postgresql_hba)
@@ -1365,8 +1467,13 @@ def db_admin_relation_broken():
     if local_state['state'] in ('master', 'standalone'):
         user = hookenv.relation_get('user', unit=hookenv.local_unit())
         if user:
-            sql = "ALTER USER %s NOSUPERUSER"
-            run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
+            # We need to check that the user still exists before
+            # attempting to revoke privileges because the local PostgreSQL
+            # cluster may have been rebuilt by another hook.
+            sql = "SELECT usename FROM pg_user WHERE usename = %s"
+            if run_select_as_postgres(sql, user)[0] != 0:
+                sql = "ALTER USER %s NOSUPERUSER"
+                run_sql_as_postgres(sql, AsIs(quote_identifier(user)))
 
     postgresql_hba = os.path.join(_get_postgresql_config_dir(), "pg_hba.conf")
     generate_postgresql_hba(postgresql_hba)
@@ -1376,18 +1483,62 @@ def db_admin_relation_broken():
 
 
 def update_repos_and_packages():
-    extra_repos = hookenv.config('extra_archives')
-    extra_repos_added = local_state.setdefault('extra_repos_added', set())
-    if extra_repos:
-        repos_added = False
-        for repo in extra_repos.split():
-            if repo not in extra_repos_added:
-                fetch.add_source(repo)
-                extra_repos_added.add(repo)
-                repos_added = True
-        if repos_added:
-            fetch.apt_update(fatal=True)
-            local_state.save()
+    need_upgrade = False
+
+    # Add the PGDG APT repository if it is enabled. Setting this boolean
+    # is simpler than requiring the magic URL and key be added to
+    # install_sources and install_keys. In addition, per Bug #1271148,
+    # install_keys is likely a security hole for this sort of remote
+    # archive. Instead, we keep a copy of the signing key in the charm
+    # and can add it securely.
+    pgdg_list = '/etc/apt/sources.list.d/pgdg_{}.list'.format(
+        sanitize(hookenv.local_unit()))
+    pgdg_key = 'ACCC4CF8'
+
+    if hookenv.config('pgdg'):
+        if not os.path.exists(pgdg_list):
+            # We need to upgrade, as if we have Ubuntu main packages
+            # installed they may be incompatible with the PGDG ones.
+            # This is unlikely to ever happen outside of the test suite,
+            # and never if you don't reuse machines.
+            need_upgrade = True
+            run("apt-key add lib/{}.asc".format(pgdg_key))
+            open(pgdg_list, 'w').write('deb {} {}-pgdg main'.format(
+                'http://apt.postgresql.org/pub/repos/apt/', distro_codename()))
+    elif os.path.exists(pgdg_list):
+        log(
+            "PGDG apt source not requested, but already in place in this "
+            "container", WARNING)
+        # We can't just remove a source, as we may have packages
+        # installed that conflict with ones from the other configured
+        # sources. In particular, if we have postgresql-common installed
+        # from the PGDG Apt source, PostgreSQL packages from Ubuntu main
+        # will fail to install.
+        # os.unlink(pgdg_list)
+
+    # Try to optimize our calls to fetch.configure_sources(), as it
+    # cannot do this itself due to lack of state.
+    if (need_upgrade
+        or local_state.get('install_sources', None)
+            != hookenv.config('install_sources')
+        or local_state.get('install_keys', None)
+            != hookenv.config('install_keys')):
+        # Support the standard mechanism implemented by charm-helpers. Pulls
+        # from the default 'install_sources' and 'install_keys' config
+        # options. This also does 'apt-get update', pulling in the PGDG data
+        # if we just configured it.
+        fetch.configure_sources(True)
+        local_state['install_sources'] = hookenv.config('install_sources')
+        local_state['install_keys'] = hookenv.config('install_keys')
+        local_state.save()
+
+    # Ensure that the desired database locale is possible.
+    if hookenv.config('locale') != 'C':
+        run(["locale-gen", "{}.{}".format(
+            hookenv.config('locale'), hookenv.config('encoding'))])
+
+    if need_upgrade:
+        run("apt-get -y upgrade")
 
     version = pg_version()
     # It might have been better for debversion and plpython to only get
@@ -1395,11 +1546,14 @@ def update_repos_and_packages():
     # but they predate this feature.
     packages = ["python-psutil",  # to obtain system RAM from python
                 "libc-bin",       # for getconf
-                "postgresql-%s" % version,
-                "postgresql-contrib-%s" % version,
-                "postgresql-plpython-%s" % version,
-                "postgresql-%s-debversion" % version,
+                "postgresql-{}".format(version),
+                "postgresql-contrib-{}".format(version),
+                "postgresql-plpython-{}".format(version),
                 "python-jinja2", "syslinux", "python-psycopg2"]
+    # PGDG currently doesn't have debversion for 9.3. Put this back when
+    # it does.
+    if not (hookenv.config('pgdg') and version == '9.3'):
+        "postgresql-{}-debversion".format(version)
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
     fetch.apt_install(packages, fatal=True)
@@ -1434,25 +1588,6 @@ def pgpass():
             os.environ['PGPASSFILE'] = org_pgpassfile
 
 
-def drop_database(dbname, warn=True):
-    import psycopg2
-    timeout = 120
-    now = time.time()
-    while True:
-        try:
-            db_cursor(autocommit=True).execute(
-                'DROP DATABASE IF EXISTS "{}"'.format(dbname))
-        except psycopg2.Error:
-            if time.time() > now + timeout:
-                if warn:
-                    log("Unable to drop database {}".format(dbname), WARNING)
-                else:
-                    raise
-            time.sleep(0.5)
-        else:
-            break
-
-
 def authorized_by(unit):
     '''Return True if the peer has authorized our database connections.'''
     relation = hookenv.relation_get(unit=unit)
@@ -1481,7 +1616,8 @@ def follow_database(master):
     '''Connect the database as a streaming replica of the master.'''
     master_relation = hookenv.relation_get(unit=master)
     create_recovery_conf(
-        master_relation['private-address'], restart_on_change=True)
+        master_relation['private-address'],
+        master_relation['port'], restart_on_change=True)
 
 
 def elected_master():
@@ -1627,6 +1763,7 @@ def replication_relation_joined_changed():
             local_state['replication_password'] = replication_password
             local_state['client_relations'] = ' '.join(
                 hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
+            local_state.publish()
 
         else:
             log("I am master and remain master")
@@ -1644,8 +1781,10 @@ def replication_relation_joined_changed():
                 master))
 
             master_ip = hookenv.relation_get('private-address', master)
+            master_port = hookenv.relation_get('port', master)
+            assert master_port is not None, 'No master port set'
 
-            clone_database(master, master_ip)
+            clone_database(master, master_ip, master_port)
 
             local_state['state'] = 'hot standby'
             local_state['following'] = master
@@ -1720,7 +1859,7 @@ def publish_hot_standby_credentials():
 
         # Override unit specific connection details
         connection_settings['host'] = hookenv.unit_private_ip()
-        connection_settings['port'] = hookenv.config('listen_port')
+        connection_settings['port'] = get_service_port()
         connection_settings['state'] = local_state['state']
 
         # Block until users and database has replicated, so we know the
@@ -1842,9 +1981,10 @@ def restart_lock(unit, exclusive):
                 cur = db_cursor(autocommit=True)
             else:
                 host = hookenv.relation_get('private-address', unit)
+                port = hookenv.relation_get('port', unit)
                 cur = db_cursor(
-                    autocommit=True, db='postgres',
-                    user='juju_replication', host=host)
+                    autocommit=True, db='postgres', user='juju_replication',
+                    host=host, port=port)
             cur.execute(q)
             break
         except psycopg2.Error:
@@ -1862,7 +2002,7 @@ def restart_lock(unit, exclusive):
             pass
 
 
-def clone_database(master_unit, master_host):
+def clone_database(master_unit, master_host, master_port):
     with restart_lock(master_unit, False):
         postgresql_stop()
         log("Cloning master {}".format(master_unit))
@@ -1877,7 +2017,8 @@ def clone_database(master_unit, master_host):
             'sudo', '-E',  # -E needed to locate pgpass file.
             '-u', 'postgres', 'pg_basebackup', '-D', postgresql_cluster_dir,
             '--xlog', '--checkpoint=fast', '--no-password',
-            '-h', master_host, '-p', '5432', '--username=juju_replication']
+            '-h', master_host, '-p', master_port,
+            '--username=juju_replication']
         log(' '.join(cmd), DEBUG)
 
         if os.path.isdir(postgresql_cluster_dir):
@@ -1892,7 +2033,7 @@ def clone_database(master_unit, master_host):
             log(output, DEBUG)
             # Debian by default expects SSL certificates in the datadir.
             create_ssl_cert(postgresql_cluster_dir)
-            create_recovery_conf(master_host)
+            create_recovery_conf(master_host, master_port)
         except subprocess.CalledProcessError as x:
             # We failed, and this cluster is broken. Rebuild a
             # working cluster so start/stop etc. works and we
@@ -1964,9 +2105,10 @@ def wal_location_to_bytes(wal_location):
     return int(logid, 16) * 16 * 1024 * 1024 * 255 + int(offset, 16)
 
 
-def wait_for_db(timeout=120, db='postgres', user='postgres', host=None):
+def wait_for_db(
+        timeout=120, db='postgres', user='postgres', host=None, port=None):
     '''Wait until the db is fully up.'''
-    db_cursor(db=db, user=user, host=host, timeout=timeout)
+    db_cursor(db=db, user=user, host=host, port=port, timeout=timeout)
 
 
 def unit_sorted(units):
@@ -2025,7 +2167,7 @@ def update_nrpe_checks():
         nrpe_check_config.write("# check pgsql\n")
         nrpe_check_config.write(
             "command[check_pgsql]=/usr/lib/nagios/plugins/check_pgsql -P {}"
-            .format(config_data['listen_port']))
+            .format(get_service_port()))
     # pgsql backups
     nrpe_check_file = '/etc/nagios/nrpe.d/check_pgsql_backups.cfg'
     backup_log = "{}/backups.log".format(postgresql_logs_dir)
