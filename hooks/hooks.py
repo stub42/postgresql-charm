@@ -1009,7 +1009,7 @@ def upgrade_charm():
             unit_name = hookenv.local_unit()
             new_mount_root = "/srv/data"
             new_pg_version_cluster_dir = os.path.join(
-                new_mount_root, version, cluster_name)
+                new_mount_root, "postgresql", version, cluster_name)
             if not os.exists(new_mount_root):
                 os.mkdir(new_mount_root)
             log("\n"
@@ -1055,17 +1055,13 @@ def upgrade_charm():
                 new_pg_version_cluster_dir, data_directory_path))
             os.symlink(new_pg_version_cluster_dir, data_directory_path)
             run("chown -h postgres:postgres {}".format(data_directory_path))
-            postgresql_start()
-            if postgresql_is_running():
-                log("Remount and restart success for this external volume.\n"
-                    "This current running installation will break upon\n"
-                    "add/remove postgresql units or relations if you do not\n"
-                    "follow the above procedure to ensure your external\n"
-                    "volumes are preserved by the storage subordinate charm.",
-                    WARNING)
-            else:
-                log("Unable to restart postgresql after remount. "
-                    "Postgres left stopped.", ERROR)
+            postgresql_start()  # Will exit(1) if issues
+            log("Remount and restart success for this external volume.\n"
+                "This current running installation will break upon\n"
+                "add/remove postgresql units or relations if you do not\n"
+                "follow the above procedure to ensure your external\n"
+                "volumes are preserved by the storage subordinate charm.",
+                WARNING)
             # So juju admins can see the hook fail and note the steps to fix
             # per our WARNINGs above
             sys.exit(1)
