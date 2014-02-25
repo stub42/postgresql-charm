@@ -982,11 +982,18 @@ def install(run_pre=True):
 
 @hooks.hook()
 def upgrade_charm():
+    """Handle saving state during an upgrade-charm hook.
+
+    When upgrading from an installation using volume-map, we migrate
+    that installation to use the storage subordinate charm by remounting
+    a mountpath that the storage subordinate maintains. We exit(1) only to
+    raise visibility to manual procedure that we log in juju logs below for the
+    juju admin to finish the migration by relating postgresql to the storage
+    and block-storage-broker services. These steps are generalised in the
+    README as well.
+    """
     install(run_pre=False)
     snapshot_relations()
-    # XXX Handle case where device is already mounted at
-    # /srv/juju/6694a6c9-0dfd-4ef8-ae1f-0658c2f45042 we need to migrate to
-    # the mount point where storage subordinate mounts
     version = pg_version()
     cluster_name = hookenv.config('cluster_name')
     data_directory_path = os.path.join(
@@ -997,7 +1004,7 @@ def upgrade_charm():
             # Then we just upgraded from an installation that was using
             # charm config volume_map definitions. We need to stop postgresql
             # and remount the device where the storage subordinate expects to
-            # control the mount in the future if relations change
+            # control the mount in the future if relations/units change
             volume_id = link_target.split("/")[3]
             unit_name = hookenv.local_unit()
             new_mount_root = "/srv/data"
