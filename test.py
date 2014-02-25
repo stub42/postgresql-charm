@@ -25,13 +25,30 @@ from testing.jujufixture import JujuFixture, run
 
 SERIES = 'precise'
 TEST_CHARM = 'local:postgresql'
-PSQL_CHARM = 'local:postgresql-psql'
+PSQL_CHARM = 'cs:postgresql-psql'
 
 
-class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
+class PostgreSQLCharmBaseTestCase(object):
+
+    # Override these in subclasses to run these tests multiple times
+    # for different PostgreSQL versions.
+
+    # PostgreSQL version for tests. One of the subclasses leaves the
+    # VERSION as None to test automatic version selection.
+    VERSION = None
+
+    # Use the PGDG Apt archive or not. One of the subclasses sets this
+    # to False to test the Ubuntu main packages. The rest set this to
+    # True to pull packages from the PGDG (only one PostgreSQL version
+    # exists in main).
+    PGDG = None
 
     def setUp(self):
-        super(PostgreSQLCharmTestCase, self).setUp()
+        super(PostgreSQLCharmBaseTestCase, self).setUp()
+
+        # Generate a basic config for all PostgreSQL charm deploys.
+        # Tests may add or change options.
+        self.pg_config = dict(version=self.VERSION, pgdg=self.PGDG)
 
         self.juju = self.useFixture(JujuFixture(
             reuse_machines=True,
@@ -84,10 +101,23 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
             # Due to Bug #1191079, we need to send the whole remote command
             # as a single argument.
             ' '.join(psql_cmd + psql_args)]
-        out = run(self, cmd, input=sql)
-        result = [line.split(',') for line in out.splitlines()]
-        self.addDetail('sql', text_content(repr((sql, result))))
-        return result
+        # The hooks are complex, and it is common that relations haven't
+        # yet been setup despite sleep()ing after juju reports
+        # everything is up. Increasing the sleep() in jujufixture
+        # further is just getting crazy, so instead here we loop a few
+        # times with a shorter wait.
+        attempts = 0
+        while True:
+            attempts += 1
+            try:
+                out = run(self, cmd, input=sql)
+                result = [line.split(',') for line in out.splitlines()]
+                self.addDetail('sql', text_content(repr((sql, result))))
+                return result
+            except subprocess.CalledProcessError:
+                if attempts >= 3:
+                    raise
+            time.sleep(30)
 
     def pg_ctlcluster(self, unit, command):
         cmd = [
@@ -99,7 +129,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
     def test_basic(self):
         '''Connect to a a single unit service via the db relationship.'''
-        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
@@ -107,11 +137,27 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         result = self.sql('SELECT TRUE')
         self.assertEqual(result, [['t']])
 
+    def test_streaming_replication(self):
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
+        self.juju.wait_until_ready()
+
+        # Confirm that the slave has successfully opened a streaming
+        # replication connection.
+        num_slaves = self.sql(
+            'SELECT COUNT(*) FROM pg_stat_replication',
+            postgres_unit='master')[0][0]
+
+        self.assertEqual(num_slaves, '1', 'Slave not connected')
+
     def test_basic_admin(self):
         '''Connect to a single unit service via the db-admin relationship.'''
-        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
+        self.juju.do(['expose', 'postgresql'])
         self.juju.wait_until_ready()
 
         result = self.sql('SELECT TRUE', dbname='postgres')
@@ -125,7 +171,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
     def test_failover(self):
         """Set up a multi-unit service and perform failovers."""
-        self.juju.deploy(TEST_CHARM, 'postgresql', num_units=3)
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=3, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
@@ -213,7 +260,8 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
 
     def test_failover_election(self):
         """Ensure master elected in a failover is the best choice"""
-        self.juju.deploy(TEST_CHARM, 'postgresql', num_units=3)
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=3, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
         self.juju.wait_until_ready()
@@ -261,7 +309,15 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.assertIs(False, self.is_master(standby_unit_1, 'postgres'))
 
     def test_admin_addresses(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql')
+
+        # This test also tests explicit port assignment. We need
+        # a different port for each PostgreSQL version we might be
+        # testing, because clusters from previous tests of different
+        # versions may be hanging around.
+        port = 7400 + int((self.VERSION or '66').replace('.', ''))
+        self.pg_config['listen_port'] = port
+
+        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
         self.juju.wait_until_ready()
@@ -271,7 +327,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         unit_ip = self.juju.status['services']['postgresql']['units'][
             unit]['public-address']
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect((unit_ip, 5432))
+        s.connect((unit_ip, port))
         my_ip = s.getsockname()[0]
         del s
 
@@ -280,8 +336,9 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
             "ALTER USER postgres ENCRYPTED PASSWORD 'foo'", dbname='postgres')
 
         # Direct connection string to the unit's database.
-        conn_str = 'dbname=postgres user=postgres password=foo host={}'.format(
-            unit_ip)
+        conn_str = (
+            'dbname=postgres user=postgres password=foo '
+            'host={} port={}'.format(unit_ip, port))
 
         # Direct database connections should fail at the moment.
         self.assertRaises(
@@ -297,7 +354,7 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.assertEquals(1, cur.fetchone()[0])
 
     def test_explicit_database(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql')
+        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['set', 'psql', 'database=explicit'])
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
@@ -306,11 +363,12 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         result = self.sql('SELECT current_database()')
         self.assertEqual(result, [['explicit']])
 
-
     def test_roles_granted(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql')
-        self.juju.deploy(PSQL_CHARM, 'psql')
-        self.juju.do(['set', 'psql', 'roles=role_a'])
+        # We use two units to confirm that there is no attempts to
+        # grant roles on the hot standby.
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
+        self.juju.deploy(PSQL_CHARM, 'psql', config={'roles': 'role_a'})
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
 
@@ -330,9 +388,11 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
         self.assertEqual(result, [['t', 't']])
 
     def test_roles_revoked(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql')
-        self.juju.deploy(PSQL_CHARM, 'psql')
-        self.juju.do(['set', 'psql', 'roles=role_a,role_b'])
+        # We use two units to confirm that there is no attempts to
+        # grant roles on the hot standby.
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
+        self.juju.deploy(PSQL_CHARM, 'psql', config={'roles': 'role_a,role_b'})
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.juju.wait_until_ready()
 
@@ -364,6 +424,29 @@ class PostgreSQLCharmTestCase(testtools.TestCase, fixtures.TestWithFixtures):
                 pg_has_role(current_user, 'role_c', 'MEMBER')
             ''')
         self.assertEqual(result, [['f', 'f', 'f']])
+
+
+class PG91Tests(
+        PostgreSQLCharmBaseTestCase,
+        testtools.TestCase, fixtures.TestWithFixtures):
+    # Test automatic version selection under precise.
+    VERSION = None if SERIES == 'precise' else '9.1'
+    PGDG = False if SERIES == 'precise' else True
+
+
+class PG92Tests(
+        PostgreSQLCharmBaseTestCase,
+        testtools.TestCase, fixtures.TestWithFixtures):
+    VERSION = '9.2'
+    PGDG = True
+
+
+class PG93Tests(
+        PostgreSQLCharmBaseTestCase,
+        testtools.TestCase, fixtures.TestWithFixtures):
+    # Test automatic version selection under trusty.
+    VERSION = None if SERIES == 'trusty' else '9.3'
+    PGDG = False if SERIES == 'trusty' else True
 
 
 def unit_sorted(units):

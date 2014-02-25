@@ -23,6 +23,11 @@ unix_socket_directories = '/var/run/postgresql'
 unix_socket_directory = '/var/run/postgresql'
 {% endif -%}
 
+{% if version >= "9.2" -%}
+ssl_cert_file = '/etc/ssl/certs/ssl-cert-snakeoil.pem'
+ssl_key_file = '/etc/ssl/private/ssl-cert-snakeoil.key'
+{% endif -%}
+
 {% if listen_ip != "" -%}
 listen_addresses = '{{listen_ip}}'
 {% endif -%}
