@@ -725,7 +725,7 @@ def config_changed_volume_apply(mount_point=None):
         return True
 
     # Create a directory structure below "new" mount_point, as e.g.:
-    #   /srv/juju/vol-000012345/postgresql/9.1/main  , which "mimics":
+    #   config["storage_mount_point"]/postgresql/9.1/main  , which "mimics":
     #   /var/lib/postgresql/9.1/main
     curr_dir_stat = os.stat(data_directory_path)
     for new_dir in [new_pg_dir,
@@ -739,7 +739,7 @@ def config_changed_volume_apply(mount_point=None):
             os.chmod(new_dir, curr_dir_stat.st_mode)
     # Carefully build this symlink, e.g.:
     # /var/lib/postgresql/9.1/main ->
-    # /srv/juju/vol-000012345/postgresql/9.1/main
+    # config["storage_mount_point"]/postgresql/9.1/main
     # but keep previous "main/"  directory, by renaming it to
     # main-$TIMESTAMP
     if not postgresql_stop() and postgresql_is_running():
@@ -884,6 +884,52 @@ def install(run_pre=True):
 def upgrade_charm():
     install(run_pre=False)
     snapshot_relations()
+    # XXX Handle case where device is already mounted at
+    # /srv/juju/6694a6c9-0dfd-4ef8-ae1f-0658c2f45042 we need to migrate to
+    # the mount point where storage subordinate mounts
+    version = pg_version()
+    cluster_name = hookenv.config('cluster_name')
+    data_directory_path = os.path.join(
+        postgresql_data_dir, version, cluster_name)
+    if (os.path.islink(data_directory_path)):
+        link_target = os.readlink(data_directory_path)
+        if "/srv/juju" in link_target:
+            # Then we just upgraded from an installation that was using
+            # charm config volume_map definitions. We need to stop postgresql
+            # an unmount the device so that storage subordinate can remount it
+            volume_id = link_target.split("/")[3]
+            unit_name = hookenv.local_unit()
+            config_data = hookenv.config()
+            log("WARNING: %s unit has external volume id %s mounted via the "
+                "deprecated volume-map and volume-ephemeral-storage"
+                "configuration parameters." % (unit_name, volume_id), WARNING)
+            log("These parameters are no longer available in the postgresql "
+                "charm in favor of using the volume_map parameter in the "
+                "storage subordinate charm.", WARNING)
+            log("The attached volume is left intact. To continue using this "
+                "volume_id with the storage subordinate follow this procedure."
+                "\n-----------------------------------\n"
+                "1. cat > storage.cfg <<EOF\nstorage:\n"
+                "storage:\n  volume_map: \"%s\"\nEOF\n2. juju deploy "
+                "--config storage.cfg storage\n3. juju resolved --retry "
+                "%s\n4. juju add-relation postgresql storage\n"
+                "\n-----------------------------------\n" %
+                (config_data["volume-map"], unit_name), WARNING)
+            postgresql_stop()
+            os.unlink(data_directory_path)
+            log("Unmounting external storage due to charm upgrade: %s" %
+                link_target)
+            try:
+                subprocess.check_call("umount %s" % link_target)
+            except subprocess.CalledProcessError, e:
+                log("Unmount failed. %s" % str(e), ERROR)
+                sys.exit(1)
+            log("Unmount success. External volume will remount when "
+                "juju add-relation postgresql storage is completed manually "
+                "per the above procedure.")
+            # So juju admins can see the hook fail and note the steps to fix
+            # per our WARNINGs above
+            sys.exit(1)
 
 
 @hooks.hook()
