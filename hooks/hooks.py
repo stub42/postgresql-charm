@@ -1024,7 +1024,7 @@ def upgrade_charm():
                 "continue using this volume_id with the storage subordinate\n"
                 "follow this procedure.\n-----------------------------------\n"
                 "1. cat > storage.cfg <<EOF\nstorage:\n"
-                "  provider:block-storage-broker\n"
+                "  provider: block-storage-broker\n"
                 "  root: %s\n"
                 "  volume_map: \"{%s: %s}\"\nEOF\n2. juju deploy "
                 "--config storage.cfg storage\n"
