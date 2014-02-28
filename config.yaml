@@ -336,12 +336,6 @@ options:
         An advisory lock key used internally by the charm. You do not need
         to change it unless it happens to conflict with an advisory lock key
         being used by your applications.
-  storage_mount_point:
-    default: "/mnt/storage"
-    type: string
-    description: |
-        The location where the storage is going to be mounted.
-
   # Swift backups and PITR via SwiftWAL
   swiftwal_container_prefix:
     type: string

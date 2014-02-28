@@ -115,6 +115,9 @@ class TestJuju(object):
             "backup_schedule": "13 4 * * *",
             "backup_retention_count": 7,
             "nagios_context": "juju",
+            "pgdg": False,
+            "install_sources": "",
+            "install_keys": "",
             "extra_archives": "",
             "advisory_lock_restart_key": 765}
 
@@ -176,11 +179,11 @@ class TestJuju(object):
         log = getattr(self, "_log_%s" % level)
         setattr(self, "_log_%s" % level, log + (message,))
 
-    def config_get(self, scope=None):
+    def config(self, scope=None):
         if scope is None:
-            return self.config
+            return self._config
         else:
-            return self.config[scope]
+            return self._config[scope]
 
     def relation_get(self, scope=None, unit_name=None, relation_id=None):
         if scope:
@@ -196,7 +199,6 @@ class TestHooks(mocker.MockerTestCase):
         hooks.hookenv = TestJuju()
         hooks.host = TestJujuHost()
         hooks.juju_log_dir = self.makeDir()
-        hooks.hookenv.config = lambda: hooks.hookenv._config
         hooks.os.environ["JUJU_UNIT_NAME"] = "landscape/1"
         hooks.os.environ["CHARM_DIR"] = os.path.abspath(
             os.path.join(os.path.dirname(__file__), os.pardir))
@@ -251,8 +253,7 @@ class TestHooksService(TestHooks):
         set C{mountpoint} in the relation in order to request a specific
         mountpoint from the storage charm.
         """
-        mount = "/mnt/this/please"
-        hooks.hookenv._config["storage_mount_point"] = mount
+        mount = hooks.external_volume_mount
         hooks.data_relation_joined()
         message = "Setting mount point in the relation: %s" % mount
         self.assertIn(
@@ -264,7 +265,7 @@ class TestHooksService(TestHooks):
         with the properly configured C{mountpoint} in the 'data' relation
         before calling C{config_changed}.
         """
-        mount = "/mnt/this/please"
+        mount = hooks.external_volume_mount
         hooks.hookenv._config["storage_mount_point"] = mount
         self.assertEqual(hooks.hookenv._incoming_relation_data, ())
         hooks.data_relation_changed()
@@ -277,8 +278,7 @@ class TestHooksService(TestHooks):
         C{data_relation_changed} will call C{config_changed} when it receives
         the successfuly mounted C{mountpoint} from storage charm.
         """
-        mount = "/mnt/this/please"
-        hooks.hookenv._config["storage_mount_point"] = mount
+        mount = hooks.external_volume_mount
         self.addCleanup(
             setattr, hooks.hookenv, "_incoming_relation_data", ())
         hooks.hookenv._incoming_relation_data = (("mountpoint", mount),)

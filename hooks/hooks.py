@@ -145,9 +145,7 @@ class State(dict):
 
 
 def volume_get_all_mounted():
-    config_data = hookenv.config()
-    storage_mount_point = config_data["storage_mount_point"]
-    command = ("mount |egrep %s" % storage_mount_point)
+    command = ("mount |egrep %s" % external_volume_mount)
     status, output = commands.getstatusoutput(command)
     if status != 0:
         return None
@@ -760,18 +758,13 @@ def validate_config():
 #     - if fresh new storage dir: rsync existing data
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
 #------------------------------------------------------------------------------
-def config_changed_volume_apply(mount_point=None):
+def config_changed_volume_apply(mount_point):
     version = pg_version()
     cluster_name = hookenv.config('cluster_name')
     data_directory_path = os.path.join(
         postgresql_data_dir, version, cluster_name)
 
     assert(data_directory_path)
-
-    if not mount_point:
-        log("Invalid volume storage configuration, not applying changes",
-            ERROR)
-        return False
 
     if not os.path.exists(data_directory_path):
         log(
@@ -804,7 +797,7 @@ def config_changed_volume_apply(mount_point=None):
         return True
 
     # Create a directory structure below "new" mount_point, as e.g.:
-    #   config["storage_mount_point"]/postgresql/9.1/main  , which "mimics":
+    #   external_volume_mount/postgresql/9.1/main  , which "mimics":
     #   /var/lib/postgresql/9.1/main
     curr_dir_stat = os.stat(data_directory_path)
     for new_dir in [new_pg_dir,
@@ -818,7 +811,7 @@ def config_changed_volume_apply(mount_point=None):
             os.chmod(new_dir, curr_dir_stat.st_mode)
     # Carefully build this symlink, e.g.:
     # /var/lib/postgresql/9.1/main ->
-    # config["storage_mount_point"]/postgresql/9.1/main
+    # external_volume_mount/postgresql/9.1/main
     # but keep previous "main/"  directory, by renaming it to
     # main-$TIMESTAMP
     if not postgresql_stop() and postgresql_is_running():
@@ -1007,7 +1000,7 @@ def upgrade_charm():
             # control the mount in the future if relations/units change
             volume_id = link_target.split("/")[3]
             unit_name = hookenv.local_unit()
-            new_mount_root = "/srv/data"
+            new_mount_root = external_volume_mount
             new_pg_version_cluster_dir = os.path.join(
                 new_mount_root, "postgresql", version, cluster_name)
             if not os.exists(new_mount_root):
@@ -1475,6 +1468,7 @@ def update_repos_and_packages():
         sanitize(hookenv.local_unit()))
     pgdg_key = 'ACCC4CF8'
 
+    import pdb; pdb.set_trace()
     if hookenv.config('pgdg'):
         if not os.path.exists(pgdg_list):
             # We need to upgrade, as if we have Ubuntu main packages
@@ -2176,24 +2170,20 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
 @hooks.hook('data-relation-changed')
 def data_relation_changed():
     """Listen for configured mountpoint from storage subordinate relation"""
-    config_data = hookenv.config()
-    storage_mount_point = config_data["storage_mount_point"]
     if not hookenv.relation_get("mountpoint"):
         hookenv.log("Waiting for mountpoint from the relation: %s"
-                    % storage_mount_point, hookenv.DEBUG)
+                    % external_volume_mount, hookenv.DEBUG)
     else:
         hookenv.log("Storage ready and mounted", hookenv.DEBUG)
-        config_changed(mount_point=storage_mount_point)
+        config_changed(mount_point=external_volume_mount)
 
 
 @hooks.hook('data-relation-joined')
 def data_relation_joined():
     """Request mountpoint from storage subordinate by setting mountpoint"""
-    config_data = hookenv.config()
-    storage_mount_point = config_data["storage_mount_point"]
     hookenv.log("Setting mount point in the relation: %s"
-                % storage_mount_point, hookenv.DEBUG)
-    hookenv.relation_set(mountpoint=storage_mount_point)
+                % external_volume_mount, hookenv.DEBUG)
+    hookenv.relation_set(mountpoint=external_volume_mount)
 
 
 @hooks.hook('data-relation-departed')
@@ -2226,6 +2216,7 @@ replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')
 hook_name = os.path.basename(sys.argv[0])
 juju_log_dir = "/var/log/juju"
+external_volume_mount = "/srv/data"
 
 
 if __name__ == '__main__':
