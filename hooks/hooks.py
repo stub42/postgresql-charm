@@ -1463,7 +1463,6 @@ def update_repos_and_packages():
         sanitize(hookenv.local_unit()))
     pgdg_key = 'ACCC4CF8'
 
-    import pdb; pdb.set_trace()
     if hookenv.config('pgdg'):
         if not os.path.exists(pgdg_list):
             # We need to upgrade, as if we have Ubuntu main packages
