@@ -796,19 +796,14 @@ def config_changed_volume_apply(mount_point):
         run("chown -R postgres:postgres %s" % new_pg_dir)
         return True
 
-    # Create a directory structure below "new" mount_point, as e.g.:
-    #   external_volume_mount/postgresql/9.1/main  , which "mimics":
-    #   /var/lib/postgresql/9.1/main
-    curr_dir_stat = os.stat(data_directory_path)
+    # Create a directory structure below "new" mount_point as
+    #   external_volume_mount/postgresql/9.1/main
     for new_dir in [new_pg_dir,
                     os.path.join(new_pg_dir, version),
                     new_pg_version_cluster_dir]:
         if not os.path.isdir(new_dir):
             log("mkdir %s".format(new_dir))
-            os.mkdir(new_dir)
-            # copy permissions from current data_directory_path
-            os.chown(new_dir, curr_dir_stat.st_uid, curr_dir_stat.st_gid)
-            os.chmod(new_dir, curr_dir_stat.st_mode)
+            host.mkdir(new_dir, owner="postgres", perms=0o700)
     # Carefully build this symlink, e.g.:
     # /var/lib/postgresql/9.1/main ->
     # external_volume_mount/postgresql/9.1/main
