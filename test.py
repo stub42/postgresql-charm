@@ -101,10 +101,23 @@ class PostgreSQLCharmBaseTestCase(object):
             # Due to Bug #1191079, we need to send the whole remote command
             # as a single argument.
             ' '.join(psql_cmd + psql_args)]
-        out = run(self, cmd, input=sql)
-        result = [line.split(',') for line in out.splitlines()]
-        self.addDetail('sql', text_content(repr((sql, result))))
-        return result
+        # The hooks are complex, and it is common that relations haven't
+        # yet been setup despite sleep()ing after juju reports
+        # everything is up. Increasing the sleep() in jujufixture
+        # further is just getting crazy, so instead here we loop a few
+        # times with a shorter wait.
+        attempts = 0
+        while True:
+            attempts += 1
+            try:
+                out = run(self, cmd, input=sql)
+                result = [line.split(',') for line in out.splitlines()]
+                self.addDetail('sql', text_content(repr((sql, result))))
+                return result
+            except subprocess.CalledProcessError:
+                if attempts >= 3:
+                    raise
+            time.sleep(30)
 
     def pg_ctlcluster(self, unit, command):
         cmd = [

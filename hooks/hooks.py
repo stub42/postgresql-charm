@@ -248,7 +248,8 @@ def postgresql_autostart(enabled):
 
 def run(command, exit_on_error=True, quiet=False):
     '''Run a command and return the output.'''
-    log("Running {!r}".format(command), DEBUG)
+    if not quiet:
+        log("Running {!r}".format(command), DEBUG)
     p = subprocess.Popen(
         command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         shell=isinstance(command, basestring))
@@ -1372,8 +1373,8 @@ def db_relation_joined_changed():
 
     # Update the peer relation, notifying any hot standby units
     # to republish connection details to the client relation.
-    local_state['client_relations'] = ' '.join(
-        hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
+    local_state['client_relations'] = ' '.join(sorted(
+        hookenv.relation_ids('db') + hookenv.relation_ids('db-admin')))
     log("Client relations {}".format(local_state['client_relations']))
     local_state.publish()
 
@@ -1861,6 +1862,13 @@ def publish_hot_standby_credentials():
         connection_settings['host'] = hookenv.unit_private_ip()
         connection_settings['port'] = get_service_port()
         connection_settings['state'] = local_state['state']
+        requested_db = hookenv.relation_get('database')
+        # A hot standby might have seen a database name change before
+        # the master, so override. This is no problem because we block
+        # until this database has been created on the master and
+        # replicated through to this unit.
+        if requested_db:
+            connection_settings['database'] = requested_db
 
         # Block until users and database has replicated, so we know the
         # connection details we publish are actually valid. This will
@@ -1877,7 +1885,8 @@ def publish_hot_standby_credentials():
                 connection_settings['database']))
             time.sleep(10)
 
-        log("Connection settings {!r}".format(connection_settings), DEBUG)
+        log("Relation {} connection settings {!r}".format(
+            client_relation, connection_settings), DEBUG)
         hookenv.relation_set(
             client_relation, relation_settings=connection_settings)
 
