@@ -88,6 +88,8 @@ effective_cache_size = {{effective_cache_size}}
 # ERROR REPORTING AND LOGGING
 #------------------------------------------------------------------------------
 
+include 'juju_logdest.conf'
+
 {% if log_min_duration_statement  != "" -%}
 log_min_duration_statement = {{log_min_duration_statement}}
 {% endif -%}
