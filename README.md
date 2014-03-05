@@ -130,6 +130,16 @@ directly to juju generated database users, as the charm may revoke them.
 - `allowed-units`: space separated list of allowed clients (unit name).  You
   should check this to determine if you can connect to the database yet.
 
+## During syslog-relation-changed
+
+### the postgresql service provides:
+
+- `programname`: the syslog 'programname' identifying this unit's
+  PostgreSQL logs.
+- `log_line_prefix`: the 'log_line_prefix' setting for the PostgreSQL
+  service.
+
+
 ## For replicated database support
 
 A PostgreSQL service may contain multiple units (a single master, and
