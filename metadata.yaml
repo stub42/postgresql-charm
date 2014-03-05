@@ -26,6 +26,8 @@ provides:
 requires:
   persistent-storage:
     interface: directory-path
+  syslog:
+    interface: syslog
 peers:
   replication:
     interface: pgreplication
