@@ -14,6 +14,7 @@ import socket
 import subprocess
 import sys
 from tempfile import NamedTemporaryFile
+from textwrap import dedent
 import time
 import yaml
 from yaml.constructor import ConstructorError
@@ -481,6 +482,9 @@ def create_postgresql_config(config_file):
     host.write_file(
         config_file, pg_config,
         owner="postgres",  group="postgres", perms=0600)
+
+    # Create or update files included from postgresql.conf.
+    configure_log_destination(os.path.dirname(config_file))
 
     local_state['saved_config'] = config_data
     local_state.save()
@@ -998,6 +1002,11 @@ def config_changed(force_restart=False):
     if force_restart:
         postgresql_restart()
     postgresql_reload_or_restart()
+
+    # In case the log_line_prefix has changed, inform syslog consumers.
+    for relid in hookenv.relation_ids('syslog'):
+        hookenv.relation_set(
+            relid, log_line_prefix=hookenv.config('log_line_prefix'))
 
 
 @hooks.hook()
@@ -2194,6 +2203,69 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
         host.service_reload('nagios-nrpe-server')
 
 
+@hooks.hook()
+def syslog_relation_changed():
+    configure_log_destination(_get_postgresql_config_dir())
+    postgresql_reload()
+
+    # We extend the syslog interface by exposing the log_line_prefix.
+    # This is required so consumers of the PostgreSQL logs can decode
+    # them. Consumers not smart enough to cope with arbitrary prefixes
+    # can at a minimum abort if they detect it is set to something they
+    # cannot support. Similarly, inform the consumer of the programname
+    # we are using so they can tell one units log messages from another.
+    hookenv.relation_set(
+        log_line_prefix=hookenv.config('log_line_prefix'),
+        programname=sanitize(hookenv.local_unit()))
+
+    template_path = "{0}/templates/rsyslog_forward.conf".format(
+        hookenv.charm_dir())
+    rsyslog_conf = Template(open(template_path).read()).render(
+        local_unit=sanitize(hookenv.local_unit()),
+        raw_local_unit=hookenv.local_unit(),
+        raw_remote_unit=hookenv.remote_unit(),
+        remote_addr=hookenv.relation_get('private-address'))
+    host.write_file(rsyslog_conf_path(hookenv.remote_unit()), rsyslog_conf)
+    run(['service', 'rsyslog', 'restart'])
+
+
+@hooks.hook()
+def syslog_relation_departed():
+    configure_log_destination(_get_postgresql_config_dir())
+    postgresql_reload()
+    os.unlink(rsyslog_conf_path(hookenv.remote_unit()))
+    run(['service', 'rsyslog', 'restart'])
+
+
+def configure_log_destination(config_dir):
+    """Set the log_destination PostgreSQL config flag appropriately"""
+    # We currently support either 'standard' logs (the files in
+    # /var/log/postgresql), or syslog + 'standard' logs. This should
+    # grow more complex in the future, as the local logs will be
+    # redundant if you are using syslog for log aggregation, and we
+    # probably want to add csvlog in the future. Note that csvlog
+    # requires switching from 'Debian' log redirection and rotation to
+    # the PostgreSQL builtin facilities.
+    logdest_conf_path = os.path.join(config_dir, 'juju_logdest.conf')
+    logdest_conf = open(logdest_conf_path, 'w')
+    if hookenv.relation_ids('syslog'):
+        # For syslog, we change the ident from the default of 'postgres'
+        # to the unit name to allow remote services to easily identify
+        # and filter which unit messages are from. We don't use IP
+        # address for this as it is not necessarily unique.
+        logdest_conf.write(dedent("""\
+                log_destination='stderr,syslog'
+                syslog_ident={0}
+                """).format(sanitize(hookenv.local_unit())))
+    else:
+        open(logdest_conf_path, 'w').write("log_destination='stderr'")
+
+
+def rsyslog_conf_path(remote_unit):
+    return '/etc/rsyslog.d/juju-{0}-{1}.conf'.format(
+        sanitize(hookenv.local_unit()), sanitize(remote_unit))
+
+
 def _get_postgresql_config_dir(config_data=None):
     """ Return the directory path of the postgresql configuration files. """
     if config_data is None:
@@ -2201,6 +2273,7 @@ def _get_postgresql_config_dir(config_data=None):
     version = pg_version()
     cluster_name = config_data['cluster_name']
     return os.path.join("/etc/postgresql", version, cluster_name)
+
 
 ###############################################################################
 # Global variables
