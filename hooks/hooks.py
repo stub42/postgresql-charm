@@ -1070,15 +1070,13 @@ def install(run_pre=True):
         'logs_dir': postgresql_logs_dir,
     }
     charm_dir = hookenv.charm_dir()
-    template_file = "{}/templates/dump-pg-db.tmpl".format(charm_dir)
-    dump_script = Template(open(template_file).read()).render(paths)
     template_file = "{}/templates/pg_backup_job.tmpl".format(charm_dir)
     backup_job = Template(open(template_file).read()).render(paths)
     host.write_file(
-        '{}/dump-pg-db'.format(postgresql_scripts_dir),
-        dump_script, perms=0755)
+        os.path.join(postgresql_scripts_dir, 'dump-pg-db'),
+        open('scripts/pgbackup.py', 'r').read(), perms=0o755)
     host.write_file(
-        '{}/pg_backup_job'.format(postgresql_scripts_dir),
+        os.path.join(postgresql_scripts_dir, 'pg_backup_job'),
         backup_job, perms=0755)
     install_postgresql_crontab(postgresql_crontab)
     hookenv.open_port(get_service_port())
