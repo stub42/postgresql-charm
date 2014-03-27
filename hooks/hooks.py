@@ -408,6 +408,22 @@ def lsclusters(s=slice(0, -1)):
             yield line.split()[s]
 
 
+def createcluster():
+    with switch_cwd('/tmp'):  # Ensure cwd is readable as the postgres user
+        create_cmd = [
+            "pg_createcluster",
+            "--locale", hookenv.config('locale'),
+            "-e", hookenv.config('encoding')]
+        if hookenv.config('listen_port'):
+            create_cmd.extend(["-p", str(hookenv.config('listen_port'))])
+        create_cmd.append(pg_version())
+        create_cmd.append(hookenv.config('cluster_name'))
+        run(create_cmd)
+        # Ensure SSL certificates exist, as we enable SSL by default.
+        create_ssl_cert(os.path.join(
+            postgresql_data_dir, pg_version(), hookenv.config('cluster_name')))
+
+
 def _get_system_ram():
     """ Return the system ram in Megabytes """
     import psutil
@@ -710,7 +726,7 @@ def update_service_port():
 
 
 def create_ssl_cert(cluster_dir):
-    # Debian by default expects SSL certificates in the datadir.
+    # PostgreSQL expects SSL certificates in the datadir.
     server_crt = os.path.join(cluster_dir, 'server.crt')
     server_key = os.path.join(cluster_dir, 'server.key')
     if not os.path.exists(server_crt):
@@ -1038,16 +1054,7 @@ def install(run_pre=True):
             port_opt = "--port={}".format(config_data['listen_port'])
         else:
             port_opt = ''
-        with switch_cwd('/tmp'):
-            create_cmd = [
-                "pg_createcluster",
-                "--locale", config_data['locale'],
-                "-e", config_data['encoding']]
-            if listen_port:
-                create_cmd.extend(["-p", str(config_data['listen_port'])])
-            create_cmd.append(pg_version())
-            create_cmd.append(config_data['cluster_name'])
-            run(create_cmd)
+        createcluster()
         assert (
             not port_opt
             or get_service_port() == config_data['listen_port']), (
@@ -2047,7 +2054,7 @@ def clone_database(master_unit, master_host, master_port):
                 # Clone the master with pg_basebackup.
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             log(output, DEBUG)
-            # Debian by default expects SSL certificates in the datadir.
+            # SSL certificates need to exist in the datadir.
             create_ssl_cert(postgresql_cluster_dir)
             create_recovery_conf(master_host, master_port)
         except subprocess.CalledProcessError as x:
@@ -2062,7 +2069,7 @@ def clone_database(master_unit, master_host, master_port):
                 shutil.rmtree(postgresql_cluster_dir)
             if os.path.exists(postgresql_config_dir):
                 shutil.rmtree(postgresql_config_dir)
-            run('pg_createcluster {} main'.format(version))
+            createcluster()
             config_changed()
             raise
         finally:
