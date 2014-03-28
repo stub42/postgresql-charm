@@ -114,6 +114,39 @@ class JujuFixture(fixtures.Fixture):
 
         return self.status
 
+    def relation_info(self, unit):
+        '''Return all the relation information accessible from a unit.
+
+        relation_info('foo/0')[relation_name][relation_id][unit][key]
+        '''
+        # Get the possible relation names heuristically, per Bug #1298819
+        relation_names = []
+        for service_name, service_info in self.status['services'].items():
+            if service_name == unit.split('/')[0]:
+                relation_names = service_info['relations'].keys()
+                break
+        assert relation_names, 'No relation_names introspected'
+
+        res = {}
+        juju_run_cmd = ['juju', 'run', '--unit', unit]
+        for rel_name in relation_names:
+            res[rel_name] = {}
+            relation_ids = run(
+                self, juju_run_cmd + [
+                    'relation-ids {}'.format(rel_name)]).split()
+            for rel_id in relation_ids:
+                res[rel_name][rel_id] = {}
+                relation_units = [unit] + run(
+                    self, juju_run_cmd + [
+                        'relation-list -r {}'.format(rel_id)]).split()
+                for rel_unit in relation_units:
+                    json_rel_info = run(
+                        self, juju_run_cmd + [
+                            'relation-get --format=json -r {} - {}'.format(
+                                rel_id, rel_unit)])
+                    res[rel_name][rel_id][rel_unit] = json.loads(json_rel_info)
+        return res
+
     def wait_until_ready(self, extra=60):
         ready = False
         while not ready:
