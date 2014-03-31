@@ -19,18 +19,22 @@ from hookenv import log
 
 
 def service_start(service_name):
+    """Start a system service"""
     return service('start', service_name)
 
 
 def service_stop(service_name):
+    """Stop a system service"""
     return service('stop', service_name)
 
 
 def service_restart(service_name):
+    """Restart a system service"""
     return service('restart', service_name)
 
 
 def service_reload(service_name, restart_on_failure=False):
+    """Reload a system service, optionally falling back to restart if reload fails"""
     service_result = service('reload', service_name)
     if not service_result and restart_on_failure:
         service_result = service('restart', service_name)
@@ -38,11 +42,13 @@ def service_reload(service_name, restart_on_failure=False):
 
 
 def service(action, service_name):
+    """Control a system service"""
     cmd = ['service', service_name, action]
     return subprocess.call(cmd) == 0
 
 
 def service_running(service):
+    """Determine whether a system service is running"""
     try:
         output = subprocess.check_output(['service', service, 'status'])
     except subprocess.CalledProcessError:
@@ -55,7 +61,7 @@ def service_running(service):
 
 
 def adduser(username, password=None, shell='/bin/bash', system_user=False):
-    """Add a user"""
+    """Add a user to the system"""
     try:
         user_info = pwd.getpwnam(username)
         log('user {0} already exists!'.format(username))
@@ -138,7 +144,7 @@ def write_file(path, content, owner='root', group='root', perms=0444):
 
 
 def mount(device, mountpoint, options=None, persist=False):
-    '''Mount a filesystem'''
+    """Mount a filesystem at a particular mountpoint"""
     cmd_args = ['mount']
     if options is not None:
         cmd_args.extend(['-o', options])
@@ -155,7 +161,7 @@ def mount(device, mountpoint, options=None, persist=False):
 
 
 def umount(mountpoint, persist=False):
-    '''Unmount a filesystem'''
+    """Unmount a filesystem"""
     cmd_args = ['umount', mountpoint]
     try:
         subprocess.check_output(cmd_args)
@@ -169,7 +175,7 @@ def umount(mountpoint, persist=False):
 
 
 def mounts():
-    '''List of all mounted volumes as [[mountpoint,device],[...]]'''
+    """Get a list of all mounted volumes as [[mountpoint,device],[...]]"""
     with open('/proc/mounts') as f:
         # [['/mount/point','/dev/path'],[...]]
         system_mounts = [m[1::-1] for m in [l.strip().split()
@@ -178,7 +184,7 @@ def mounts():
 
 
 def file_hash(path):
-    ''' Generate a md5 hash of the contents of 'path' or None if not found '''
+    """Generate a md5 hash of the contents of 'path' or None if not found """
     if os.path.exists(path):
         h = hashlib.md5()
         with open(path, 'r') as source:
@@ -188,8 +194,8 @@ def file_hash(path):
         return None
 
 
-def restart_on_change(restart_map):
-    ''' Restart services based on configuration files changing
+def restart_on_change(restart_map, stopstart=False):
+    """Restart services based on configuration files changing
 
     This function is used a decorator, for example
 
@@ -202,7 +208,7 @@ def restart_on_change(restart_map):
     In this example, the cinder-api and cinder-volume services
     would be restarted if /etc/ceph/ceph.conf is changed by the
     ceph_client_changed function.
-    '''
+    """
     def wrap(f):
         def wrapped_f(*args):
             checksums = {}
@@ -213,14 +219,20 @@ def restart_on_change(restart_map):
             for path in restart_map:
                 if checksums[path] != file_hash(path):
                     restarts += restart_map[path]
-            for service_name in list(OrderedDict.fromkeys(restarts)):
-                service('restart', service_name)
+            services_list = list(OrderedDict.fromkeys(restarts))
+            if not stopstart:
+                for service_name in services_list:
+                    service('restart', service_name)
+            else:
+                for action in ['stop', 'start']:
+                    for service_name in services_list:
+                        service(action, service_name)
         return wrapped_f
     return wrap
 
 
 def lsb_release():
-    '''Return /etc/lsb-release in a dict'''
+    """Return /etc/lsb-release in a dict"""
     d = {}
     with open('/etc/lsb-release', 'r') as lsb:
         for l in lsb:
@@ -230,7 +242,7 @@ def lsb_release():
 
 
 def pwgen(length=None):
-    '''Generate a random pasword.'''
+    """Generate a random pasword."""
     if length is None:
         length = random.choice(range(35, 45))
     alphanumeric_chars = [
@@ -239,3 +251,47 @@ def pwgen(length=None):
     random_chars = [
         random.choice(alphanumeric_chars) for _ in range(length)]
     return(''.join(random_chars))
+
+
+def list_nics(nic_type):
+    '''Return a list of nics of given type(s)'''
+    if isinstance(nic_type, basestring):
+        int_types = [nic_type]
+    else:
+        int_types = nic_type
+    interfaces = []
+    for int_type in int_types:
+        cmd = ['ip', 'addr', 'show', 'label', int_type + '*']
+        ip_output = subprocess.check_output(cmd).split('\n')
+        ip_output = (line for line in ip_output if line)
+        for line in ip_output:
+            if line.split()[1].startswith(int_type):
+                interfaces.append(line.split()[1].replace(":", ""))
+    return interfaces
+
+
+def set_nic_mtu(nic, mtu):
+    '''Set MTU on a network interface'''
+    cmd = ['ip', 'link', 'set', nic, 'mtu', mtu]
+    subprocess.check_call(cmd)
+
+
+def get_nic_mtu(nic):
+    cmd = ['ip', 'addr', 'show', nic]
+    ip_output = subprocess.check_output(cmd).split('\n')
+    mtu = ""
+    for line in ip_output:
+        words = line.split()
+        if 'mtu' in words:
+            mtu = words[words.index("mtu") + 1]
+    return mtu
+
+
+def get_nic_hwaddr(nic):
+    cmd = ['ip', '-o', '-0', 'addr', 'show', nic]
+    ip_output = subprocess.check_output(cmd)
+    hwaddr = ""
+    words = ip_output.split()
+    if 'link/ether' in words:
+        hwaddr = words[words.index('link/ether') + 1]
+    return hwaddr
