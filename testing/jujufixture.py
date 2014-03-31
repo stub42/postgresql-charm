@@ -125,7 +125,6 @@ class JujuFixture(fixtures.Fixture):
             if service_name == unit.split('/')[0]:
                 relation_names = service_info['relations'].keys()
                 break
-        assert relation_names, 'No relation_names introspected'
 
         res = {}
         juju_run_cmd = ['juju', 'run', '--unit', unit]
@@ -235,6 +234,9 @@ class JujuFixture(fixtures.Fixture):
             self.do(['terminate-machine'] + list(self._free_machines))
 
 
+_run_seq = 0
+
+
 def run(detail_collector, cmd, input=''):
     try:
         proc = subprocess.Popen(
@@ -244,12 +246,18 @@ def run(detail_collector, cmd, input=''):
         raise
 
     (out, err) = proc.communicate(input)
-    detail_collector.addDetail(
-        'cmd', text_content('{}: {}'.format(proc.returncode, ' '.join(cmd))))
-    if out:
-        detail_collector.addDetail('stdout', text_content(out))
-    if err:
-        detail_collector.addDetail('stderr', text_content(err))
+    if detail_collector:
+        global _run_seq
+        _run_seq += 1
+        m = {
+            'cmd': ' '.join(cmd),
+            'rc': proc.returncode,
+            'stdout': out,
+            'stderr': err,
+        }
+        detail_collector.addDetail(
+            'run_{}'.format(_run_seq),
+            text_content(yaml.safe_dump(m, default_flow_style=False)))
     if proc.returncode != 0:
         raise subprocess.CalledProcessError(
             proc.returncode, cmd, err)
