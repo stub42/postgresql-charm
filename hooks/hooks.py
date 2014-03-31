@@ -1611,7 +1611,7 @@ def promote_database():
         # this way to avoid creating a timeline change. Switch this
         # to using 'pg_ctl promote' once PostgreSQL propagates
         # timeline changes via streaming replication.
-        os.unlink(os.path.join(postgresql_cluster_dir, 'recovery.conf'))
+        os.unlink(recovery_conf)
         postgresql_restart()
 
 
