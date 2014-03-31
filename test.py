@@ -60,45 +60,81 @@ class PostgreSQLCharmBaseTestCase(object):
             self.useFixture(fixtures.Timeout(timeout, gentle=True))
 
     def wait_until_ready(self):
-        self.juju.wait_until_ready(0)
+
+        # Per Bug #1200267, it is impossible to know when a juju
+        # environment is actually ready for testing. Instead, we do the
+        # best we can by inspecting all the relation state, and, if it
+        # is at this particular instant in the expected state, hoping
+        # that the system is stable enough to continue testing.
 
         class NotReady(Exception):
             pass
 
-        timeout = time.time() + 60
+        timeout = time.time() + 300
 
         while True:
             try:
+                self.juju.wait_until_ready(0)
                 # Confirm the db and db-admin relations are all in a useful
                 # state.
-                psql_unit = self.juju.status[
-                    'services']['psql']['units'].keys()[0]
-                psql_rel_info = self.juju.relation_info(psql_unit)
-                for rel_name in psql_rel_info:
-                    for rel_id, rel_info in psql_rel_info[rel_name].items():
-                        num_pg_units = len([
-                            k for k in rel_info.keys()
-                            if k.startswith('postgresql/')])
-                        for unit, unit_rel_info in rel_info.items():
-                            if not unit.startswith('postgresql/'):
-                                continue
-                            if 'user' not in unit_rel_info:
-                                raise NotReady('{} has no user'.format(unit))
-                            if 'state' not in unit_rel_info:
-                                raise NotReady('{} has no state'.format(unit))
-                            state = unit_rel_info['state']
-                            if state == 'standalone':
-                                if num_pg_units > 1:
-                                    raise NotReady(
-                                        '{} is standalone'.format(unit))
-                            elif state not in ('master', 'hot standby'):
+                for psql_unit in self.juju.status['services']['psql']['units']:
+                    psql_rel_info = self.juju.relation_info(psql_unit)
+                    if not psql_rel_info:
+                        raise NotReady('No relations')
+                    for rel_name in psql_rel_info:
+                        for rel_id, rel_info in (
+                                psql_rel_info[rel_name].items()):
+                            num_pg_units = len([
+                                k for k in rel_info.keys()
+                                if k.startswith('postgresql/')])
+                            if num_pg_units == 0:
                                 raise NotReady(
-                                    '{} in {} state'.format(unit, state))
+                                    '{} has no postgres units'.format(rel_id))
+                            requested_db = rel_info['psql/0'].get(
+                                'database', None)
+                            num_masters = 0
+                            for unit, unit_rel_info in rel_info.items():
+                                if not unit.startswith('postgresql/'):
+                                    continue
+                                if 'user' not in unit_rel_info:
+                                    raise NotReady(
+                                        '{} has no user'.format(unit))
+                                if 'database' not in unit_rel_info:
+                                    raise NotReady(
+                                        '{} has no database'.format(unit))
+                                if requested_db and (unit_rel_info['database']
+                                                     != requested_db):
+                                    raise NotReady(
+                                        '{} not using requested db {}'.format(
+                                            unit, requested_db))
+                                if 'state' not in unit_rel_info:
+                                    raise NotReady(
+                                        '{} has no state'.format(unit))
+                                state = unit_rel_info['state']
+                                if state == 'standalone':
+                                    if num_pg_units > 1:
+                                        raise NotReady(
+                                            '{} is standalone'.format(unit))
+                                elif state == 'master':
+                                    num_masters += 1
+                                elif state not in ('master', 'hot standby'):
+                                    raise NotReady(
+                                        '{} in {} state'.format(unit, state))
+                                allowed_units = unit_rel_info.get(
+                                    'allowed-units', '').split()
+                                if psql_unit not in allowed_units:
+                                    raise NotReady(
+                                        '{} not yet authorized by {} '
+                                        '({})'.format(
+                                            psql_unit, unit, allowed_units))
+                            if num_pg_units > 1 and num_masters != 1:
+                                raise NotReady(
+                                    '{} masters'.format(num_masters))
                 return
             except NotReady:
                 if time.time() > timeout:
                     raise
-                time.sleep(0.25)
+                time.sleep(3)
 
     def sql(self, sql, postgres_unit=None, psql_unit=None, dbname=None):
         '''Run some SQL on postgres_unit from psql_unit.
@@ -139,7 +175,8 @@ class PostgreSQLCharmBaseTestCase(object):
             if postgres_unit in full_rel_info[rel_name][rel_id]:
                 rel_info = full_rel_info[rel_name][rel_id][postgres_unit]
                 break
-        assert rel_info is not None, 'Unable to find pg rel info'
+        assert rel_info is not None, 'Unable to find pg rel info {!r}'.format(
+            full_rel_info[rel_name])
 
         if dbname is None:
             dbname = rel_info['database']
@@ -491,12 +528,24 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.do(['set', 'psql', 'roles=role_c'])
         self.wait_until_ready()
 
-        has_role_a, has_role_b, has_role_c = self.sql('''
-            SELECT
-                pg_has_role(current_user, 'role_a', 'MEMBER'),
-                pg_has_role(current_user, 'role_b', 'MEMBER'),
-                pg_has_role(current_user, 'role_c', 'MEMBER')
-            ''')[0]
+        # Retry this for a while. Per Bug #1200267, we can't tell when
+        # the hooks have finished running and the role has been granted.
+        # We could make the PostgreSQL charm provide feedback on when
+        # the role has actually been granted and wait for that, but we
+        # don't want to complicate the interface any more than we must.
+        timeout = time.time() + 60
+        while True:
+            try:
+                has_role_a, has_role_b, has_role_c = self.sql('''
+                    SELECT
+                        pg_has_role(current_user, 'role_a', 'MEMBER'),
+                        pg_has_role(current_user, 'role_b', 'MEMBER'),
+                        pg_has_role(current_user, 'role_c', 'MEMBER')
+                    ''')[0]
+                break
+            except psycopg2.ProgrammingError:
+                if time.time() > timeout:
+                    raise
         self.assertFalse(has_role_a)
         self.assertFalse(has_role_b)
         self.assertTrue(has_role_c)
