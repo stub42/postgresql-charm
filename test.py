@@ -484,7 +484,7 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertEqual(result, 'explicit')
 
     def test_roles_granted(self):
-        # We use two units to confirm that there is no attempts to
+        # We use two units to confirm that there is no attempt to
         # grant roles on the hot standby.
         self.juju.deploy(
             TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
@@ -500,11 +500,23 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.do(['set', 'psql', 'roles=role_a,role_b'])
         self.wait_until_ready()
 
-        has_role_a, has_role_b = self.sql('''
-            SELECT
-                pg_has_role(current_user, 'role_a', 'MEMBER'),
-                pg_has_role(current_user, 'role_b', 'MEMBER')
-            ''')[0]
+        # Retry this for a while. Per Bug #1200267, we can't tell when
+        # the hooks have finished running and the role has been granted.
+        # We could make the PostgreSQL charm provide feedback on when
+        # the role has actually been granted and wait for that, but we
+        # don't want to complicate the interface any more than we must.
+        timeout = time.time() + 60
+        while True:
+            try:
+                has_role_a, has_role_b = self.sql('''
+                    SELECT
+                        pg_has_role(current_user, 'role_a', 'MEMBER'),
+                        pg_has_role(current_user, 'role_b', 'MEMBER')
+                    ''')[0]
+                break
+            except psycopg2.ProgrammingError:
+                if time.time() > timeout:
+                    raise
         self.assertTrue(has_role_a)
         self.assertTrue(has_role_b)
 
@@ -528,30 +540,28 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.do(['set', 'psql', 'roles=role_c'])
         self.wait_until_ready()
 
-        # Retry this for a while. Per Bug #1200267, we can't tell when
-        # the hooks have finished running and the role has been granted.
-        # We could make the PostgreSQL charm provide feedback on when
-        # the role has actually been granted and wait for that, but we
-        # don't want to complicate the interface any more than we must.
-        timeout = time.time() + 60
-        while True:
-            try:
-                has_role_a, has_role_b, has_role_c = self.sql('''
-                    SELECT
-                        pg_has_role(current_user, 'role_a', 'MEMBER'),
-                        pg_has_role(current_user, 'role_b', 'MEMBER'),
-                        pg_has_role(current_user, 'role_c', 'MEMBER')
-                    ''')[0]
-                break
-            except psycopg2.ProgrammingError:
-                if time.time() > timeout:
-                    raise
+        # Per Bug #1200267, we have to sleep here and hope. We have no
+        # way of knowing how many of the three pending role changes have
+        # actually been applied.
+        time.sleep(30)
+
+        has_role_a, has_role_b, has_role_c = self.sql('''
+            SELECT
+                pg_has_role(current_user, 'role_a', 'MEMBER'),
+                pg_has_role(current_user, 'role_b', 'MEMBER'),
+                pg_has_role(current_user, 'role_c', 'MEMBER')
+            ''')[0]
         self.assertFalse(has_role_a)
         self.assertFalse(has_role_b)
         self.assertTrue(has_role_c)
 
         self.juju.do(['unset', 'psql', 'roles'])
         self.wait_until_ready()
+
+        # Per Bug #1200267, we have to sleep here and hope. We have no
+        # way of knowing how many of the three pending role changes have
+        # actually been applied.
+        time.sleep(30)
 
         has_role_a, has_role_b, has_role_c = self.sql('''
             SELECT
