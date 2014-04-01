@@ -183,6 +183,7 @@ class TestHooks(mocker.MockerTestCase):
         hooks.postgresql_sysctl = self.makeFile()
         hooks._get_system_ram = lambda: 1024   # MB
         hooks._get_page_size = lambda: 1024 * 1024  # bytes
+        hooks._run_sysctl = lambda x: ""
         self.maxDiff = None
 
     def assertFileContains(self, filename, lines):
@@ -216,8 +217,8 @@ class TestHooksService(TestHooks):
         C{replication} relations, default wal settings will be present.
         """
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
         hooks.create_postgresql_config(config_outfile)
@@ -240,8 +241,8 @@ class TestHooksService(TestHooks):
         hooks.hookenv._relation_ids = {
             "replication/0": "db-admin:5", "replication/1": "db-admin:6"}
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
         hooks.create_postgresql_config(config_outfile)
@@ -269,8 +270,8 @@ class TestHooksService(TestHooks):
         hooks.hookenv._config["wal_keep_segments"] = 1000
         hooks.hookenv._config["replicated_wal_keep_segments"] = 999
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
         hooks.create_postgresql_config(config_outfile)
@@ -278,6 +279,22 @@ class TestHooksService(TestHooks):
             config_outfile,
             ["hot_standby = True", "wal_level = hot_standby",
              "max_wal_senders = 3", "wal_keep_segments = 1000"])
+
+    def test_postgresql_config_pgtune(self):
+        """
+        When automatic performance tuning is specified, pgtune will
+        modify postgresql.conf. Automatic performance tuning is the default.
+        """
+        config_outfile = self.makeFile()
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
+        self.mocker.result(True)
+        self.mocker.replay()
+
+        hooks.create_postgresql_config(config_outfile)
+
+        raw_config = open(config_outfile, 'r').read()
+        self.assert_('# pgtune wizard' in raw_config)
 
     def test_create_postgresql_config_performance_tune_auto_large_ram(self):
         """
@@ -291,8 +308,8 @@ class TestHooksService(TestHooks):
            - C{kernel_shmall} equal to kernel_shmmax in pages
         """
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
         hooks.create_postgresql_config(config_outfile)
@@ -316,8 +333,8 @@ class TestHooksService(TestHooks):
         """
         hooks._get_system_ram = lambda: 1023   # MB
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
         hooks.create_postgresql_config(config_outfile)
@@ -344,8 +361,8 @@ class TestHooksService(TestHooks):
         hooks.hookenv._config["kernel_shmall"] = 500
         hooks._get_system_ram = lambda: 1023   # MB
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
         hooks.create_postgresql_config(config_outfile)

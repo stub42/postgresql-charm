@@ -437,12 +437,17 @@ def _get_page_size():
     return int(run("getconf PAGE_SIZE"))   # frequently 4096
 
 
+def _run_sysctl(postgresql_sysctl):
+    """sysctl -p postgresql_sysctl, helper for easy test mocking."""
+    return run("sysctl -p {}".format(postgresql_sysctl))
+
+
 def create_postgresql_config(config_file):
     '''Create the postgresql.conf file'''
     config_data = hookenv.config()
     if not config_data.get('listen_port', None):
         config_data['listen_port'] = get_service_port()
-    if config_data["performance_tuning"] == "auto":
+    if config_data["performance_tuning"].lower() != "manual":
         # Taken from:
         # http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
         # num_cpus is not being used ... commenting it out ... negronjl
@@ -473,7 +478,7 @@ def create_postgresql_config(config_file):
     if config_data["kernel_shmmax"] > 0:
         lines.append("kernel.shmmax = %s\n" % config_data["kernel_shmmax"])
     host.write_file(postgresql_sysctl, ''.join(lines), perms=0600)
-    run("sysctl -p {}".format(postgresql_sysctl))
+    _run_sysctl(postgresql_sysctl)
 
     # If we are replicating, some settings may need to be overridden to
     # certain minimum levels.
