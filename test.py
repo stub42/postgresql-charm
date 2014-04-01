@@ -235,6 +235,7 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
         self.wait_until_ready()
 
+
         result = self.sql('SELECT TRUE')
         self.assertEqual(result, [(True,)])
 

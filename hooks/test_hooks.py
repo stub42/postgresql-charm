@@ -159,11 +159,11 @@ class TestJuju(object):
     def log(self, *args, **kwargs):
         pass
 
-    def config_get(self, scope=None):
+    def config(self, scope=None):
         if scope is None:
-            return self.config
+            return dict(self._config)
         else:
-            return self.config[scope]
+            return self._config[scope]
 
     def relation_get(self, scope=None, unit_name=None, relation_id=None):
         pass
@@ -175,8 +175,6 @@ class TestHooks(mocker.MockerTestCase):
         hooks.hookenv = TestJuju()
         hooks.host = TestJujuHost()
         hooks.juju_log_dir = self.makeDir()
-        hooks.hookenv.config = lambda: hooks.hookenv._config
-        #hooks.hookenv.localunit = lambda: "localhost"
         hooks.os.environ["JUJU_UNIT_NAME"] = "landscape/1"
         hooks.os.environ["CHARM_DIR"] = os.path.abspath(
             os.path.join(os.path.dirname(__file__), os.pardir))
@@ -280,7 +278,7 @@ class TestHooksService(TestHooks):
             ["hot_standby = True", "wal_level = hot_standby",
              "max_wal_senders = 3", "wal_keep_segments = 1000"])
 
-    def test_postgresql_config_pgtune(self):
+    def test_auto_tuned_postgresql_config(self):
         """
         When automatic performance tuning is specified, pgtune will
         modify postgresql.conf. Automatic performance tuning is the default.
@@ -295,6 +293,42 @@ class TestHooksService(TestHooks):
 
         raw_config = open(config_outfile, 'r').read()
         self.assert_('# pgtune wizard' in raw_config)
+
+    def test_auto_tuning_preserves_max_connections(self):
+        """
+        pgtune with choose max_connections unless you tell it not too
+        """
+        # Note that the charm does not yet make use of automatic
+        # max_connections. We may want to change the default
+        # max_connections to null and autotune then.
+        hooks.hookenv._config["max_connections"] = 42
+        config_outfile = self.makeFile()
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
+        self.mocker.result(True)
+        self.mocker.replay()
+
+        hooks.create_postgresql_config(config_outfile)
+
+        raw_config = open(config_outfile, 'r').read()
+        self.assert_('\nmax_connections = 42\n' in raw_config)
+
+    def test_manually_tuned_postgresql_config(self):
+        """
+        When automatic performance tuning is specified, pgtune will
+        modify postgresql.conf. Automatic performance tuning is the default.
+        """
+        hooks.hookenv._config["performance_tuning"] = "maNual"
+        config_outfile = self.makeFile()
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
+        self.mocker.result(True)
+        self.mocker.replay()
+
+        hooks.create_postgresql_config(config_outfile)
+
+        raw_config = open(config_outfile, 'r').read()
+        self.assert_('# pgtune wizard' not in raw_config)
 
     def test_create_postgresql_config_performance_tune_auto_large_ram(self):
         """

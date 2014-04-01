@@ -3,6 +3,7 @@ TEST_TIMEOUT := 900
 
 default:
 	@echo "One of:"
+	@echo "    make lint"
 	@echo "    make test"
 	@echo "    make unit_test"
 	@echo "    make integration_test"
