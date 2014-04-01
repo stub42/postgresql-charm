@@ -347,13 +347,13 @@ options:
         List of extra package sources, per charm-helpers standard.
         YAML format.
     type: string
-    default: null
+    default: ''
   install_keys:
     description: |
         List of signing keys for install_sources package sources, per
         charmhelpers standard. YAML format.
     type: string
-    default: null
+    default: ''
   extra_archives:
     default: ""
     type: string
