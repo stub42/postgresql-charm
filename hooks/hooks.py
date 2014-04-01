@@ -449,16 +449,6 @@ def create_postgresql_config(config_file):
         config_data['listen_port'] = get_service_port()
     if config_data["performance_tuning"].lower() != "manual":
         total_ram = _get_system_ram()
-        if not config_data["effective_cache_size"]:
-            config_data["effective_cache_size"] = \
-                "%sMB" % (int(int(total_ram) * 0.75),)
-        if not config_data["shared_buffers"]:
-            if total_ram > 1023:
-                config_data["shared_buffers"] = \
-                    "%sMB" % (int(int(total_ram) * 0.25),)
-            else:
-                config_data["shared_buffers"] = \
-                    "%sMB" % (int(int(total_ram) * 0.15),)
         config_data["kernel_shmmax"] = (int(total_ram) * 1024 * 1024) + 1024
         config_data["kernel_shmall"] = config_data["kernel_shmmax"]
 
