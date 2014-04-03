@@ -28,6 +28,10 @@ TEST_CHARM = 'local:postgresql'
 PSQL_CHARM = 'cs:postgresql-psql'
 
 
+class NotReady(Exception):
+    pass
+
+
 class PostgreSQLCharmBaseTestCase(object):
 
     # Override these in subclasses to run these tests multiple times
@@ -59,7 +63,7 @@ class PostgreSQLCharmBaseTestCase(object):
         if timeout > 0:
             self.useFixture(fixtures.Timeout(timeout, gentle=True))
 
-    def wait_until_ready(self):
+    def wait_until_ready(self, pg_units=()):
 
         # Per Bug #1200267, it is impossible to know when a juju
         # environment is actually ready for testing. Instead, we do the
@@ -67,78 +71,150 @@ class PostgreSQLCharmBaseTestCase(object):
         # is at this particular instant in the expected state, hoping
         # that the system is stable enough to continue testing.
 
-        class NotReady(Exception):
-            pass
-
-        timeout = time.time() + 300
+        timeout = time.time() + 60
 
         while True:
             try:
-                self.juju.wait_until_ready(0)
-                # Confirm the db and db-admin relations are all in a useful
-                # state.
+                self.juju.wait_until_ready(0)  # Also refreshes status
+
+                if pg_units:
+                    # Confirm the deployed PG units match the list we
+                    # expect.
+                    status_pg_units = set(self.juju.status[
+                        'services']['postgresql']['units'].keys())
+                    if set(pg_units) != status_pg_units:
+                        raise NotReady('units not yet added/removed')
+
                 for psql_unit in self.juju.status['services']['psql']['units']:
-                    psql_rel_info = self.juju.relation_info(psql_unit)
-                    if not psql_rel_info:
-                        raise NotReady('No relations')
-                    for rel_name in psql_rel_info:
-                        for rel_id, rel_info in (
-                                psql_rel_info[rel_name].items()):
-                            num_pg_units = len([
-                                k for k in rel_info.keys()
-                                if k.startswith('postgresql/')])
-                            if num_pg_units == 0:
-                                raise NotReady(
-                                    '{} has no postgres units'.format(rel_id))
-                            requested_db = rel_info['psql/0'].get(
-                                'database', None)
-                            num_masters = 0
-                            for unit, unit_rel_info in rel_info.items():
-                                if not unit_rel_info:
-                                    raise NotReady(
-                                        '{} {} is not setup'.format(
-                                            unit, rel_id))
-                                if not unit.startswith('postgresql/'):
-                                    continue
-                                if 'user' not in unit_rel_info:
-                                    raise NotReady(
-                                        '{} has no user'.format(unit))
-                                if 'database' not in unit_rel_info:
-                                    raise NotReady(
-                                        '{} has no database'.format(unit))
-                                if requested_db and (unit_rel_info['database']
-                                                     != requested_db):
-                                    raise NotReady(
-                                        '{} not using requested db {}'.format(
-                                            unit, requested_db))
-                                if 'state' not in unit_rel_info:
-                                    raise NotReady(
-                                        '{} has no state'.format(unit))
-                                state = unit_rel_info['state']
-                                if state == 'standalone':
-                                    if num_pg_units > 1:
-                                        raise NotReady(
-                                            '{} is standalone'.format(unit))
-                                elif state == 'master':
-                                    num_masters += 1
-                                elif state not in ('master', 'hot standby'):
-                                    raise NotReady(
-                                        '{} in {} state'.format(unit, state))
-                                allowed_units = unit_rel_info.get(
-                                    'allowed-units', '').split()
-                                if psql_unit not in allowed_units:
-                                    raise NotReady(
-                                        '{} not yet authorized by {} '
-                                        '({})'.format(
-                                            psql_unit, unit, allowed_units))
-                            if num_pg_units > 1 and num_masters != 1:
-                                raise NotReady(
-                                    '{} masters'.format(num_masters))
+                    self.confirm_psql_unit_ready(psql_unit)
+
+                for pg_unit in pg_units:
+                    peers = [u for u in pg_units if u != pg_unit]
+                    self.confirm_postgresql_unit_ready(pg_unit, peers)
+
                 return
             except NotReady:
                 if time.time() > timeout:
                     raise
                 time.sleep(3)
+
+    def confirm_psql_unit_ready(self, psql_unit):
+        # Confirm the db and db-admin relations are all in a useful
+        # state.
+        psql_rel_info = self.juju.relation_info(psql_unit)
+        if not psql_rel_info:
+            raise NotReady('{} has no relations'.format(psql_unit))
+        status_pg_units = set(
+            self.juju.status['services']['postgresql']['units'].keys())
+        related_pg_units = set()
+        for rel_name in psql_rel_info:
+            for rel_id, rel_info in (
+                    psql_rel_info[rel_name].items()):
+                num_pg_units = len([
+                    k for k in rel_info.keys()
+                    if k.startswith('postgresql/')])
+                if num_pg_units == 0:
+                    raise NotReady(
+                        '{} has no postgres units'.format(rel_id))
+                requested_db = rel_info['psql/0'].get(
+                    'database', None)
+                num_masters = 0
+                for unit, unit_rel_info in rel_info.items():
+                    if not unit.startswith('postgresql/'):
+                        continue
+                    related_pg_units.add(unit)
+                    if 'user' not in unit_rel_info:
+                        raise NotReady(
+                            '{} has no user'.format(unit))
+                    if 'database' not in unit_rel_info:
+                        raise NotReady(
+                            '{} has no database'.format(unit))
+                    if requested_db and (
+                            unit_rel_info['database'] != requested_db):
+                        raise NotReady(
+                            '{} not using requested db {}'.format(
+                                unit, requested_db))
+                    if 'state' not in unit_rel_info:
+                        raise NotReady(
+                            '{} has no state'.format(unit))
+                    state = unit_rel_info['state']
+                    if state == 'standalone':
+                        if num_pg_units > 1:
+                            raise NotReady(
+                                '{} is standalone'.format(unit))
+                    elif state == 'master':
+                        num_masters += 1
+                    elif state not in ('master', 'hot standby'):
+                        raise NotReady(
+                            '{} in {} state'.format(unit, state))
+                    allowed_units = unit_rel_info.get(
+                        'allowed-units', '').split()
+                    if psql_unit not in allowed_units:
+                        raise NotReady(
+                            '{} not yet authorized by {} '
+                            '({})'.format(
+                                psql_unit, unit, allowed_units))
+                if num_pg_units > 1 and num_masters != 1:
+                    raise NotReady(
+                        '{} masters'.format(num_masters))
+        if status_pg_units != related_pg_units:
+            raise NotReady(
+                'PG units reported by status does not match related units')
+
+    def confirm_postgresql_unit_ready(self, pg_unit, peers=()):
+        pg_rel_info = self.juju.relation_info(pg_unit)
+        if not pg_rel_info:
+            raise NotReady('{} has no relations'.format(pg_unit))
+
+        try:
+            rep_rel_id = pg_rel_info['replication'].keys()[0]
+            actual_peers = set([
+                u for u in pg_rel_info['replication'][rep_rel_id].keys()
+                if u != pg_unit])
+        except (IndexError, KeyError):
+            if peers:
+                raise NotReady('Peer relation does not exist')
+            rep_rel_id = None
+            actual_peers = set()
+
+        if actual_peers != set(peers):
+            raise NotReady('Expecting {} peers, found {}'.format(
+                peers, actual_peers))
+
+        if not peers:
+            return
+
+        pg_rep_rel_info = pg_rel_info['replication'][rep_rel_id].get(
+            pg_unit, None)
+        if not pg_rep_rel_info:
+            raise NotReady('{} has not yet joined the peer relation'.format(
+                pg_unit))
+
+        state = pg_rep_rel_info.get('state', None)
+
+        if not state:
+            raise NotReady('{} has no state'.format(pg_unit))
+
+        if state == 'standalone' and peers:
+            raise NotReady('{} is standalone but has peers'.format(pg_unit))
+
+        if state not in ('standalone', 'master', 'hot standby'):
+            raise NotReady('{} reports failover in progress'.format(pg_unit))
+
+        num_masters = 1 if state in ('master', 'standalone') else 0
+
+        for peer in peers:
+            peer_rel_info = pg_rel_info['replication'][rep_rel_id][peer]
+            peer_state = peer_rel_info.get('state', None)
+            if not peer_state:
+                raise NotReady('{} has no peer state'.format(peer))
+            if peer_state == 'master':
+                num_masters += 1
+            elif peer_state != 'hot standby':
+                raise NotReady('Peer {} in state {}'.format(peer, peer_state))
+
+        if num_masters != 1:
+            raise NotReady('No masters seen from {}'.format(pg_unit))
 
     def sql(self, sql, postgres_unit=None, psql_unit=None, dbname=None):
         '''Run some SQL on postgres_unit from psql_unit.
@@ -285,11 +361,16 @@ class PostgreSQLCharmBaseTestCase(object):
 
     def test_failover(self):
         """Set up a multi-unit service and perform failovers."""
-        self.juju.deploy(
-            TEST_CHARM, 'postgresql', num_units=3, config=self.pg_config)
+        # Per Bug #1258485, creating a 3 unit service will often fail.
+        # Instead, create a 2 unit service, wait for it to be ready,
+        # then add a third unit.
         self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0', 'postgresql/1'])
+        self.juju.add_unit('postgresql')
+        self.wait_until_ready(['postgresql/0', 'postgresql/1', 'postgresql/2'])
 
         # Even on a freshly setup service, we have no idea which unit
         # will become the master as we have no control over which two
@@ -334,13 +415,15 @@ class PostgreSQLCharmBaseTestCase(object):
 
         # Remove the master unit.
         self.juju.do(['remove-unit', master_unit])
-        self.wait_until_ready()
+        self.wait_until_ready([standby_unit_1, standby_unit_2])
 
         # When we failover, the unit that has received the most WAL
         # information from the old master (most in sync) is elected the
         # new master.
         standby_unit_1_is_master = self.is_master(standby_unit_1)
         standby_unit_2_is_master = self.is_master(standby_unit_2)
+        if standby_unit_1_is_master == standby_unit_2_is_master:
+            import pdb; pdb.set_trace()
         self.assertNotEqual(
             standby_unit_1_is_master, standby_unit_2_is_master)
 

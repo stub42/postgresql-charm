@@ -20,8 +20,6 @@ class JujuFixture(fixtures.Fixture):
     def __init__(self, reuse_machines=False, do_teardown=True):
         super(JujuFixture, self).__init__()
 
-        self._deployed_charms = set()
-
         self.reuse_machines = reuse_machines
 
         # Optionally, don't teardown services and machines after running
@@ -45,16 +43,7 @@ class JujuFixture(fixtures.Fixture):
         return None
 
     def deploy(self, charm, name=None, num_units=1, config=None):
-        # The first time we deploy a local: charm in the test run, it
-        # needs to deploy with --update to ensure we are testing the
-        # desired revision of the charm. Subsequent deploys we do not
-        # use --update to avoid overhead and needless incrementing of the
-        # revision number.
-        if not charm.startswith('local:') or charm in self._deployed_charms:
-            cmd = ['deploy']
-        else:
-            cmd = ['deploy', '-u']
-            self._deployed_charms.add(charm)
+        cmd = ['deploy']
 
         if config:
             config_path = os.path.join(
@@ -76,15 +65,12 @@ class JujuFixture(fixtures.Fixture):
             cmd.extend(['--to', str(self._free_machines.pop())])
             self.do(cmd)
             if num_units > 1:
-                self.add_unit(charm, name, num_units - 1)
+                self.add_unit(name, num_units - 1)
         else:
             cmd.extend(['-n', str(num_units)])
             self.do(cmd)
 
-    def add_unit(self, charm, name=None, num_units=1):
-        if name is None:
-            name = charm.split(':', 1)[-1]
-
+    def add_unit(self, name, num_units=1):
         num_units_spawned = 0
         while self.reuse_machines and self._free_machines:
             cmd = ['add-unit', '--to', str(self._free_machines.pop()), name]
