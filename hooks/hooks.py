@@ -908,7 +908,9 @@ def config_changed_volume_apply():
         # /srv/juju/vol-000012345/postgresql/9.1/main
         # but keep previous "main/"  directory, by renaming it to
         # main-$TIMESTAMP
-        if not postgresql_stop():
+        try:
+            postgresql_stop()
+        except subprocess.CalledProcessError:
             log("postgresql_stop() failed - can't migrate data.", ERROR)
             return False
         if not os.path.exists(os.path.join(
