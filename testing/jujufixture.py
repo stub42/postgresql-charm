@@ -94,9 +94,9 @@ class JujuFixture(fixtures.Fixture):
             and m.get('life', None) not in ('dead', 'dying')
             and m.get('agent-state', 'pending') in ('started', 'ready'))
         for service in self.status.get('services', {}).values():
-            for unit in service.get('units', []):
+            for unit in service.get('units', {}).values():
                 if 'machine' in unit:
-                    self._free_machines.remove(int(unit['machine']))
+                    self._free_machines.discard(int(unit['machine']))
 
         return self.status
 
