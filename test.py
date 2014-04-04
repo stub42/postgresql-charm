@@ -287,42 +287,51 @@ class PostgreSQLCharmBaseTestCase(object):
         local_port = s.getsockname()[1]
         s.close()
 
-        # Open the tunnel and wait for it to come up
+        # Open the tunnel and wait for it to come up. The new process
+        # group is to ensure we can reap all the ssh tunnels, as simply
+        # killing the 'juju ssh' process doesn't seem to be enough.
         tunnel_cmd = [
-            'juju', 'ssh', psql_unit,
-            '-N', '-L',
+            'juju', 'ssh', psql_unit, '-N', '-L',
             '{}:{}:{}'.format(local_port, rel_info['host'], rel_info['port'])]
         tunnel_proc = subprocess.Popen(
-            tunnel_cmd, stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            tunnel_cmd, stdin=subprocess.PIPE)
+            # Don't disable stdout, so we can see when there are SSH
+            # failures like bad host keys.
+            #stdout=open('/dev/null', 'ab'), stderr=subprocess.STDOUT)
         tunnel_proc.stdin.close()
-        tunnel_proc.stdout.close()
 
-        timeout = time.time() + 60
-        while True:
-            assert tunnel_proc.poll() is None, 'Tunnel died {!r}'.format(
-                tunnel_proc.stdout)
-            try:
-                socket.create_connection(('localhost', local_port)).close()
-                break
-            except socket.error:
-                if time.time() > timeout:
-                    raise
-                time.sleep(0.25)
+        try:
+            timeout = time.time() + 60
+            while True:
+                time.sleep(1)
+                assert tunnel_proc.poll() is None, 'Tunnel died {!r}'.format(
+                    tunnel_proc.stdout)
+                try:
+                    socket.create_connection(('localhost', local_port)).close()
+                    break
+                except socket.error:
+                    if time.time() > timeout:
+                        # Its not going to work. Per Bug #802117, this
+                        # is likely an invalid host key forcing
+                        # tunnelling to be disabled.
+                        raise
 
-        # Execute the query
-        con = psycopg2.connect(
-            database=dbname, port=local_port, host='localhost',
-            user=rel_info['user'], password=rel_info['password'])
-        cur = con.cursor()
-        cur.execute(sql)
-        if cur.description is None:
-            rv = None
-        else:
-            rv = cur.fetchall()
-        con.commit()
-        tunnel_proc.kill()
-        return rv
+            # Execute the query
+            con = psycopg2.connect(
+                database=dbname, port=local_port, host='localhost',
+                user=rel_info['user'], password=rel_info['password'])
+            cur = con.cursor()
+            cur.execute(sql)
+            if cur.description is None:
+                rv = None
+            else:
+                rv = cur.fetchall()
+            con.commit()
+            con.close()
+            return rv
+        finally:
+            tunnel_proc.kill()
+            tunnel_proc.wait()
 
     def pg_ctlcluster(self, unit, command):
         cmd = [
