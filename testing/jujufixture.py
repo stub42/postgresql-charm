@@ -109,7 +109,7 @@ class JujuFixture(fixtures.Fixture):
         relation_names = []
         for service_name, service_info in self.status['services'].items():
             if service_name == unit.split('/')[0]:
-                relation_names = service_info['relations'].keys()
+                relation_names = service_info.get('relations', {}).keys()
                 break
 
         res = {}

@@ -63,7 +63,7 @@ class PostgreSQLCharmBaseTestCase(object):
         if timeout > 0:
             self.useFixture(fixtures.Timeout(timeout, gentle=True))
 
-    def wait_until_ready(self, pg_units=None):
+    def wait_until_ready(self, pg_units, relation=True):
 
         # Per Bug #1200267, it is impossible to know when a juju
         # environment is actually ready for testing. Instead, we do the
@@ -72,9 +72,13 @@ class PostgreSQLCharmBaseTestCase(object):
         # that the system is stable enough to continue testing.
 
         timeout = time.time() + 180
+        pg_units = frozenset(pg_units)
 
-        if pg_units:
-            pg_units = set(pg_units)
+        # The list of PG units we expect to be related to the psql unit.
+        if relation:
+            rel_pg_units = frozenset(pg_units)
+        else:
+            rel_pg_units = frozenset()
 
         while True:
             try:
@@ -83,15 +87,13 @@ class PostgreSQLCharmBaseTestCase(object):
                 status_pg_units = set(self.juju.status[
                     'services']['postgresql']['units'].keys())
 
-                if not pg_units:
-                    pg_units = status_pg_units
-                elif pg_units != status_pg_units:
+                if pg_units != status_pg_units:
                     # Confirm the PG units reported by 'juju status'
                     # match the list we expect.
                     raise NotReady('units not yet added/removed')
 
                 for psql_unit in self.juju.status['services']['psql']['units']:
-                    self.confirm_psql_unit_ready(psql_unit, pg_units)
+                    self.confirm_psql_unit_ready(psql_unit, rel_pg_units)
 
                 for pg_unit in pg_units:
                     peers = [u for u in pg_units if u != pg_unit]
@@ -103,12 +105,16 @@ class PostgreSQLCharmBaseTestCase(object):
                     raise
                 time.sleep(3)
 
-    def confirm_psql_unit_ready(self, psql_unit, pg_units=frozenset()):
+    def confirm_psql_unit_ready(self, psql_unit, pg_units):
         # Confirm the db and db-admin relations are all in a useful
         # state.
         psql_rel_info = self.juju.relation_info(psql_unit)
-        if not psql_rel_info:
-            raise NotReady('{} has no relations'.format(psql_unit))
+        if pg_units and not psql_rel_info:
+            raise NotReady('{} waiting for relations'.format(psql_unit))
+        elif not pg_units and psql_rel_info:
+            raise NotReady('{} waiting to drop relations'.format(psql_unit))
+        elif not pg_units and not psql_rel_info:
+            return
 
         psql_service = psql_unit.split('/', 1)[0]
 
@@ -289,15 +295,17 @@ class PostgreSQLCharmBaseTestCase(object):
         tunnel_proc = subprocess.Popen(
             tunnel_cmd, stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        tunnel_proc.stdin.close()
+        tunnel_proc.stdout.close()
 
-        timeout = time.time() + 30
+        timeout = time.time() + 60
         while True:
+            assert tunnel_proc.poll() is None, 'Tunnel died {!r}'.format(
+                tunnel_proc.stdout)
             try:
                 socket.create_connection(('localhost', local_port)).close()
                 break
             except socket.error:
-                assert tunnel_proc.poll() is None, 'Tunnel died {!r}'.format(
-                    tunnel_proc.stdout)
                 if time.time() > timeout:
                     raise
                 time.sleep(0.25)
@@ -327,21 +335,21 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0'])
 
         result = self.sql('SELECT TRUE')
         self.assertEqual(result, [(True,)])
 
         # Confirm that the relation tears down without errors.
         self.juju.do(['destroy-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0'], relation=False)
 
     def test_streaming_replication(self):
         self.juju.deploy(
             TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0', 'postgresql/1'])
 
         # Confirm that the slave has successfully opened a streaming
         # replication connection.
@@ -357,7 +365,7 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
         self.juju.do(['expose', 'postgresql'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0'])
 
         result = self.sql('SELECT TRUE', dbname='postgres')
         self.assertEqual(result, [(True,)])
@@ -365,7 +373,7 @@ class PostgreSQLCharmBaseTestCase(object):
         # Confirm that the relation tears down without errors.
         self.juju.do([
             'destroy-relation', 'postgresql:db-admin', 'psql:db-admin'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0'], relation=False)
 
     def is_master(self, postgres_unit, dbname=None):
         is_master = self.sql(
@@ -472,11 +480,16 @@ class PostgreSQLCharmBaseTestCase(object):
 
     def test_failover_election(self):
         """Ensure master elected in a failover is the best choice"""
+        # Per Bug #1258485, creating a 3 unit service will often fail.
+        # Instead, create a 2 unit service, wait for it to be ready,
+        # then add a third unit.
         self.juju.deploy(
-            TEST_CHARM, 'postgresql', num_units=3, config=self.pg_config)
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0', 'postgresql/1'])
+        self.juju.add_unit('postgresql')
+        self.wait_until_ready(['postgresql/0', 'postgresql/1', 'postgresql/2'])
 
         # Even on a freshly setup service, we have no idea which unit
         # will become the master as we have no control over which two
@@ -509,7 +522,7 @@ class PostgreSQLCharmBaseTestCase(object):
 
         # Failover.
         self.juju.do(['remove-unit', master_unit])
-        self.wait_until_ready()
+        self.wait_until_ready([standby_unit_1, standby_unit_2])
 
         # Fix replication.
         self.sql(
@@ -532,7 +545,7 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0'])
 
         # Determine the IP address that the unit will see.
         unit = self.juju.status['services']['postgresql']['units'].keys()[0]
@@ -573,14 +586,22 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertEquals(1, cur.fetchone()[0])
 
     def test_explicit_database(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
+        # Two units to ensure both masters and hot standbys
+        # present the correct credentials.
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['set', 'psql', 'database=explicit'])
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
 
-        result = self.sql('SELECT current_database()')[0][0]
-        self.assertEqual(result, 'explicit')
+        pg_units = ['postgresql/0', 'postgresql/1']
+        self.wait_until_ready(pg_units)
+
+        for unit in pg_units:
+            result = self.sql('SELECT current_database()', unit)[0][0]
+            self.assertEqual(
+                result, 'explicit',
+                '{} reports incorrect db {}'.format(unit, result))
 
     def test_roles_granted(self):
         # We use two units to confirm that there is no attempt to
@@ -589,7 +610,8 @@ class PostgreSQLCharmBaseTestCase(object):
             TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql', config={'roles': 'role_a'})
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        pg_units = ['postgresql/0', 'postgresql/1']
+        self.wait_until_ready(pg_units)
 
         has_role_a = self.sql('''
             SELECT pg_has_role(current_user, 'role_a', 'MEMBER')
@@ -597,13 +619,14 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertTrue(has_role_a)
 
         self.juju.do(['set', 'psql', 'roles=role_a,role_b'])
-        self.wait_until_ready()
+        self.wait_until_ready(pg_units)
 
         # Retry this for a while. Per Bug #1200267, we can't tell when
         # the hooks have finished running and the role has been granted.
         # We could make the PostgreSQL charm provide feedback on when
-        # the role has actually been granted and wait for that, but we
-        # don't want to complicate the interface any more than we must.
+        # the role has actually been granted and wait for that, but that
+        # is complex as hot standbys need to wait until the master has
+        # performed the grant and the grant has replicated.
         timeout = time.time() + 60
         while True:
             try:
@@ -626,7 +649,8 @@ class PostgreSQLCharmBaseTestCase(object):
             TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql', config={'roles': 'role_a,role_b'})
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        pg_units = ['postgresql/0', 'postgresql/1']
+        self.wait_until_ready(pg_units)
 
         has_role_a, has_role_b = self.sql('''
             SELECT
@@ -637,37 +661,38 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertTrue(has_role_b)
 
         self.juju.do(['set', 'psql', 'roles=role_c'])
-        self.wait_until_ready()
+        self.wait_until_ready(pg_units)
 
-        # Per Bug #1200267, we have to sleep here and hope. We have no
-        # way of knowing how many of the three pending role changes have
+        # Per Bug #1200267, we have to retry a while here and hope.
+        # We have of knowing when the pending role changes have
         # actually been applied.
-        time.sleep(30)
-
-        has_role_a, has_role_b, has_role_c = self.sql('''
-            SELECT
-                pg_has_role(current_user, 'role_a', 'MEMBER'),
-                pg_has_role(current_user, 'role_b', 'MEMBER'),
-                pg_has_role(current_user, 'role_c', 'MEMBER')
-            ''')[0]
+        timeout = time.time() + 60
+        while time.time() < timeout:
+            has_role_a, has_role_b, has_role_c = self.sql('''
+                SELECT
+                    pg_has_role(current_user, 'role_a', 'MEMBER'),
+                    pg_has_role(current_user, 'role_b', 'MEMBER'),
+                    pg_has_role(current_user, 'role_c', 'MEMBER')
+                ''')[0]
+            if has_role_c:
+                break
         self.assertFalse(has_role_a)
         self.assertFalse(has_role_b)
         self.assertTrue(has_role_c)
 
         self.juju.do(['unset', 'psql', 'roles'])
-        self.wait_until_ready()
+        self.wait_until_ready(pg_units)
 
-        # Per Bug #1200267, we have to sleep here and hope. We have no
-        # way of knowing how many of the three pending role changes have
-        # actually been applied.
-        time.sleep(30)
-
-        has_role_a, has_role_b, has_role_c = self.sql('''
-            SELECT
-                pg_has_role(current_user, 'role_a', 'MEMBER'),
-                pg_has_role(current_user, 'role_b', 'MEMBER'),
-                pg_has_role(current_user, 'role_c', 'MEMBER')
-            ''')[0]
+        timeout = time.time() + 60
+        while True:
+            has_role_a, has_role_b, has_role_c = self.sql('''
+                SELECT
+                    pg_has_role(current_user, 'role_a', 'MEMBER'),
+                    pg_has_role(current_user, 'role_b', 'MEMBER'),
+                    pg_has_role(current_user, 'role_c', 'MEMBER')
+                ''')[0]
+            if not has_role_c:
+                break
         self.assertFalse(has_role_a)
         self.assertFalse(has_role_b)
         self.assertFalse(has_role_c)
@@ -683,7 +708,8 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.deploy('cs:rsyslog', 'rsyslog', num_units=2)
         self.juju.do([
             'add-relation', 'postgresql:syslog', 'rsyslog:aggregator'])
-        self.wait_until_ready()
+        pg_units = ['postgresql/0', 'postgresql/1']
+        self.wait_until_ready(pg_units)
 
         token = str(uuid.uuid1())
 
@@ -698,9 +724,15 @@ class PostgreSQLCharmBaseTestCase(object):
             self.failUnless('hot standby {}'.format(token) in out)
 
         # Confirm that the relation tears down correctly.
-        self.juju.do([
-            'destroy-relation', 'postgresql:syslog', 'rsyslog:aggregator'])
-        self.wait_until_ready()
+        self.juju.do(['destroy-service', 'rsyslog:aggregator'])
+        timeout = time.time() + 60
+        while time.time() < timeout:
+            status = self.juju.refresh_status()
+            if 'rsyslog' in status['services']:
+                break
+        self.assert_(
+            'rsyslog' not in status['services'], 'rsyslog failed to die')
+        self.wait_until_ready(pg_units)
 
 
 class PG91Tests(
