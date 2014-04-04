@@ -536,7 +536,7 @@ class PostgreSQLCharmBaseTestCase(object):
         # Fix replication.
         self.sql(
             "ALTER ROLE juju_replication REPLICATION",
-            standby_unit_2, dbname='postgres')
+            'master', dbname='postgres')
 
         # Ensure the election went as predicted.
         self.assertIs(True, self.is_master(standby_unit_2, 'postgres'))
