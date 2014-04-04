@@ -225,11 +225,15 @@ options:
   work_mem:
     default: "1MB"
     type: string
-    description: Working Memory
+    description: |
+        Working Memory.
+        Ignored unless 'performance_tuning' is set to 'manual'.
   maintenance_work_mem:
     default: "1MB"
     type: string
-    description: Maintenance working memory
+    description: |
+        Maintenance working memory.
+        Ignored unless 'performance_tuning' is set to 'manual'.
   performance_tuning:
     default: "Mixed"
     type: string
@@ -257,13 +261,15 @@ options:
     description: |
         The amount of memory the database server uses for shared memory
         buffers. This string should be of the format '###MB'.
+        Ignored unless 'performance_tuning' is set to 'manual'.
   effective_cache_size:
     default: ""
     type: string
     description: |
         Effective cache size is an estimate of how much memory is available for
         disk caching within the database. (50% to 75% of system memory). This
-        string should be of the format '###MB'.
+        string should be of the format '###MB'. Ignored unless
+        'performance_tuning' is set to 'manual'.
   temp_buffers:
     default: "1MB"
     type: string
@@ -273,11 +279,14 @@ options:
     default: "-1"
     type: string
     description: |
-        min 32kB, -1 sets based on shared_buffers (change requires restart)
+        min 32kB, -1 sets based on shared_buffers (change requires restart).
+        Ignored unless 'performance_tuning' is set to 'manual'.
   checkpoint_segments:
     default: 3
     type: int
-    description: in logfile segments, min 1, 16MB each
+    description: |
+        in logfile segments, min 1, 16MB each.
+        Ignored unless 'performance_tuning' is set to 'manual'.
   random_page_cost:
     default: 4.0
     type: float
