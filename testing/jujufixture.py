@@ -115,10 +115,18 @@ class JujuFixture(fixtures.Fixture):
         res = {}
         juju_run_cmd = ['juju', 'run', '--unit', unit]
         for rel_name in relation_names:
+            try:
+                relation_ids = run(
+                    self, juju_run_cmd + [
+                        'relation-ids {}'.format(rel_name)]).split()
+            except subprocess.CalledProcessError:
+                # Per Bug #1298819, we can't ask the unit which relation
+                # names are active so we need to use the relation names
+                # reported by 'juju status'. This may cause us to
+                # request relation information that the unit is not yet
+                # aware of.
+                continue
             res[rel_name] = {}
-            relation_ids = run(
-                self, juju_run_cmd + [
-                    'relation-ids {}'.format(rel_name)]).split()
             for rel_id in relation_ids:
                 res[rel_name][rel_id] = {}
                 relation_units = [unit] + run(

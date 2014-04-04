@@ -63,7 +63,7 @@ class PostgreSQLCharmBaseTestCase(object):
         if timeout > 0:
             self.useFixture(fixtures.Timeout(timeout, gentle=True))
 
-    def wait_until_ready(self, pg_units=()):
+    def wait_until_ready(self, pg_units=None):
 
         # Per Bug #1200267, it is impossible to know when a juju
         # environment is actually ready for testing. Instead, we do the
@@ -71,22 +71,27 @@ class PostgreSQLCharmBaseTestCase(object):
         # is at this particular instant in the expected state, hoping
         # that the system is stable enough to continue testing.
 
-        timeout = time.time() + 60
+        timeout = time.time() + 180
+
+        if pg_units:
+            pg_units = set(pg_units)
 
         while True:
             try:
                 self.juju.wait_until_ready(0)  # Also refreshes status
 
-                if pg_units:
-                    # Confirm the deployed PG units match the list we
-                    # expect.
-                    status_pg_units = set(self.juju.status[
-                        'services']['postgresql']['units'].keys())
-                    if set(pg_units) != status_pg_units:
-                        raise NotReady('units not yet added/removed')
+                status_pg_units = set(self.juju.status[
+                    'services']['postgresql']['units'].keys())
+
+                if not pg_units:
+                    pg_units = status_pg_units
+                elif pg_units != status_pg_units:
+                    # Confirm the PG units reported by 'juju status'
+                    # match the list we expect.
+                    raise NotReady('units not yet added/removed')
 
                 for psql_unit in self.juju.status['services']['psql']['units']:
-                    self.confirm_psql_unit_ready(psql_unit)
+                    self.confirm_psql_unit_ready(psql_unit, pg_units)
 
                 for pg_unit in pg_units:
                     peers = [u for u in pg_units if u != pg_unit]
@@ -98,34 +103,35 @@ class PostgreSQLCharmBaseTestCase(object):
                     raise
                 time.sleep(3)
 
-    def confirm_psql_unit_ready(self, psql_unit):
+    def confirm_psql_unit_ready(self, psql_unit, pg_units=frozenset()):
         # Confirm the db and db-admin relations are all in a useful
         # state.
         psql_rel_info = self.juju.relation_info(psql_unit)
         if not psql_rel_info:
             raise NotReady('{} has no relations'.format(psql_unit))
-        status_pg_units = set(
-            self.juju.status['services']['postgresql']['units'].keys())
-        related_pg_units = set()
+
+        psql_service = psql_unit.split('/', 1)[0]
+
+        # The set of PostgreSQL units related to the psql unit. They
+        # might be related via several db or db-admin relations.
+        all_rel_pg_units = set()
+
         for rel_name in psql_rel_info:
-            for rel_id, rel_info in (
-                    psql_rel_info[rel_name].items()):
-                num_pg_units = len([
-                    k for k in rel_info.keys()
-                    if k.startswith('postgresql/')])
-                if num_pg_units == 0:
-                    raise NotReady(
-                        '{} has no postgres units'.format(rel_id))
-                requested_db = rel_info['psql/0'].get(
-                    'database', None)
+            for rel_id, rel_info in psql_rel_info[rel_name].items():
+
+                # The database this relation has requested to use, if any.
+                requested_db = rel_info[psql_unit].get('database', None)
+
+                rel_pg_units = (
+                    [u for u in rel_info if not u.startswith(psql_service)])
+                all_rel_pg_units = all_rel_pg_units.union(rel_pg_units)
+
                 num_masters = 0
-                for unit, unit_rel_info in rel_info.items():
-                    if not unit.startswith('postgresql/'):
-                        continue
-                    related_pg_units.add(unit)
-                    if 'user' not in unit_rel_info:
-                        raise NotReady(
-                            '{} has no user'.format(unit))
+
+                for unit in rel_pg_units:
+                    unit_rel_info = rel_info[unit]
+
+                    # PG unit must be presenting the correct database.
                     if 'database' not in unit_rel_info:
                         raise NotReady(
                             '{} has no database'.format(unit))
@@ -134,32 +140,40 @@ class PostgreSQLCharmBaseTestCase(object):
                         raise NotReady(
                             '{} not using requested db {}'.format(
                                 unit, requested_db))
-                    if 'state' not in unit_rel_info:
+
+                    # PG unit must be in a valid state.
+                    state = unit_rel_info.get('state', None)
+                    if not state:
                         raise NotReady(
                             '{} has no state'.format(unit))
-                    state = unit_rel_info['state']
-                    if state == 'standalone':
-                        if num_pg_units > 1:
+                    elif state == 'standalone':
+                        if len(rel_pg_units) > 1:
                             raise NotReady(
                                 '{} is standalone'.format(unit))
                     elif state == 'master':
                         num_masters += 1
-                    elif state not in ('master', 'hot standby'):
+                    elif state != 'hot standby':
+                        # Failover state or totally broken.
                         raise NotReady(
                             '{} in {} state'.format(unit, state))
+
+                    # PG unit must have authorized this psql client.
                     allowed_units = unit_rel_info.get(
                         'allowed-units', '').split()
                     if psql_unit not in allowed_units:
                         raise NotReady(
-                            '{} not yet authorized by {} '
-                            '({})'.format(
+                            '{} not yet authorized by {} ({})'.format(
                                 psql_unit, unit, allowed_units))
-                if num_pg_units > 1 and num_masters != 1:
+
+                # We must not have multiple masters in this relation.
+                if len(rel_pg_units) > 1 and num_masters != 1:
                     raise NotReady(
                         '{} masters'.format(num_masters))
-        if status_pg_units != related_pg_units:
+
+        if pg_units != all_rel_pg_units:
             raise NotReady(
-                'PG units reported by status does not match related units')
+                'Expected PG units {} != related units {}'.format(
+                    pg_units, all_rel_pg_units))
 
     def confirm_postgresql_unit_ready(self, pg_unit, peers=()):
         pg_rel_info = self.juju.relation_info(pg_unit)
@@ -422,8 +436,6 @@ class PostgreSQLCharmBaseTestCase(object):
         # new master.
         standby_unit_1_is_master = self.is_master(standby_unit_1)
         standby_unit_2_is_master = self.is_master(standby_unit_2)
-        if standby_unit_1_is_master == standby_unit_2_is_master:
-            import pdb; pdb.set_trace()
         self.assertNotEqual(
             standby_unit_1_is_master, standby_unit_2_is_master)
 
@@ -440,7 +452,7 @@ class PostgreSQLCharmBaseTestCase(object):
 
         # Remove the master again, leaving a single unit.
         self.juju.do(['remove-unit', master_unit])
-        self.wait_until_ready()
+        self.wait_until_ready([standby_unit])
 
         # Last unit is a working, standalone database.
         self.is_master(standby_unit)
