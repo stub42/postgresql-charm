@@ -294,6 +294,22 @@ class TestHooksService(TestHooks):
         raw_config = open(config_outfile, 'r').read()
         self.assert_('# pgtune wizard' in raw_config)
 
+    def test_auto_tuned_kernel_settings(self):
+        """
+        Kernel settings are automatically set to max RAM values
+        """
+        config_outfile = self.makeFile()
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
+        self.mocker.result(True)
+        self.mocker.replay()
+
+        hooks.create_postgresql_config(config_outfile)
+
+        self.assertFileContains(
+            hooks.postgresql_sysctl,
+            ["kernel.shmall = 1025\nkernel.shmmax = 1073742848"])
+
     def test_auto_tuning_preserves_max_connections(self):
         """
         pgtune with choose max_connections unless you tell it not too
@@ -329,80 +345,3 @@ class TestHooksService(TestHooks):
 
         raw_config = open(config_outfile, 'r').read()
         self.assert_('# pgtune wizard' not in raw_config)
-
-    def test_create_postgresql_config_performance_tune_auto_large_ram(self):
-        """
-        When configuration attribute C{performance_tune} is set to C{auto} and
-        total RAM on a system is > 1023MB. It will automatically calculate
-        values for the following attributes if these attributes were left as
-        default values:
-           - C{effective_cache_size} set to 75% of total RAM in MegaBytes
-           - C{shared_buffers} set to 25% of total RAM in MegaBytes
-           - C{kernel_shmmax} set to total RAM in bytes
-           - C{kernel_shmall} equal to kernel_shmmax in pages
-        """
-        config_outfile = self.makeFile()
-        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
-        _run_sysctl(hooks.postgresql_sysctl)
-        self.mocker.result(True)
-        self.mocker.replay()
-        hooks.create_postgresql_config(config_outfile)
-        self.assertFileContains(
-            config_outfile,
-            ["shared_buffers = 256MB", "effective_cache_size = 768MB"])
-        self.assertFileContains(
-            hooks.postgresql_sysctl,
-            ["kernel.shmall = 1025\nkernel.shmmax = 1073742848"])
-
-    def test_create_postgresql_config_performance_tune_auto_small_ram(self):
-        """
-        When configuration attribute C{performance_tune} is set to C{auto} and
-        total RAM on a system is <= 1023MB. It will automatically calculate
-        values for the following attributes if these attributes were left as
-        default values:
-           - C{effective_cache_size} set to 75% of total RAM in MegaBytes
-           - C{shared_buffers} set to 15% of total RAM in MegaBytes
-           - C{kernel_shmmax} set to total RAM in bytes
-           - C{kernel_shmall} equal to kernel_shmmax in pages
-        """
-        hooks._get_system_ram = lambda: 1023   # MB
-        config_outfile = self.makeFile()
-        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
-        _run_sysctl(hooks.postgresql_sysctl)
-        self.mocker.result(True)
-        self.mocker.replay()
-        hooks.create_postgresql_config(config_outfile)
-        self.assertFileContains(
-            config_outfile,
-            ["shared_buffers = 153MB", "effective_cache_size = 767MB"])
-        self.assertFileContains(
-            hooks.postgresql_sysctl,
-            ["kernel.shmall = 1024\nkernel.shmmax = 1072694272"])
-
-    def test_create_postgresql_config_performance_tune_auto_overridden(self):
-        """
-        When configuration attribute C{performance_tune} is set to C{auto} any
-        non-default values for the configuration parameters below will be used
-        instead of the automatically calculated values.
-           - C{effective_cache_size}
-           - C{shared_buffers}
-           - C{kernel_shmmax}
-           - C{kernel_shmall}
-        """
-        hooks.hookenv._config["effective_cache_size"] = "999MB"
-        hooks.hookenv._config["shared_buffers"] = "101MB"
-        hooks.hookenv._config["kernel_shmmax"] = 50000
-        hooks.hookenv._config["kernel_shmall"] = 500
-        hooks._get_system_ram = lambda: 1023   # MB
-        config_outfile = self.makeFile()
-        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
-        _run_sysctl(hooks.postgresql_sysctl)
-        self.mocker.result(True)
-        self.mocker.replay()
-        hooks.create_postgresql_config(config_outfile)
-        self.assertFileContains(
-            config_outfile,
-            ["shared_buffers = 101MB", "effective_cache_size = 999MB"])
-        self.assertFileContains(
-            hooks.postgresql_sysctl,
-            ["kernel.shmall = 1024\nkernel.shmmax = 1072694272"])
