@@ -5,7 +5,7 @@
 # Database administrative login by UNIX sockets
 local   all         root,postgres                     ident map=superusers
 local   replication root,postgres                     ident map=superusers
-local   all         nagios                            ident
+local   all         nagios                            md5
 
 {% if access_list is defined -%}
 {% for unit in access_list -%}
