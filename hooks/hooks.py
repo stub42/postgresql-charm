@@ -833,6 +833,14 @@ def validate_config():
         sys.exit(99)
 
 
+def ensure_package_status(package, status):
+    if status in ['install', 'hold']:
+        selections = ''.join(['{} {}\n'.format(package, status)])
+        dpkg = subprocess.Popen(['dpkg', '--set-selections'],
+                                stdin=subprocess.PIPE)
+        dpkg.communicate(input=selections)
+
+
 #------------------------------------------------------------------------------
 # Core logic for permanent storage changes:
 # NOTE the only 2 "True" return points:
@@ -1001,6 +1009,8 @@ def config_changed(force_restart=False):
         postgresql_data_dir, pg_version(), config_data['cluster_name']))
     update_service_port()
     update_nrpe_checks()
+    ensure_package_status('postgresql-{}'.format(pg_version()), 
+                           config_data.get('package_status'))
     if force_restart:
         postgresql_restart()
     postgresql_reload_or_restart()

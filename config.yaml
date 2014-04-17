@@ -423,3 +423,9 @@ options:
     type: string
     default: ""
     description: EXPERIMENTAL. OpenStack Swift tenant name.
+  package_status:
+    default: "install"
+    type: string
+    description: |
+        The status of service-affecting packages will be set to this value in the dpkg database.
+        Useful valid values are "install" and "hold".
