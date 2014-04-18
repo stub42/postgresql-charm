@@ -829,16 +829,21 @@ def validate_config():
         local_state[name] = config_data.get(name, None)
     local_state.save()
 
+    package_status = config_data['package_status']
+    if package_status not in ['install', 'hold']:
+        valid = False
+        log("package_status must be 'install' or 'hold' not '{}'"
+            "".format(package_status), CRITICAL)
+
     if not valid:
         sys.exit(99)
 
 
 def ensure_package_status(package, status):
-    if status in ['install', 'hold']:
-        selections = ''.join(['{} {}\n'.format(package, status)])
-        dpkg = subprocess.Popen(['dpkg', '--set-selections'],
+    selections = ''.join(['{} {}\n'.format(package, status)])
+    dpkg = subprocess.Popen(['dpkg', '--set-selections'],
                                 stdin=subprocess.PIPE)
-        dpkg.communicate(input=selections)
+    dpkg.communicate(input=selections)
 
 
 #------------------------------------------------------------------------------
@@ -1009,8 +1014,6 @@ def config_changed(force_restart=False):
         postgresql_data_dir, pg_version(), config_data['cluster_name']))
     update_service_port()
     update_nrpe_checks()
-    ensure_package_status('postgresql-{}'.format(pg_version()), 
-                           config_data.get('package_status'))
     if force_restart:
         postgresql_restart()
     postgresql_reload_or_restart()
@@ -1559,10 +1562,18 @@ def update_repos_and_packages():
         run(["locale-gen", "{}.{}".format(
             hookenv.config('locale'), hookenv.config('encoding'))])
 
+    version = pg_version()
+    # Set package state for main postgresql package if installed
+    try:
+        run("dpkg -l postgresql-{}".format(version, exit_on_error=False))
+        ensure_package_status('postgresql-{}'.format(version), 
+                              hookenv.config('package_status'))
+    except:
+        pass
+
     if need_upgrade:
         run("apt-get -y upgrade")
 
-    version = pg_version()
     # It might have been better for debversion and plpython to only get
     # installed if they were listed in the extra-packages config item,
     # but they predate this feature.
