@@ -114,6 +114,38 @@ class JujuFixture(fixtures.Fixture):
 
         return self.status
 
+    def relation_info(self, unit):
+        '''Return all the relation information accessible from a unit.
+
+        relation_info('foo/0')[relation_name][relation_id][unit][key]
+        '''
+        # Get the possible relation names heuristically, per Bug #1298819
+        relation_names = []
+        for service_name, service_info in self.status['services'].items():
+            if service_name == unit.split('/')[0]:
+                relation_names = service_info['relations'].keys()
+                break
+
+        res = {}
+        juju_run_cmd = ['juju', 'run', '--unit', unit]
+        for rel_name in relation_names:
+            res[rel_name] = {}
+            relation_ids = run(
+                self, juju_run_cmd + [
+                    'relation-ids {}'.format(rel_name)]).split()
+            for rel_id in relation_ids:
+                res[rel_name][rel_id] = {}
+                relation_units = [unit] + run(
+                    self, juju_run_cmd + [
+                        'relation-list -r {}'.format(rel_id)]).split()
+                for rel_unit in relation_units:
+                    json_rel_info = run(
+                        self, juju_run_cmd + [
+                            'relation-get --format=json -r {} - {}'.format(
+                                rel_id, rel_unit)])
+                    res[rel_name][rel_id][rel_unit] = json.loads(json_rel_info)
+        return res
+
     def wait_until_ready(self, extra=60):
         ready = False
         while not ready:
@@ -202,6 +234,9 @@ class JujuFixture(fixtures.Fixture):
             self.do(['terminate-machine'] + list(self._free_machines))
 
 
+_run_seq = 0
+
+
 def run(detail_collector, cmd, input=''):
     try:
         proc = subprocess.Popen(
@@ -211,12 +246,18 @@ def run(detail_collector, cmd, input=''):
         raise
 
     (out, err) = proc.communicate(input)
-    detail_collector.addDetail(
-        'cmd', text_content('{}: {}'.format(proc.returncode, ' '.join(cmd))))
-    if out:
-        detail_collector.addDetail('stdout', text_content(out))
-    if err:
-        detail_collector.addDetail('stderr', text_content(err))
+    if detail_collector:
+        global _run_seq
+        _run_seq += 1
+        m = {
+            'cmd': ' '.join(cmd),
+            'rc': proc.returncode,
+            'stdout': out,
+            'stderr': err,
+        }
+        detail_collector.addDetail(
+            'run_{}'.format(_run_seq),
+            text_content(yaml.safe_dump(m, default_flow_style=False)))
     if proc.returncode != 0:
         raise subprocess.CalledProcessError(
             proc.returncode, cmd, err)
