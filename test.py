@@ -94,6 +94,10 @@ class PostgreSQLCharmBaseTestCase(object):
                                 'database', None)
                             num_masters = 0
                             for unit, unit_rel_info in rel_info.items():
+                                if not unit_rel_info:
+                                    raise NotReady(
+                                        '{} {} is not setup'.format(
+                                            unit, rel_id))
                                 if not unit.startswith('postgresql/'):
                                     continue
                                 if 'user' not in unit_rel_info:

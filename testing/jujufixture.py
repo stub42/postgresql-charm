@@ -139,11 +139,18 @@ class JujuFixture(fixtures.Fixture):
                     self, juju_run_cmd + [
                         'relation-list -r {}'.format(rel_id)]).split()
                 for rel_unit in relation_units:
-                    json_rel_info = run(
-                        self, juju_run_cmd + [
-                            'relation-get --format=json -r {} - {}'.format(
-                                rel_id, rel_unit)])
-                    res[rel_name][rel_id][rel_unit] = json.loads(json_rel_info)
+                    try:
+                        json_rel_info = run(
+                            self, juju_run_cmd + [
+                                'relation-get --format=json -r {} - {}'.format(
+                                    rel_id, rel_unit)])
+                        res[rel_name][rel_id][rel_unit] = json.loads(
+                            json_rel_info)
+                    except subprocess.CalledProcessError as x:
+                        if x.returncode == 2:
+                            res[rel_name][rel_id][rel_unit] = None
+                        else:
+                            raise
         return res
 
     def wait_until_ready(self, extra=60):
@@ -238,27 +245,34 @@ _run_seq = 0
 
 
 def run(detail_collector, cmd, input=''):
+    global _run_seq
+    _run_seq = _run_seq + 1
+
+    # This helper primarily exists to capture the subprocess details,
+    # but this is failing. Details are being captured, but those added
+    # inside the actual test (not setup) are not being reported.
+
+    out, err, returncode = None, None, None
     try:
         proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError:
+        (out, err) = proc.communicate(input)
+        returncode = proc.returncode
+        if returncode != 0:
+            raise subprocess.CalledProcessError(returncode, cmd, err)
+        return out
+    except subprocess.CalledProcessError as x:
+        returncode = x.returncode
         raise
-
-    (out, err) = proc.communicate(input)
-    if detail_collector:
-        global _run_seq
-        _run_seq += 1
-        m = {
-            'cmd': ' '.join(cmd),
-            'rc': proc.returncode,
-            'stdout': out,
-            'stderr': err,
-        }
-        detail_collector.addDetail(
-            'run_{}'.format(_run_seq),
-            text_content(yaml.safe_dump(m, default_flow_style=False)))
-    if proc.returncode != 0:
-        raise subprocess.CalledProcessError(
-            proc.returncode, cmd, err)
-    return out
+    finally:
+        if detail_collector is not None:
+            m = {
+                'cmd': ' '.join(cmd),
+                'rc': returncode,
+                'stdout': out,
+                'stderr': err,
+            }
+            detail_collector.addDetail(
+                'run_{}'.format(_run_seq),
+                text_content(yaml.safe_dump(m, default_flow_style=False)))

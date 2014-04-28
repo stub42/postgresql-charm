@@ -159,11 +159,11 @@ class TestJuju(object):
     def log(self, *args, **kwargs):
         pass
 
-    def config_get(self, scope=None):
+    def config(self, scope=None):
         if scope is None:
-            return self.config
+            return dict(self._config)
         else:
-            return self.config[scope]
+            return self._config[scope]
 
     def relation_get(self, scope=None, unit_name=None, relation_id=None):
         pass
@@ -175,14 +175,13 @@ class TestHooks(mocker.MockerTestCase):
         hooks.hookenv = TestJuju()
         hooks.host = TestJujuHost()
         hooks.juju_log_dir = self.makeDir()
-        hooks.hookenv.config = lambda: hooks.hookenv._config
-        #hooks.hookenv.localunit = lambda: "localhost"
         hooks.os.environ["JUJU_UNIT_NAME"] = "landscape/1"
         hooks.os.environ["CHARM_DIR"] = os.path.abspath(
             os.path.join(os.path.dirname(__file__), os.pardir))
         hooks.postgresql_sysctl = self.makeFile()
         hooks._get_system_ram = lambda: 1024   # MB
         hooks._get_page_size = lambda: 1024 * 1024  # bytes
+        hooks._run_sysctl = lambda x: ""
         self.maxDiff = None
 
     def assertFileContains(self, filename, lines):
@@ -216,8 +215,8 @@ class TestHooksService(TestHooks):
         C{replication} relations, default wal settings will be present.
         """
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
         hooks.create_postgresql_config(config_outfile)
@@ -240,8 +239,8 @@ class TestHooksService(TestHooks):
         hooks.hookenv._relation_ids = {
             "replication/0": "db-admin:5", "replication/1": "db-admin:6"}
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
         hooks.create_postgresql_config(config_outfile)
@@ -269,8 +268,8 @@ class TestHooksService(TestHooks):
         hooks.hookenv._config["wal_keep_segments"] = 1000
         hooks.hookenv._config["replicated_wal_keep_segments"] = 999
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
         hooks.create_postgresql_config(config_outfile)
@@ -279,79 +278,70 @@ class TestHooksService(TestHooks):
             ["hot_standby = True", "wal_level = hot_standby",
              "max_wal_senders = 3", "wal_keep_segments = 1000"])
 
-    def test_create_postgresql_config_performance_tune_auto_large_ram(self):
+    def test_auto_tuned_postgresql_config(self):
         """
-        When configuration attribute C{performance_tune} is set to C{auto} and
-        total RAM on a system is > 1023MB. It will automatically calculate
-        values for the following attributes if these attributes were left as
-        default values:
-           - C{effective_cache_size} set to 75% of total RAM in MegaBytes
-           - C{shared_buffers} set to 25% of total RAM in MegaBytes
-           - C{kernel_shmmax} set to total RAM in bytes
-           - C{kernel_shmall} equal to kernel_shmmax in pages
+        When automatic performance tuning is specified, pgtune will
+        modify postgresql.conf. Automatic performance tuning is the default.
         """
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
+
         hooks.create_postgresql_config(config_outfile)
-        self.assertFileContains(
-            config_outfile,
-            ["shared_buffers = 256MB", "effective_cache_size = 768MB"])
+
+        raw_config = open(config_outfile, 'r').read()
+        self.assert_('# pgtune wizard' in raw_config)
+
+    def test_auto_tuned_kernel_settings(self):
+        """
+        Kernel settings are automatically set to max RAM values
+        """
+        config_outfile = self.makeFile()
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
+        self.mocker.result(True)
+        self.mocker.replay()
+
+        hooks.create_postgresql_config(config_outfile)
+
         self.assertFileContains(
             hooks.postgresql_sysctl,
             ["kernel.shmall = 1025\nkernel.shmmax = 1073742848"])
 
-    def test_create_postgresql_config_performance_tune_auto_small_ram(self):
+    def test_auto_tuning_preserves_max_connections(self):
         """
-        When configuration attribute C{performance_tune} is set to C{auto} and
-        total RAM on a system is <= 1023MB. It will automatically calculate
-        values for the following attributes if these attributes were left as
-        default values:
-           - C{effective_cache_size} set to 75% of total RAM in MegaBytes
-           - C{shared_buffers} set to 15% of total RAM in MegaBytes
-           - C{kernel_shmmax} set to total RAM in bytes
-           - C{kernel_shmall} equal to kernel_shmmax in pages
+        pgtune with choose max_connections unless you tell it not too
         """
-        hooks._get_system_ram = lambda: 1023   # MB
+        # Note that the charm does not yet make use of automatic
+        # max_connections. We may want to change the default
+        # max_connections to null and autotune then.
+        hooks.hookenv._config["max_connections"] = 42
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
-        hooks.create_postgresql_config(config_outfile)
-        self.assertFileContains(
-            config_outfile,
-            ["shared_buffers = 153MB", "effective_cache_size = 767MB"])
-        self.assertFileContains(
-            hooks.postgresql_sysctl,
-            ["kernel.shmall = 1024\nkernel.shmmax = 1072694272"])
 
-    def test_create_postgresql_config_performance_tune_auto_overridden(self):
+        hooks.create_postgresql_config(config_outfile)
+
+        raw_config = open(config_outfile, 'r').read()
+        self.assert_('\nmax_connections = 42\n' in raw_config)
+
+    def test_manually_tuned_postgresql_config(self):
         """
-        When configuration attribute C{performance_tune} is set to C{auto} any
-        non-default values for the configuration parameters below will be used
-        instead of the automatically calculated values.
-           - C{effective_cache_size}
-           - C{shared_buffers}
-           - C{kernel_shmmax}
-           - C{kernel_shmall}
+        When automatic performance tuning is specified, pgtune will
+        modify postgresql.conf. Automatic performance tuning is the default.
         """
-        hooks.hookenv._config["effective_cache_size"] = "999MB"
-        hooks.hookenv._config["shared_buffers"] = "101MB"
-        hooks.hookenv._config["kernel_shmmax"] = 50000
-        hooks.hookenv._config["kernel_shmall"] = 500
-        hooks._get_system_ram = lambda: 1023   # MB
+        hooks.hookenv._config["performance_tuning"] = "maNual"
         config_outfile = self.makeFile()
-        run = self.mocker.replace(hooks.run)
-        run("sysctl -p %s" % hooks.postgresql_sysctl)
+        _run_sysctl = self.mocker.replace(hooks._run_sysctl)
+        _run_sysctl(hooks.postgresql_sysctl)
         self.mocker.result(True)
         self.mocker.replay()
+
         hooks.create_postgresql_config(config_outfile)
-        self.assertFileContains(
-            config_outfile,
-            ["shared_buffers = 101MB", "effective_cache_size = 999MB"])
-        self.assertFileContains(
-            hooks.postgresql_sysctl,
-            ["kernel.shmall = 1024\nkernel.shmmax = 1072694272"])
+
+        raw_config = open(config_outfile, 'r').read()
+        self.assert_('# pgtune wizard' not in raw_config)
