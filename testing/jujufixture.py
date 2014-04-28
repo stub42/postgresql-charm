@@ -20,8 +20,6 @@ class JujuFixture(fixtures.Fixture):
     def __init__(self, reuse_machines=False, do_teardown=True):
         super(JujuFixture, self).__init__()
 
-        self._deployed_charms = set()
-
         self.reuse_machines = reuse_machines
 
         # Optionally, don't teardown services and machines after running
@@ -45,16 +43,7 @@ class JujuFixture(fixtures.Fixture):
         return None
 
     def deploy(self, charm, name=None, num_units=1, config=None):
-        # The first time we deploy a local: charm in the test run, it
-        # needs to deploy with --update to ensure we are testing the
-        # desired revision of the charm. Subsequent deploys we do not
-        # use --update to avoid overhead and needless incrementing of the
-        # revision number.
-        if not charm.startswith('local:') or charm in self._deployed_charms:
-            cmd = ['deploy']
-        else:
-            cmd = ['deploy', '-u']
-            self._deployed_charms.add(charm)
+        cmd = ['deploy']
 
         if config:
             config_path = os.path.join(
@@ -76,15 +65,12 @@ class JujuFixture(fixtures.Fixture):
             cmd.extend(['--to', str(self._free_machines.pop())])
             self.do(cmd)
             if num_units > 1:
-                self.add_unit(charm, name, num_units - 1)
+                self.add_unit(name, num_units - 1)
         else:
             cmd.extend(['-n', str(num_units)])
             self.do(cmd)
 
-    def add_unit(self, charm, name=None, num_units=1):
-        if name is None:
-            name = charm.split(':', 1)[-1]
-
+    def add_unit(self, name, num_units=1):
         num_units_spawned = 0
         while self.reuse_machines and self._free_machines:
             cmd = ['add-unit', '--to', str(self._free_machines.pop()), name]
@@ -108,9 +94,9 @@ class JujuFixture(fixtures.Fixture):
             and m.get('life', None) not in ('dead', 'dying')
             and m.get('agent-state', 'pending') in ('started', 'ready'))
         for service in self.status.get('services', {}).values():
-            for unit in service.get('units', []):
+            for unit in service.get('units', {}).values():
                 if 'machine' in unit:
-                    self._free_machines.remove(int(unit['machine']))
+                    self._free_machines.discard(int(unit['machine']))
 
         return self.status
 
@@ -123,16 +109,24 @@ class JujuFixture(fixtures.Fixture):
         relation_names = []
         for service_name, service_info in self.status['services'].items():
             if service_name == unit.split('/')[0]:
-                relation_names = service_info['relations'].keys()
+                relation_names = service_info.get('relations', {}).keys()
                 break
 
         res = {}
         juju_run_cmd = ['juju', 'run', '--unit', unit]
         for rel_name in relation_names:
+            try:
+                relation_ids = run(
+                    self, juju_run_cmd + [
+                        'relation-ids {}'.format(rel_name)]).split()
+            except subprocess.CalledProcessError:
+                # Per Bug #1298819, we can't ask the unit which relation
+                # names are active so we need to use the relation names
+                # reported by 'juju status'. This may cause us to
+                # request relation information that the unit is not yet
+                # aware of.
+                continue
             res[rel_name] = {}
-            relation_ids = run(
-                self, juju_run_cmd + [
-                    'relation-ids {}'.format(rel_name)]).split()
             for rel_id in relation_ids:
                 res[rel_name][rel_id] = {}
                 relation_units = [unit] + run(

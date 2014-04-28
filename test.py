@@ -28,6 +28,10 @@ TEST_CHARM = 'local:postgresql'
 PSQL_CHARM = 'cs:postgresql-psql'
 
 
+class NotReady(Exception):
+    pass
+
+
 class PostgreSQLCharmBaseTestCase(object):
 
     # Override these in subclasses to run these tests multiple times
@@ -59,7 +63,7 @@ class PostgreSQLCharmBaseTestCase(object):
         if timeout > 0:
             self.useFixture(fixtures.Timeout(timeout, gentle=True))
 
-    def wait_until_ready(self):
+    def wait_until_ready(self, pg_units, relation=True):
 
         # Per Bug #1200267, it is impossible to know when a juju
         # environment is actually ready for testing. Instead, we do the
@@ -67,78 +71,170 @@ class PostgreSQLCharmBaseTestCase(object):
         # is at this particular instant in the expected state, hoping
         # that the system is stable enough to continue testing.
 
-        class NotReady(Exception):
-            pass
+        timeout = time.time() + 180
+        pg_units = frozenset(pg_units)
 
-        timeout = time.time() + 300
+        # The list of PG units we expect to be related to the psql unit.
+        if relation:
+            rel_pg_units = frozenset(pg_units)
+        else:
+            rel_pg_units = frozenset()
 
         while True:
             try:
-                self.juju.wait_until_ready(0)
-                # Confirm the db and db-admin relations are all in a useful
-                # state.
+                self.juju.wait_until_ready(0)  # Also refreshes status
+
+                status_pg_units = set(self.juju.status[
+                    'services']['postgresql']['units'].keys())
+
+                if pg_units != status_pg_units:
+                    # Confirm the PG units reported by 'juju status'
+                    # match the list we expect.
+                    raise NotReady('units not yet added/removed')
+
                 for psql_unit in self.juju.status['services']['psql']['units']:
-                    psql_rel_info = self.juju.relation_info(psql_unit)
-                    if not psql_rel_info:
-                        raise NotReady('No relations')
-                    for rel_name in psql_rel_info:
-                        for rel_id, rel_info in (
-                                psql_rel_info[rel_name].items()):
-                            num_pg_units = len([
-                                k for k in rel_info.keys()
-                                if k.startswith('postgresql/')])
-                            if num_pg_units == 0:
-                                raise NotReady(
-                                    '{} has no postgres units'.format(rel_id))
-                            requested_db = rel_info['psql/0'].get(
-                                'database', None)
-                            num_masters = 0
-                            for unit, unit_rel_info in rel_info.items():
-                                if not unit_rel_info:
-                                    raise NotReady(
-                                        '{} {} is not setup'.format(
-                                            unit, rel_id))
-                                if not unit.startswith('postgresql/'):
-                                    continue
-                                if 'user' not in unit_rel_info:
-                                    raise NotReady(
-                                        '{} has no user'.format(unit))
-                                if 'database' not in unit_rel_info:
-                                    raise NotReady(
-                                        '{} has no database'.format(unit))
-                                if requested_db and (unit_rel_info['database']
-                                                     != requested_db):
-                                    raise NotReady(
-                                        '{} not using requested db {}'.format(
-                                            unit, requested_db))
-                                if 'state' not in unit_rel_info:
-                                    raise NotReady(
-                                        '{} has no state'.format(unit))
-                                state = unit_rel_info['state']
-                                if state == 'standalone':
-                                    if num_pg_units > 1:
-                                        raise NotReady(
-                                            '{} is standalone'.format(unit))
-                                elif state == 'master':
-                                    num_masters += 1
-                                elif state not in ('master', 'hot standby'):
-                                    raise NotReady(
-                                        '{} in {} state'.format(unit, state))
-                                allowed_units = unit_rel_info.get(
-                                    'allowed-units', '').split()
-                                if psql_unit not in allowed_units:
-                                    raise NotReady(
-                                        '{} not yet authorized by {} '
-                                        '({})'.format(
-                                            psql_unit, unit, allowed_units))
-                            if num_pg_units > 1 and num_masters != 1:
-                                raise NotReady(
-                                    '{} masters'.format(num_masters))
+                    self.confirm_psql_unit_ready(psql_unit, rel_pg_units)
+
+                for pg_unit in pg_units:
+                    peers = [u for u in pg_units if u != pg_unit]
+                    self.confirm_postgresql_unit_ready(pg_unit, peers)
+
                 return
             except NotReady:
                 if time.time() > timeout:
                     raise
                 time.sleep(3)
+
+    def confirm_psql_unit_ready(self, psql_unit, pg_units):
+        # Confirm the db and db-admin relations are all in a useful
+        # state.
+        psql_rel_info = self.juju.relation_info(psql_unit)
+        if pg_units and not psql_rel_info:
+            raise NotReady('{} waiting for relations'.format(psql_unit))
+        elif not pg_units and psql_rel_info:
+            raise NotReady('{} waiting to drop relations'.format(psql_unit))
+        elif not pg_units and not psql_rel_info:
+            return
+
+        psql_service = psql_unit.split('/', 1)[0]
+
+        # The set of PostgreSQL units related to the psql unit. They
+        # might be related via several db or db-admin relations.
+        all_rel_pg_units = set()
+
+        for rel_name in psql_rel_info:
+            for rel_id, rel_info in psql_rel_info[rel_name].items():
+
+                # The database this relation has requested to use, if any.
+                requested_db = rel_info[psql_unit].get('database', None)
+
+                rel_pg_units = (
+                    [u for u in rel_info if not u.startswith(psql_service)])
+                all_rel_pg_units = all_rel_pg_units.union(rel_pg_units)
+
+                num_masters = 0
+
+                for unit in rel_pg_units:
+                    unit_rel_info = rel_info[unit]
+
+                    # PG unit must be presenting the correct database.
+                    if 'database' not in unit_rel_info:
+                        raise NotReady(
+                            '{} has no database'.format(unit))
+                    if requested_db and (
+                            unit_rel_info['database'] != requested_db):
+                        raise NotReady(
+                            '{} not using requested db {}'.format(
+                                unit, requested_db))
+
+                    # PG unit must be in a valid state.
+                    state = unit_rel_info.get('state', None)
+                    if not state:
+                        raise NotReady(
+                            '{} has no state'.format(unit))
+                    elif state == 'standalone':
+                        if len(rel_pg_units) > 1:
+                            raise NotReady(
+                                '{} is standalone'.format(unit))
+                    elif state == 'master':
+                        num_masters += 1
+                    elif state != 'hot standby':
+                        # Failover state or totally broken.
+                        raise NotReady(
+                            '{} in {} state'.format(unit, state))
+
+                    # PG unit must have authorized this psql client.
+                    allowed_units = unit_rel_info.get(
+                        'allowed-units', '').split()
+                    if psql_unit not in allowed_units:
+                        raise NotReady(
+                            '{} not yet authorized by {} ({})'.format(
+                                psql_unit, unit, allowed_units))
+
+                # We must not have multiple masters in this relation.
+                if len(rel_pg_units) > 1 and num_masters != 1:
+                    raise NotReady(
+                        '{} masters'.format(num_masters))
+
+        if pg_units != all_rel_pg_units:
+            raise NotReady(
+                'Expected PG units {} != related units {}'.format(
+                    pg_units, all_rel_pg_units))
+
+    def confirm_postgresql_unit_ready(self, pg_unit, peers=()):
+        pg_rel_info = self.juju.relation_info(pg_unit)
+        if not pg_rel_info:
+            raise NotReady('{} has no relations'.format(pg_unit))
+
+        try:
+            rep_rel_id = pg_rel_info['replication'].keys()[0]
+            actual_peers = set([
+                u for u in pg_rel_info['replication'][rep_rel_id].keys()
+                if u != pg_unit])
+        except (IndexError, KeyError):
+            if peers:
+                raise NotReady('Peer relation does not exist')
+            rep_rel_id = None
+            actual_peers = set()
+
+        if actual_peers != set(peers):
+            raise NotReady('Expecting {} peers, found {}'.format(
+                peers, actual_peers))
+
+        if not peers:
+            return
+
+        pg_rep_rel_info = pg_rel_info['replication'][rep_rel_id].get(
+            pg_unit, None)
+        if not pg_rep_rel_info:
+            raise NotReady('{} has not yet joined the peer relation'.format(
+                pg_unit))
+
+        state = pg_rep_rel_info.get('state', None)
+
+        if not state:
+            raise NotReady('{} has no state'.format(pg_unit))
+
+        if state == 'standalone' and peers:
+            raise NotReady('{} is standalone but has peers'.format(pg_unit))
+
+        if state not in ('standalone', 'master', 'hot standby'):
+            raise NotReady('{} reports failover in progress'.format(pg_unit))
+
+        num_masters = 1 if state in ('master', 'standalone') else 0
+
+        for peer in peers:
+            peer_rel_info = pg_rel_info['replication'][rep_rel_id][peer]
+            peer_state = peer_rel_info.get('state', None)
+            if not peer_state:
+                raise NotReady('{} has no peer state'.format(peer))
+            if peer_state == 'master':
+                num_masters += 1
+            elif peer_state != 'hot standby':
+                raise NotReady('Peer {} in state {}'.format(peer, peer_state))
+
+        if num_masters != 1:
+            raise NotReady('No masters seen from {}'.format(pg_unit))
 
     def sql(self, sql, postgres_unit=None, psql_unit=None, dbname=None):
         '''Run some SQL on postgres_unit from psql_unit.
@@ -191,40 +287,51 @@ class PostgreSQLCharmBaseTestCase(object):
         local_port = s.getsockname()[1]
         s.close()
 
-        # Open the tunnel and wait for it to come up
+        # Open the tunnel and wait for it to come up. The new process
+        # group is to ensure we can reap all the ssh tunnels, as simply
+        # killing the 'juju ssh' process doesn't seem to be enough.
         tunnel_cmd = [
-            'juju', 'ssh', psql_unit,
-            '-N', '-L',
+            'juju', 'ssh', psql_unit, '-N', '-L',
             '{}:{}:{}'.format(local_port, rel_info['host'], rel_info['port'])]
         tunnel_proc = subprocess.Popen(
-            tunnel_cmd, stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            tunnel_cmd, stdin=subprocess.PIPE)
+            # Don't disable stdout, so we can see when there are SSH
+            # failures like bad host keys.
+            #stdout=open('/dev/null', 'ab'), stderr=subprocess.STDOUT)
+        tunnel_proc.stdin.close()
 
-        timeout = time.time() + 30
-        while True:
-            try:
-                socket.create_connection(('localhost', local_port)).close()
-                break
-            except socket.error:
+        try:
+            timeout = time.time() + 60
+            while True:
+                time.sleep(1)
                 assert tunnel_proc.poll() is None, 'Tunnel died {!r}'.format(
                     tunnel_proc.stdout)
-                if time.time() > timeout:
-                    raise
-                time.sleep(0.25)
+                try:
+                    socket.create_connection(('localhost', local_port)).close()
+                    break
+                except socket.error:
+                    if time.time() > timeout:
+                        # Its not going to work. Per Bug #802117, this
+                        # is likely an invalid host key forcing
+                        # tunnelling to be disabled.
+                        raise
 
-        # Execute the query
-        con = psycopg2.connect(
-            database=dbname, port=local_port, host='localhost',
-            user=rel_info['user'], password=rel_info['password'])
-        cur = con.cursor()
-        cur.execute(sql)
-        if cur.description is None:
-            rv = None
-        else:
-            rv = cur.fetchall()
-        con.commit()
-        tunnel_proc.kill()
-        return rv
+            # Execute the query
+            con = psycopg2.connect(
+                database=dbname, port=local_port, host='localhost',
+                user=rel_info['user'], password=rel_info['password'])
+            cur = con.cursor()
+            cur.execute(sql)
+            if cur.description is None:
+                rv = None
+            else:
+                rv = cur.fetchall()
+            con.commit()
+            con.close()
+            return rv
+        finally:
+            tunnel_proc.kill()
+            tunnel_proc.wait()
 
     def pg_ctlcluster(self, unit, command):
         cmd = [
@@ -237,21 +344,21 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0'])
 
         result = self.sql('SELECT TRUE')
         self.assertEqual(result, [(True,)])
 
         # Confirm that the relation tears down without errors.
         self.juju.do(['destroy-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0'], relation=False)
 
     def test_streaming_replication(self):
         self.juju.deploy(
             TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0', 'postgresql/1'])
 
         # Confirm that the slave has successfully opened a streaming
         # replication connection.
@@ -267,7 +374,7 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
         self.juju.do(['expose', 'postgresql'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0'])
 
         result = self.sql('SELECT TRUE', dbname='postgres')
         self.assertEqual(result, [(True,)])
@@ -275,7 +382,7 @@ class PostgreSQLCharmBaseTestCase(object):
         # Confirm that the relation tears down without errors.
         self.juju.do([
             'destroy-relation', 'postgresql:db-admin', 'psql:db-admin'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0'], relation=False)
 
     def is_master(self, postgres_unit, dbname=None):
         is_master = self.sql(
@@ -285,11 +392,16 @@ class PostgreSQLCharmBaseTestCase(object):
 
     def test_failover(self):
         """Set up a multi-unit service and perform failovers."""
-        self.juju.deploy(
-            TEST_CHARM, 'postgresql', num_units=3, config=self.pg_config)
+        # Per Bug #1258485, creating a 3 unit service will often fail.
+        # Instead, create a 2 unit service, wait for it to be ready,
+        # then add a third unit.
         self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0', 'postgresql/1'])
+        self.juju.add_unit('postgresql')
+        self.wait_until_ready(['postgresql/0', 'postgresql/1', 'postgresql/2'])
 
         # Even on a freshly setup service, we have no idea which unit
         # will become the master as we have no control over which two
@@ -334,7 +446,7 @@ class PostgreSQLCharmBaseTestCase(object):
 
         # Remove the master unit.
         self.juju.do(['remove-unit', master_unit])
-        self.wait_until_ready()
+        self.wait_until_ready([standby_unit_1, standby_unit_2])
 
         # When we failover, the unit that has received the most WAL
         # information from the old master (most in sync) is elected the
@@ -357,7 +469,7 @@ class PostgreSQLCharmBaseTestCase(object):
 
         # Remove the master again, leaving a single unit.
         self.juju.do(['remove-unit', master_unit])
-        self.wait_until_ready()
+        self.wait_until_ready([standby_unit])
 
         # Last unit is a working, standalone database.
         self.is_master(standby_unit)
@@ -377,11 +489,16 @@ class PostgreSQLCharmBaseTestCase(object):
 
     def test_failover_election(self):
         """Ensure master elected in a failover is the best choice"""
+        # Per Bug #1258485, creating a 3 unit service will often fail.
+        # Instead, create a 2 unit service, wait for it to be ready,
+        # then add a third unit.
         self.juju.deploy(
-            TEST_CHARM, 'postgresql', num_units=3, config=self.pg_config)
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0', 'postgresql/1'])
+        self.juju.add_unit('postgresql')
+        self.wait_until_ready(['postgresql/0', 'postgresql/1', 'postgresql/2'])
 
         # Even on a freshly setup service, we have no idea which unit
         # will become the master as we have no control over which two
@@ -414,12 +531,12 @@ class PostgreSQLCharmBaseTestCase(object):
 
         # Failover.
         self.juju.do(['remove-unit', master_unit])
-        self.wait_until_ready()
+        self.wait_until_ready([standby_unit_1, standby_unit_2])
 
         # Fix replication.
         self.sql(
             "ALTER ROLE juju_replication REPLICATION",
-            standby_unit_2, dbname='postgres')
+            'master', dbname='postgres')
 
         # Ensure the election went as predicted.
         self.assertIs(True, self.is_master(standby_unit_2, 'postgres'))
@@ -437,7 +554,7 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
-        self.wait_until_ready()
+        self.wait_until_ready(['postgresql/0'])
 
         # Determine the IP address that the unit will see.
         unit = self.juju.status['services']['postgresql']['units'].keys()[0]
@@ -478,14 +595,22 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertEquals(1, cur.fetchone()[0])
 
     def test_explicit_database(self):
-        self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
+        # Two units to ensure both masters and hot standbys
+        # present the correct credentials.
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql')
         self.juju.do(['set', 'psql', 'database=explicit'])
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
 
-        result = self.sql('SELECT current_database()')[0][0]
-        self.assertEqual(result, 'explicit')
+        pg_units = ['postgresql/0', 'postgresql/1']
+        self.wait_until_ready(pg_units)
+
+        for unit in pg_units:
+            result = self.sql('SELECT current_database()', unit)[0][0]
+            self.assertEqual(
+                result, 'explicit',
+                '{} reports incorrect db {}'.format(unit, result))
 
     def test_roles_granted(self):
         # We use two units to confirm that there is no attempt to
@@ -494,7 +619,8 @@ class PostgreSQLCharmBaseTestCase(object):
             TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql', config={'roles': 'role_a'})
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        pg_units = ['postgresql/0', 'postgresql/1']
+        self.wait_until_ready(pg_units)
 
         has_role_a = self.sql('''
             SELECT pg_has_role(current_user, 'role_a', 'MEMBER')
@@ -502,13 +628,14 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertTrue(has_role_a)
 
         self.juju.do(['set', 'psql', 'roles=role_a,role_b'])
-        self.wait_until_ready()
+        self.wait_until_ready(pg_units)
 
         # Retry this for a while. Per Bug #1200267, we can't tell when
         # the hooks have finished running and the role has been granted.
         # We could make the PostgreSQL charm provide feedback on when
-        # the role has actually been granted and wait for that, but we
-        # don't want to complicate the interface any more than we must.
+        # the role has actually been granted and wait for that, but that
+        # is complex as hot standbys need to wait until the master has
+        # performed the grant and the grant has replicated.
         timeout = time.time() + 60
         while True:
             try:
@@ -531,7 +658,8 @@ class PostgreSQLCharmBaseTestCase(object):
             TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
         self.juju.deploy(PSQL_CHARM, 'psql', config={'roles': 'role_a,role_b'})
         self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
-        self.wait_until_ready()
+        pg_units = ['postgresql/0', 'postgresql/1']
+        self.wait_until_ready(pg_units)
 
         has_role_a, has_role_b = self.sql('''
             SELECT
@@ -542,37 +670,38 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertTrue(has_role_b)
 
         self.juju.do(['set', 'psql', 'roles=role_c'])
-        self.wait_until_ready()
+        self.wait_until_ready(pg_units)
 
-        # Per Bug #1200267, we have to sleep here and hope. We have no
-        # way of knowing how many of the three pending role changes have
+        # Per Bug #1200267, we have to retry a while here and hope.
+        # We have of knowing when the pending role changes have
         # actually been applied.
-        time.sleep(30)
-
-        has_role_a, has_role_b, has_role_c = self.sql('''
-            SELECT
-                pg_has_role(current_user, 'role_a', 'MEMBER'),
-                pg_has_role(current_user, 'role_b', 'MEMBER'),
-                pg_has_role(current_user, 'role_c', 'MEMBER')
-            ''')[0]
+        timeout = time.time() + 60
+        while time.time() < timeout:
+            has_role_a, has_role_b, has_role_c = self.sql('''
+                SELECT
+                    pg_has_role(current_user, 'role_a', 'MEMBER'),
+                    pg_has_role(current_user, 'role_b', 'MEMBER'),
+                    pg_has_role(current_user, 'role_c', 'MEMBER')
+                ''')[0]
+            if has_role_c:
+                break
         self.assertFalse(has_role_a)
         self.assertFalse(has_role_b)
         self.assertTrue(has_role_c)
 
         self.juju.do(['unset', 'psql', 'roles'])
-        self.wait_until_ready()
+        self.wait_until_ready(pg_units)
 
-        # Per Bug #1200267, we have to sleep here and hope. We have no
-        # way of knowing how many of the three pending role changes have
-        # actually been applied.
-        time.sleep(30)
-
-        has_role_a, has_role_b, has_role_c = self.sql('''
-            SELECT
-                pg_has_role(current_user, 'role_a', 'MEMBER'),
-                pg_has_role(current_user, 'role_b', 'MEMBER'),
-                pg_has_role(current_user, 'role_c', 'MEMBER')
-            ''')[0]
+        timeout = time.time() + 60
+        while True:
+            has_role_a, has_role_b, has_role_c = self.sql('''
+                SELECT
+                    pg_has_role(current_user, 'role_a', 'MEMBER'),
+                    pg_has_role(current_user, 'role_b', 'MEMBER'),
+                    pg_has_role(current_user, 'role_c', 'MEMBER')
+                ''')[0]
+            if not has_role_c:
+                break
         self.assertFalse(has_role_a)
         self.assertFalse(has_role_b)
         self.assertFalse(has_role_c)
@@ -588,7 +717,8 @@ class PostgreSQLCharmBaseTestCase(object):
         self.juju.deploy('cs:rsyslog', 'rsyslog', num_units=2)
         self.juju.do([
             'add-relation', 'postgresql:syslog', 'rsyslog:aggregator'])
-        self.wait_until_ready()
+        pg_units = ['postgresql/0', 'postgresql/1']
+        self.wait_until_ready(pg_units)
 
         token = str(uuid.uuid1())
 
@@ -603,9 +733,15 @@ class PostgreSQLCharmBaseTestCase(object):
             self.failUnless('hot standby {}'.format(token) in out)
 
         # Confirm that the relation tears down correctly.
-        self.juju.do([
-            'destroy-relation', 'postgresql:syslog', 'rsyslog:aggregator'])
-        self.wait_until_ready()
+        self.juju.do(['destroy-service', 'rsyslog:aggregator'])
+        timeout = time.time() + 60
+        while time.time() < timeout:
+            status = self.juju.refresh_status()
+            if 'rsyslog' in status['services']:
+                break
+        self.assert_(
+            'rsyslog' not in status['services'], 'rsyslog failed to die')
+        self.wait_until_ready(pg_units)
 
 
 class PG91Tests(
