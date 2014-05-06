@@ -1562,18 +1562,10 @@ def update_repos_and_packages():
         run(["locale-gen", "{}.{}".format(
             hookenv.config('locale'), hookenv.config('encoding'))])
 
-    version = pg_version()
-    # Set package state for main postgresql package if installed
-    try:
-        run("dpkg -l postgresql-{}".format(version, exit_on_error=False))
-        ensure_package_status('postgresql-{}'.format(version), 
-                              hookenv.config('package_status'))
-    except:
-        pass
-
     if need_upgrade:
         run("apt-get -y upgrade")
 
+    version = pg_version()
     # It might have been better for debversion and plpython to only get
     # installed if they were listed in the extra-packages config item,
     # but they predate this feature.
@@ -1589,6 +1581,10 @@ def update_repos_and_packages():
         "postgresql-{}-debversion".format(version)
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
+    # Set package state for main postgresql package if installed
+    if 'postgresql-{}'.format(version) not in packages:
+        ensure_package_status('postgresql-{}'.format(version), 
+                              hookenv.config('package_status'))
     fetch.apt_install(packages, fatal=True)
 
 
