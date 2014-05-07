@@ -225,21 +225,25 @@ options:
   work_mem:
     default: "1MB"
     type: string
-    description: Working Memory
+    description: |
+        Working Memory.
+        Ignored unless 'performance_tuning' is set to 'manual'.
   maintenance_work_mem:
     default: "1MB"
     type: string
-    description: Maintenance working memory
+    description: |
+        Maintenance working memory.
+        Ignored unless 'performance_tuning' is set to 'manual'.
   performance_tuning:
-    default: "auto"
+    default: "Mixed"
     type: string
     description: |
-        Possible values here are "auto" or "manual". If we set "auto" then the
-        charm will attempt to automatically tune all the performance parameters
-        for kernel_shmall, kernel_shmmax, shared_buffers and
-        effective_cache_size below, unless those config values are explicitly
-        set. If manual, then it will use the defaults below unless set.
-        "auto" gathers information about the node on which you are deployed and
+        Possible values here are "manual", "DW" (data warehouse),
+        "OLTP" (online transaction processing), "Web" (web application),
+        "Desktop" or "Mixed". When this is set to a value other than
+        "manual", the charm invokes the pgtune tool to tune a number
+        of performance parameters based on the specified load type.
+        pgtune gathers information about the node on which you are deployed and
         tries to make intelligent guesses about what tuning parameters to set
         based on available RAM and CPU under the assumption that it's the only
         significant service running on this node.
@@ -257,13 +261,15 @@ options:
     description: |
         The amount of memory the database server uses for shared memory
         buffers. This string should be of the format '###MB'.
+        Ignored unless 'performance_tuning' is set to 'manual'.
   effective_cache_size:
     default: ""
     type: string
     description: |
         Effective cache size is an estimate of how much memory is available for
         disk caching within the database. (50% to 75% of system memory). This
-        string should be of the format '###MB'.
+        string should be of the format '###MB'. Ignored unless
+        'performance_tuning' is set to 'manual'.
   temp_buffers:
     default: "1MB"
     type: string
@@ -273,11 +279,14 @@ options:
     default: "-1"
     type: string
     description: |
-        min 32kB, -1 sets based on shared_buffers (change requires restart)
+        min 32kB, -1 sets based on shared_buffers (change requires restart).
+        Ignored unless 'performance_tuning' is set to 'manual'.
   checkpoint_segments:
     default: 3
     type: int
-    description: in logfile segments, min 1, 16MB each
+    description: |
+        in logfile segments, min 1, 16MB each.
+        Ignored unless 'performance_tuning' is set to 'manual'.
   random_page_cost:
     default: 4.0
     type: float
@@ -347,13 +356,13 @@ options:
         List of extra package sources, per charm-helpers standard.
         YAML format.
     type: string
-    default: null
+    default: ''
   install_keys:
     description: |
         List of signing keys for install_sources package sources, per
         charmhelpers standard. YAML format.
     type: string
-    default: null
+    default: ''
   extra_archives:
     default: ""
     type: string
@@ -423,3 +432,9 @@ options:
     type: string
     default: ""
     description: EXPERIMENTAL. OpenStack Swift tenant name.
+  package_status:
+    default: "install"
+    type: string
+    description: |
+        The status of service-affecting packages will be set to this value in the dpkg database.
+        Useful valid values are "install" and "hold".
