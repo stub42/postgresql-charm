@@ -1,6 +1,16 @@
 CHARM_DIR := $(shell pwd)
 TEST_TIMEOUT := 900
 
+default:
+	@echo "One of:"
+	@echo "    make lint"
+	@echo "    make test"
+	@echo "    make unit_test"
+	@echo "    make integration_test"
+	@echo "    make integration_test_91"
+	@echo "    make integration_test_92"
+	@echo "    make integration_test_93"
+
 test: lint unit_test integration_test
 
 unit_test:

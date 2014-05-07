@@ -437,27 +437,18 @@ def _get_page_size():
     return int(run("getconf PAGE_SIZE"))   # frequently 4096
 
 
+def _run_sysctl(postgresql_sysctl):
+    """sysctl -p postgresql_sysctl, helper for easy test mocking."""
+    return run("sysctl -p {}".format(postgresql_sysctl))
+
+
 def create_postgresql_config(config_file):
     '''Create the postgresql.conf file'''
     config_data = hookenv.config()
     if not config_data.get('listen_port', None):
         config_data['listen_port'] = get_service_port()
-    if config_data["performance_tuning"] == "auto":
-        # Taken from:
-        # http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
-        # num_cpus is not being used ... commenting it out ... negronjl
-        #num_cpus = run("cat /proc/cpuinfo | grep processor | wc -l")
+    if config_data["performance_tuning"].lower() != "manual":
         total_ram = _get_system_ram()
-        if not config_data["effective_cache_size"]:
-            config_data["effective_cache_size"] = \
-                "%sMB" % (int(int(total_ram) * 0.75),)
-        if not config_data["shared_buffers"]:
-            if total_ram > 1023:
-                config_data["shared_buffers"] = \
-                    "%sMB" % (int(int(total_ram) * 0.25),)
-            else:
-                config_data["shared_buffers"] = \
-                    "%sMB" % (int(int(total_ram) * 0.15),)
         config_data["kernel_shmmax"] = (int(total_ram) * 1024 * 1024) + 1024
         config_data["kernel_shmall"] = config_data["kernel_shmmax"]
 
@@ -473,7 +464,7 @@ def create_postgresql_config(config_file):
     if config_data["kernel_shmmax"] > 0:
         lines.append("kernel.shmmax = %s\n" % config_data["kernel_shmmax"])
     host.write_file(postgresql_sysctl, ''.join(lines), perms=0600)
-    run("sysctl -p {}".format(postgresql_sysctl))
+    _run_sysctl(postgresql_sysctl)
 
     # If we are replicating, some settings may need to be overridden to
     # certain minimum levels.
@@ -504,8 +495,27 @@ def create_postgresql_config(config_file):
     # Create or update files included from postgresql.conf.
     configure_log_destination(os.path.dirname(config_file))
 
+    tune_postgresql_config(config_file)
+
     local_state['saved_config'] = config_data
     local_state.save()
+
+
+def tune_postgresql_config(config_file):
+    tune_workload = hookenv.config('performance_tuning').lower()
+    if tune_workload == "manual":
+        return  # Requested no autotuning.
+
+    if tune_workload == "auto":
+        tune_workload = "mixed"  # Pre-pgtune backwards compatibility.
+
+    with NamedTemporaryFile() as tmp_config:
+        run(['pgtune', '-i', config_file, '-o', tmp_config.name,
+             '-T', tune_workload,
+             '-c', str(hookenv.config('max_connections'))])
+        host.write_file(
+            config_file, open(tmp_config.name, 'r').read(),
+            owner='postgres', group='postgres', perms=0o600)
 
 
 def create_postgresql_ident(output_file):
@@ -834,6 +844,17 @@ def validate_config():
         log("listen_ip values other than '*' do not work per LP:1271837",
             CRITICAL)
 
+    valid_workloads = [
+        'dw',  'oltp', 'web', 'mixed', 'desktop', 'manual', 'auto']
+    requested_workload = config_data['performance_tuning'].lower()
+    if requested_workload not in valid_workloads:
+        valid = False
+        log('Invalid performance_tuning setting {}'.format(requested_workload),
+            CRITICAL)
+    if requested_workload == 'auto':
+        log("'auto' performance_tuning deprecated. Using 'mixed' tuning",
+            WARNING)
+
     unchangeable_config = [
         'locale', 'encoding', 'version', 'cluster_name', 'pgdg']
 
@@ -845,8 +866,21 @@ def validate_config():
         local_state[name] = config_data.get(name, None)
     local_state.save()
 
+    package_status = config_data['package_status']
+    if package_status not in ['install', 'hold']:
+        valid = False
+        log("package_status must be 'install' or 'hold' not '{}'"
+            "".format(package_status), CRITICAL)
+
     if not valid:
         sys.exit(99)
+
+
+def ensure_package_status(package, status):
+    selections = ''.join(['{} {}\n'.format(package, status)])
+    dpkg = subprocess.Popen(['dpkg', '--set-selections'],
+                                stdin=subprocess.PIPE)
+    dpkg.communicate(input=selections)
 
 
 #------------------------------------------------------------------------------
@@ -924,7 +958,9 @@ def config_changed_volume_apply():
         # /srv/juju/vol-000012345/postgresql/9.1/main
         # but keep previous "main/"  directory, by renaming it to
         # main-$TIMESTAMP
-        if not postgresql_stop():
+        try:
+            postgresql_stop()
+        except subprocess.CalledProcessError:
             log("postgresql_stop() failed - can't migrate data.", ERROR)
             return False
         if not os.path.exists(os.path.join(
@@ -1552,13 +1588,19 @@ def update_repos_and_packages():
                 "postgresql-{}".format(version),
                 "postgresql-contrib-{}".format(version),
                 "postgresql-plpython-{}".format(version),
-                "python-jinja2", "syslinux", "python-psycopg2"]
+                "python-jinja2", "python-psycopg2"]
     # PGDG currently doesn't have debversion for 9.3. Put this back when
     # it does.
     if not (hookenv.config('pgdg') and version == '9.3'):
-        "postgresql-{}-debversion".format(version)
+        packages.append("postgresql-{}-debversion".format(version))
+    if hookenv.config('performance_tuning').lower() != 'manual':
+        packages.append('pgtune')
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
+    # Set package state for main postgresql package if installed
+    if 'postgresql-{}'.format(version) not in packages:
+        ensure_package_status('postgresql-{}'.format(version), 
+                              hookenv.config('package_status'))
     fetch.apt_install(packages, fatal=True)
 
 
