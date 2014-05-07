@@ -20,8 +20,6 @@ class JujuFixture(fixtures.Fixture):
     def __init__(self, reuse_machines=False, do_teardown=True):
         super(JujuFixture, self).__init__()
 
-        self._deployed_charms = set()
-
         self.reuse_machines = reuse_machines
 
         # Optionally, don't teardown services and machines after running
@@ -45,16 +43,7 @@ class JujuFixture(fixtures.Fixture):
         return None
 
     def deploy(self, charm, name=None, num_units=1, config=None):
-        # The first time we deploy a local: charm in the test run, it
-        # needs to deploy with --update to ensure we are testing the
-        # desired revision of the charm. Subsequent deploys we do not
-        # use --update to avoid overhead and needless incrementing of the
-        # revision number.
-        if not charm.startswith('local:') or charm in self._deployed_charms:
-            cmd = ['deploy']
-        else:
-            cmd = ['deploy', '-u']
-            self._deployed_charms.add(charm)
+        cmd = ['deploy']
 
         if config:
             config_path = os.path.join(
@@ -76,15 +65,12 @@ class JujuFixture(fixtures.Fixture):
             cmd.extend(['--to', str(self._free_machines.pop())])
             self.do(cmd)
             if num_units > 1:
-                self.add_unit(charm, name, num_units - 1)
+                self.add_unit(name, num_units - 1)
         else:
             cmd.extend(['-n', str(num_units)])
             self.do(cmd)
 
-    def add_unit(self, charm, name=None, num_units=1):
-        if name is None:
-            name = charm.split(':', 1)[-1]
-
+    def add_unit(self, name, num_units=1):
         num_units_spawned = 0
         while self.reuse_machines and self._free_machines:
             cmd = ['add-unit', '--to', str(self._free_machines.pop()), name]
@@ -108,11 +94,58 @@ class JujuFixture(fixtures.Fixture):
             and m.get('life', None) not in ('dead', 'dying')
             and m.get('agent-state', 'pending') in ('started', 'ready'))
         for service in self.status.get('services', {}).values():
-            for unit in service.get('units', []):
+            for unit in service.get('units', {}).values():
                 if 'machine' in unit:
-                    self._free_machines.remove(int(unit['machine']))
+                    self._free_machines.discard(int(unit['machine']))
 
         return self.status
+
+    def relation_info(self, unit):
+        '''Return all the relation information accessible from a unit.
+
+        relation_info('foo/0')[relation_name][relation_id][unit][key]
+        '''
+        # Get the possible relation names heuristically, per Bug #1298819
+        relation_names = []
+        for service_name, service_info in self.status['services'].items():
+            if service_name == unit.split('/')[0]:
+                relation_names = service_info.get('relations', {}).keys()
+                break
+
+        res = {}
+        juju_run_cmd = ['juju', 'run', '--unit', unit]
+        for rel_name in relation_names:
+            try:
+                relation_ids = run(
+                    self, juju_run_cmd + [
+                        'relation-ids {}'.format(rel_name)]).split()
+            except subprocess.CalledProcessError:
+                # Per Bug #1298819, we can't ask the unit which relation
+                # names are active so we need to use the relation names
+                # reported by 'juju status'. This may cause us to
+                # request relation information that the unit is not yet
+                # aware of.
+                continue
+            res[rel_name] = {}
+            for rel_id in relation_ids:
+                res[rel_name][rel_id] = {}
+                relation_units = [unit] + run(
+                    self, juju_run_cmd + [
+                        'relation-list -r {}'.format(rel_id)]).split()
+                for rel_unit in relation_units:
+                    try:
+                        json_rel_info = run(
+                            self, juju_run_cmd + [
+                                'relation-get --format=json -r {} - {}'.format(
+                                    rel_id, rel_unit)])
+                        res[rel_name][rel_id][rel_unit] = json.loads(
+                            json_rel_info)
+                    except subprocess.CalledProcessError as x:
+                        if x.returncode == 2:
+                            res[rel_name][rel_id][rel_unit] = None
+                        else:
+                            raise
+        return res
 
     def wait_until_ready(self, extra=60):
         ready = False
@@ -202,22 +235,38 @@ class JujuFixture(fixtures.Fixture):
             self.do(['terminate-machine'] + list(self._free_machines))
 
 
+_run_seq = 0
+
+
 def run(detail_collector, cmd, input=''):
+    global _run_seq
+    _run_seq = _run_seq + 1
+
+    # This helper primarily exists to capture the subprocess details,
+    # but this is failing. Details are being captured, but those added
+    # inside the actual test (not setup) are not being reported.
+
+    out, err, returncode = None, None, None
     try:
         proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError:
+        (out, err) = proc.communicate(input)
+        returncode = proc.returncode
+        if returncode != 0:
+            raise subprocess.CalledProcessError(returncode, cmd, err)
+        return out
+    except subprocess.CalledProcessError as x:
+        returncode = x.returncode
         raise
-
-    (out, err) = proc.communicate(input)
-    detail_collector.addDetail(
-        'cmd', text_content('{}: {}'.format(proc.returncode, ' '.join(cmd))))
-    if out:
-        detail_collector.addDetail('stdout', text_content(out))
-    if err:
-        detail_collector.addDetail('stderr', text_content(err))
-    if proc.returncode != 0:
-        raise subprocess.CalledProcessError(
-            proc.returncode, cmd, err)
-    return out
+    finally:
+        if detail_collector is not None:
+            m = {
+                'cmd': ' '.join(cmd),
+                'rc': returncode,
+                'stdout': out,
+                'stderr': err,
+            }
+            detail_collector.addDetail(
+                'run_{}'.format(_run_seq),
+                text_content(yaml.safe_dump(m, default_flow_style=False)))

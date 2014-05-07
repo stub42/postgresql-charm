@@ -49,7 +49,9 @@ existing unit into a 'master'::
 
 To deploy a new service containing a 'master' and two 'hot standbys'::
 
-    juju deploy -n 3 postgresql pg-b
+    juju deploy -n 2 postgresql pg-b
+    [ ... wait until units are stable ... ]
+    juju add-unit pg-b
 
 You can remove units as normal. If the master unit is removed, failover occurs
 and the most up to date 'hot standby' is promoted to 'master'.  The
@@ -72,12 +74,18 @@ installation listening on port 8080::
 
 ## Known Limitations and Issues
 
-- Do not attempt to relate client charms to a PostgreSQL service containing
+⚠ Due to current [limitations][1] with juju, you cannot reliably
+create a service initially containing more than 2 units (eg. juju deploy
+-n 3 postgresql). Instead, you must first create a service with 2 units.
+Once the environment is stable and all the hooks have finished running,
+you may add more units.
+
+⚠ Do not attempt to relate client charms to a PostgreSQL service containing
   multiple units unless you know the charm supports a replicated service.
 
-- You cannot host multiple units in a single juju container. This is
-  problematic as some PostgreSQL features, such as tablespaces, use user
-specified absolute paths.
+⚠ To host multiple units on a single server, you must use an lxc
+container.
+
 
 # Interacting with the Postgresql Service
 
@@ -136,7 +144,7 @@ directly to juju generated database users, as the charm may revoke them.
 
 - `programname`: the syslog 'programname' identifying this unit's
   PostgreSQL logs.
-- `log_line_prefix`: the 'log_line_prefix' setting for the PostgreSQL
+- `log_line_prefix`: the `log_line_prefix` setting for the PostgreSQL
   service.
 
 
@@ -242,3 +250,5 @@ Python::
 - [PostgreSQL bug submission
   guidelines](http://www.postgresql.org/docs/9.2/static/bug-reporting.html)
 - [PostgreSQL Mailing List](http://www.postgresql.org/list/)
+
+  [1]: https://bugs.launchpad.net/charms/+source/postgresql/+bug/1258485

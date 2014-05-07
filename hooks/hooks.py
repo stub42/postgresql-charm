@@ -25,17 +25,19 @@ from charmhelpers.core.hookenv import (
     CRITICAL, ERROR, WARNING, INFO, DEBUG,
     )
 
-hooks = hookenv.Hooks()
-
-
-def Template(*args, **kw):
-    """jinja2.Template with deferred jinja2 import.
-
-    jinja2 may not be importable until the install hook has installed the
-    required packages.
-    """
+try:
+    import psycopg2
     from jinja2 import Template
-    return Template(*args, **kw)
+except ImportError:
+    fetch.apt_install(['python-psycopg2', 'python-jinja2'], fatal=True)
+    import psycopg2
+    from jinja2 import Template
+
+from psycopg2.extensions import AsIs
+from jinja2 import Environment, FileSystemLoader
+
+
+hooks = hookenv.Hooks()
 
 
 def log(msg, lvl=INFO):
@@ -408,6 +410,22 @@ def lsclusters(s=slice(0, -1)):
             yield line.split()[s]
 
 
+def createcluster():
+    with switch_cwd('/tmp'):  # Ensure cwd is readable as the postgres user
+        create_cmd = [
+            "pg_createcluster",
+            "--locale", hookenv.config('locale'),
+            "-e", hookenv.config('encoding')]
+        if hookenv.config('listen_port'):
+            create_cmd.extend(["-p", str(hookenv.config('listen_port'))])
+        create_cmd.append(pg_version())
+        create_cmd.append(hookenv.config('cluster_name'))
+        run(create_cmd)
+        # Ensure SSL certificates exist, as we enable SSL by default.
+        create_ssl_cert(os.path.join(
+            postgresql_data_dir, pg_version(), hookenv.config('cluster_name')))
+
+
 def _get_system_ram():
     """ Return the system ram in Megabytes """
     import psutil
@@ -419,27 +437,18 @@ def _get_page_size():
     return int(run("getconf PAGE_SIZE"))   # frequently 4096
 
 
+def _run_sysctl(postgresql_sysctl):
+    """sysctl -p postgresql_sysctl, helper for easy test mocking."""
+    return run("sysctl -p {}".format(postgresql_sysctl))
+
+
 def create_postgresql_config(config_file):
     '''Create the postgresql.conf file'''
     config_data = hookenv.config()
     if not config_data.get('listen_port', None):
         config_data['listen_port'] = get_service_port()
-    if config_data["performance_tuning"] == "auto":
-        # Taken from:
-        # http://wiki.postgresql.org/wiki/Tuning_Your_PostgreSQL_Server
-        # num_cpus is not being used ... commenting it out ... negronjl
-        #num_cpus = run("cat /proc/cpuinfo | grep processor | wc -l")
+    if config_data["performance_tuning"].lower() != "manual":
         total_ram = _get_system_ram()
-        if not config_data["effective_cache_size"]:
-            config_data["effective_cache_size"] = \
-                "%sMB" % (int(int(total_ram) * 0.75),)
-        if not config_data["shared_buffers"]:
-            if total_ram > 1023:
-                config_data["shared_buffers"] = \
-                    "%sMB" % (int(int(total_ram) * 0.25),)
-            else:
-                config_data["shared_buffers"] = \
-                    "%sMB" % (int(int(total_ram) * 0.15),)
         config_data["kernel_shmmax"] = (int(total_ram) * 1024 * 1024) + 1024
         config_data["kernel_shmall"] = config_data["kernel_shmmax"]
 
@@ -455,7 +464,7 @@ def create_postgresql_config(config_file):
     if config_data["kernel_shmmax"] > 0:
         lines.append("kernel.shmmax = %s\n" % config_data["kernel_shmmax"])
     host.write_file(postgresql_sysctl, ''.join(lines), perms=0600)
-    run("sysctl -p {}".format(postgresql_sysctl))
+    _run_sysctl(postgresql_sysctl)
 
     # If we are replicating, some settings may need to be overridden to
     # certain minimum levels.
@@ -486,8 +495,27 @@ def create_postgresql_config(config_file):
     # Create or update files included from postgresql.conf.
     configure_log_destination(os.path.dirname(config_file))
 
+    tune_postgresql_config(config_file)
+
     local_state['saved_config'] = config_data
     local_state.save()
+
+
+def tune_postgresql_config(config_file):
+    tune_workload = hookenv.config('performance_tuning').lower()
+    if tune_workload == "manual":
+        return  # Requested no autotuning.
+
+    if tune_workload == "auto":
+        tune_workload = "mixed"  # Pre-pgtune backwards compatibility.
+
+    with NamedTemporaryFile() as tmp_config:
+        run(['pgtune', '-i', config_file, '-o', tmp_config.name,
+             '-T', tune_workload,
+             '-c', str(hookenv.config('max_connections'))])
+        host.write_file(
+            config_file, open(tmp_config.name, 'r').read(),
+            owner='postgres', group='postgres', perms=0o600)
 
 
 def create_postgresql_ident(output_file):
@@ -710,7 +738,7 @@ def update_service_port():
 
 
 def create_ssl_cert(cluster_dir):
-    # Debian by default expects SSL certificates in the datadir.
+    # PostgreSQL expects SSL certificates in the datadir.
     server_crt = os.path.join(cluster_dir, 'server.crt')
     server_key = os.path.join(cluster_dir, 'server.key')
     if not os.path.exists(server_crt):
@@ -742,7 +770,6 @@ def get_password(user):
 
 def db_cursor(autocommit=False, db='postgres', user='postgres',
               host=None, port=None, timeout=30):
-    import psycopg2
     if port is None:
         port = get_service_port()
     if host:
@@ -774,7 +801,6 @@ def db_cursor(autocommit=False, db='postgres', user='postgres',
 
 
 def run_sql_as_postgres(sql, *parameters):
-    import psycopg2
     cur = db_cursor(autocommit=True)
     try:
         cur.execute(sql, parameters)
@@ -818,6 +844,17 @@ def validate_config():
         log("listen_ip values other than '*' do not work per LP:1271837",
             CRITICAL)
 
+    valid_workloads = [
+        'dw',  'oltp', 'web', 'mixed', 'desktop', 'manual', 'auto']
+    requested_workload = config_data['performance_tuning'].lower()
+    if requested_workload not in valid_workloads:
+        valid = False
+        log('Invalid performance_tuning setting {}'.format(requested_workload),
+            CRITICAL)
+    if requested_workload == 'auto':
+        log("'auto' performance_tuning deprecated. Using 'mixed' tuning",
+            WARNING)
+
     unchangeable_config = [
         'locale', 'encoding', 'version', 'cluster_name', 'pgdg']
 
@@ -829,8 +866,21 @@ def validate_config():
         local_state[name] = config_data.get(name, None)
     local_state.save()
 
+    package_status = config_data['package_status']
+    if package_status not in ['install', 'hold']:
+        valid = False
+        log("package_status must be 'install' or 'hold' not '{}'"
+            "".format(package_status), CRITICAL)
+
     if not valid:
         sys.exit(99)
+
+
+def ensure_package_status(package, status):
+    selections = ''.join(['{} {}\n'.format(package, status)])
+    dpkg = subprocess.Popen(['dpkg', '--set-selections'],
+                                stdin=subprocess.PIPE)
+    dpkg.communicate(input=selections)
 
 
 #------------------------------------------------------------------------------
@@ -908,7 +958,9 @@ def config_changed_volume_apply():
         # /srv/juju/vol-000012345/postgresql/9.1/main
         # but keep previous "main/"  directory, by renaming it to
         # main-$TIMESTAMP
-        if not postgresql_stop():
+        try:
+            postgresql_stop()
+        except subprocess.CalledProcessError:
             log("postgresql_stop() failed - can't migrate data.", ERROR)
             return False
         if not os.path.exists(os.path.join(
@@ -1038,16 +1090,7 @@ def install(run_pre=True):
             port_opt = "--port={}".format(config_data['listen_port'])
         else:
             port_opt = ''
-        with switch_cwd('/tmp'):
-            create_cmd = [
-                "pg_createcluster",
-                "--locale", config_data['locale'],
-                "-e", config_data['encoding']]
-            if listen_port:
-                create_cmd.extend(["-p", str(config_data['listen_port'])])
-            create_cmd.append(pg_version())
-            create_cmd.append(config_data['cluster_name'])
-            run(create_cmd)
+        createcluster()
         assert (
             not port_opt
             or get_service_port() == config_data['listen_port']), (
@@ -1070,15 +1113,13 @@ def install(run_pre=True):
         'logs_dir': postgresql_logs_dir,
     }
     charm_dir = hookenv.charm_dir()
-    template_file = "{}/templates/dump-pg-db.tmpl".format(charm_dir)
-    dump_script = Template(open(template_file).read()).render(paths)
     template_file = "{}/templates/pg_backup_job.tmpl".format(charm_dir)
     backup_job = Template(open(template_file).read()).render(paths)
     host.write_file(
-        '{}/dump-pg-db'.format(postgresql_scripts_dir),
-        dump_script, perms=0755)
+        os.path.join(postgresql_scripts_dir, 'dump-pg-db'),
+        open('scripts/pgbackup.py', 'r').read(), perms=0o755)
     host.write_file(
-        '{}/pg_backup_job'.format(postgresql_scripts_dir),
+        os.path.join(postgresql_scripts_dir, 'pg_backup_job'),
         backup_job, perms=0755)
     install_postgresql_crontab(postgresql_crontab)
     hookenv.open_port(get_service_port())
@@ -1180,8 +1221,6 @@ def user_exists(user):
 
 
 def create_user(user, admin=False, replication=False):
-    from psycopg2.extensions import AsIs
-
     password = get_password(user)
     if password is None:
         password = host.pwgen()
@@ -1208,8 +1247,6 @@ def create_user(user, admin=False, replication=False):
 
 
 def reset_user_roles(user, roles):
-    from psycopg2.extensions import AsIs
-
     wanted_roles = set(roles)
 
     sql = """
@@ -1250,8 +1287,6 @@ def reset_user_roles(user, roles):
 
 
 def ensure_role(role):
-    from psycopg2.extensions import AsIs
-
     sql = "SELECT oid FROM pg_roles WHERE rolname = %s"
     if run_select_as_postgres(sql, role)[0] == 0:
         sql = "CREATE ROLE %s INHERIT NOLOGIN"
@@ -1259,8 +1294,6 @@ def ensure_role(role):
 
 
 def ensure_database(user, schema_user, database):
-    from psycopg2.extensions import AsIs
-
     sql = "SELECT datname FROM pg_database WHERE datname = %s"
     if run_select_as_postgres(sql, database)[0] != 0:
         # DB already exists
@@ -1433,8 +1466,6 @@ def db_admin_relation_joined_changed():
 
 @hooks.hook()
 def db_relation_broken():
-    from psycopg2.extensions import AsIs
-
     relid = hookenv.relation_id()
     if relid not in local_state['relations']['db']:
         # This was to be a hot standby, but it had not yet got as far as
@@ -1472,8 +1503,6 @@ def db_relation_broken():
 
 @hooks.hook()
 def db_admin_relation_broken():
-    from psycopg2.extensions import AsIs
-
     if local_state['state'] in ('master', 'standalone'):
         user = hookenv.relation_get('user', unit=hookenv.local_unit())
         if user:
@@ -1559,13 +1588,19 @@ def update_repos_and_packages():
                 "postgresql-{}".format(version),
                 "postgresql-contrib-{}".format(version),
                 "postgresql-plpython-{}".format(version),
-                "python-jinja2", "syslinux", "python-psycopg2"]
+                "python-jinja2", "python-psycopg2"]
     # PGDG currently doesn't have debversion for 9.3. Put this back when
     # it does.
     if not (hookenv.config('pgdg') and version == '9.3'):
-        "postgresql-{}-debversion".format(version)
+        packages.append("postgresql-{}-debversion".format(version))
+    if hookenv.config('performance_tuning').lower() != 'manual':
+        packages.append('pgtune')
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
+    # Set package state for main postgresql package if installed
+    if 'postgresql-{}'.format(version) not in packages:
+        ensure_package_status('postgresql-{}'.format(version), 
+                              hookenv.config('package_status'))
     fetch.apt_install(packages, fatal=True)
 
 
@@ -1618,7 +1653,7 @@ def promote_database():
         # this way to avoid creating a timeline change. Switch this
         # to using 'pg_ctl promote' once PostgreSQL propagates
         # timeline changes via streaming replication.
-        os.unlink(os.path.join(postgresql_cluster_dir, 'recovery.conf'))
+        os.unlink(recovery_conf)
         postgresql_restart()
 
 
@@ -1980,7 +2015,6 @@ def restart_lock(unit, exclusive):
     doing so. To block a remote database from doing a restart, grab a shared
     lock.
     '''
-    import psycopg2
     key = long(hookenv.config('advisory_lock_restart_key'))
     if exclusive:
         lock_function = 'pg_advisory_lock'
@@ -2049,7 +2083,7 @@ def clone_database(master_unit, master_host, master_port):
                 # Clone the master with pg_basebackup.
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             log(output, DEBUG)
-            # Debian by default expects SSL certificates in the datadir.
+            # SSL certificates need to exist in the datadir.
             create_ssl_cert(postgresql_cluster_dir)
             create_recovery_conf(master_host, master_port)
         except subprocess.CalledProcessError as x:
@@ -2064,7 +2098,7 @@ def clone_database(master_unit, master_host, master_port):
                 shutil.rmtree(postgresql_cluster_dir)
             if os.path.exists(postgresql_config_dir):
                 shutil.rmtree(postgresql_config_dir)
-            run('pg_createcluster {} main'.format(version))
+            createcluster()
             config_changed()
             raise
         finally:
@@ -2165,7 +2199,6 @@ def update_nrpe_checks():
             os.remove(os.path.join('/var/lib/nagios/export/', f))
 
     # --- exported service configuration file
-    from jinja2 import Environment, FileSystemLoader
     template_env = Environment(
         loader=FileSystemLoader(
             os.path.join(os.environ['CHARM_DIR'], 'templates')))
