@@ -866,8 +866,21 @@ def validate_config():
         local_state[name] = config_data.get(name, None)
     local_state.save()
 
+    package_status = config_data['package_status']
+    if package_status not in ['install', 'hold']:
+        valid = False
+        log("package_status must be 'install' or 'hold' not '{}'"
+            "".format(package_status), CRITICAL)
+
     if not valid:
         sys.exit(99)
+
+
+def ensure_package_status(package, status):
+    selections = ''.join(['{} {}\n'.format(package, status)])
+    dpkg = subprocess.Popen(['dpkg', '--set-selections'],
+                                stdin=subprocess.PIPE)
+    dpkg.communicate(input=selections)
 
 
 #------------------------------------------------------------------------------
@@ -1584,6 +1597,10 @@ def update_repos_and_packages():
         packages.append('pgtune')
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
+    # Set package state for main postgresql package if installed
+    if 'postgresql-{}'.format(version) not in packages:
+        ensure_package_status('postgresql-{}'.format(version), 
+                              hookenv.config('package_status'))
     fetch.apt_install(packages, fatal=True)
 
 
