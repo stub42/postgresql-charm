@@ -287,6 +287,29 @@ options:
     description: |
         in logfile segments, min 1, 16MB each.
         Ignored unless 'performance_tuning' is set to 'manual'.
+  checkpoint_timeout:
+    default: ""
+    type: string
+    description: |
+        Maximum time between automatic WAL checkpoints. range '30s-1h'.
+        If left empty, the default postgresql value will be used.
+  fsync:
+    type: boolean
+    default: True
+    description: |
+        Turns forced synchronization on/off. If fsync is turned off, database
+        failures are likely to involve database corruption and require
+        recreating the unit
+  synchronous_commit:
+    type: boolean
+    default: True
+    description: |
+        Immediate fsync after commit.
+  full_page_writes:
+    type: boolean
+    default: True
+    description: |
+        Recover from partial page writes.
   random_page_cost:
     default: 4.0
     type: float
