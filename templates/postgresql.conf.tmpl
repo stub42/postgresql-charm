@@ -70,6 +70,18 @@ wal_buffers = {{wal_buffers}}
 {% if checkpoint_segments  != "" -%}
 checkpoint_segments = {{checkpoint_segments}}
 {% endif -%}
+{% if checkpoint_timeout  != "" -%}
+checkpoint_timeout = {{checkpoint_timeout}}
+{% endif -%}
+{% if fsync  != "" -%}
+fsync = {{fsync}}
+{% endif -%}
+{% if synchronous_commit  != "" -%}
+synchronous_commit = {{synchronous_commit}}
+{% endif -%}
+{% if full_page_writes  != "" -%}
+full_page_writes = {{full_page_writes}}
+{% endif -%}
 
 
 #------------------------------------------------------------------------------
