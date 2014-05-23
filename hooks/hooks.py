@@ -652,10 +652,15 @@ def generate_postgresql_hba(
                 'private-address': munge_address(admin_ip)}
             relation_data.append(admin_host)
 
+    extra_pg_auth = [pg_auth.strip() for pg_auth in
+                     config_data["extra_pg_auth"].split(',') if pg_auth]
+
     template_file = "{}/templates/pg_hba.conf.tmpl".format(hookenv.charm_dir())
     pg_hba_template = Template(open(template_file).read())
+    pg_hba_rendered = pg_hba_template.render(extra_pg_auth=extra_pg_auth,
+                                             access_list=relation_data)
     host.write_file(
-        output_file, pg_hba_template.render(access_list=relation_data),
+        output_file, pg_hba_rendered,
         owner="postgres", group="postgres", perms=0600)
     postgresql_reload()
 
