@@ -7,6 +7,13 @@ local   all         root,postgres                     ident map=superusers
 local   replication root,postgres                     ident map=superusers
 local   all         nagios                            md5
 
+{% if extra_pg_auth is defined and extra_pg_auth|count > 0 -%}
+# extra_pg_auth
+{% for pg_auth in extra_pg_auth -%}
+{{pg_auth}}
+{% endfor -%}
+{% endif -%}
+
 {% if access_list is defined -%}
 {% for unit in access_list -%}
 # {{unit['relation-id']}} from {{unit['unit']}}

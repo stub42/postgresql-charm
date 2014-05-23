@@ -314,6 +314,15 @@ options:
     default: 4.0
     type: float
     description: Random page cost
+  extra_pg_auth:
+    type: string
+    default: ""
+    description: |
+        A comma separated extra pg_hba.conf auth rules.
+        This will be written to the pg_hba.conf file, one line per rule.
+        Note that this should not be needed as db relations already create
+        those rules the right way. Only use this if you really need too
+        (e.g. on a development environment)
   #------------------------------------------------------------------------
   # Volume management
   #   volume-map, volume-dev_regexp are only used 
