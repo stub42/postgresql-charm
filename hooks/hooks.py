@@ -883,8 +883,8 @@ def validate_config():
 
 def ensure_package_status(package, status):
     selections = ''.join(['{} {}\n'.format(package, status)])
-    dpkg = subprocess.Popen(['dpkg', '--set-selections'],
-                                stdin=subprocess.PIPE)
+    dpkg = subprocess.Popen(
+        ['dpkg', '--set-selections'], stdin=subprocess.PIPE)
     dpkg.communicate(input=selections)
 
 
@@ -1604,8 +1604,8 @@ def update_repos_and_packages():
     packages = fetch.filter_installed_packages(packages)
     # Set package state for main postgresql package if installed
     if 'postgresql-{}'.format(version) not in packages:
-        ensure_package_status('postgresql-{}'.format(version), 
-                              hookenv.config('package_status'))
+        ensure_package_status(
+            'postgresql-{}'.format(version), hookenv.config('package_status'))
     fetch.apt_install(packages, fatal=True)
 
 
