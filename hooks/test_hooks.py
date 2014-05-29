@@ -43,9 +43,23 @@ class TestJuju(object):
     certain data is set.
     """
 
-    _relation_data = {}
+    _incoming_relation_data = ()
+    _outgoing_relation_data = ()
     _relation_ids = {}
     _relation_list = ("postgres/0",)
+    _log = ()
+
+    _log_DEBUG = ()
+    _log_INFO = ()
+    _log_WARNING = ()
+    _log_ERROR = ()
+    _log_CRITICAL = ()
+
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
 
     def __init__(self):
         self._config = {
@@ -95,27 +109,30 @@ class TestJuju(object):
             "wal_buffers": "-1",
             "checkpoint_segments": 3,
             "random_page_cost": 4.0,
-            "volume_ephemeral_storage": True,
             "volume_map": "",
             "volume_dev_regexp": "/dev/db[b-z]",
             "backup_dir": "/var/lib/postgresql/backups",
             "backup_schedule": "13 4 * * *",
             "backup_retention_count": 7,
             "nagios_context": "juju",
+            "pgdg": False,
+            "install_sources": "",
+            "install_keys": "",
             "extra_archives": "",
             "advisory_lock_restart_key": 765}
 
     def relation_set(self, *args, **kwargs):
         """
-        Capture result of relation_set into _relation_data, which
+        Capture result of relation_set into _outgoing_relation_data, which
         can then be checked later.
         """
         if "relation_id" in kwargs:
             del kwargs["relation_id"]
-        self._relation_data = dict(self._relation_data, **kwargs)
+
         for arg in args:
             (key, value) = arg.split("=")
-            self._relation_data[key] = value
+            self._outgoing_relation_data = (
+                self._outgoing_relation_data + ((key, value),))
 
     def relation_ids(self, relation_name="db-admin"):
         """
@@ -156,8 +173,11 @@ class TestJuju(object):
     def juju_log(self, *args, **kwargs):
         pass
 
-    def log(self, *args, **kwargs):
-        pass
+    def log(self, message, level=None):
+        if level is None:
+            level = self.INFO
+        log = getattr(self, "_log_%s" % level)
+        setattr(self, "_log_%s" % level, log + (message,))
 
     def config(self, scope=None):
         if scope is None:
@@ -166,7 +186,11 @@ class TestJuju(object):
             return self._config[scope]
 
     def relation_get(self, scope=None, unit_name=None, relation_id=None):
-        pass
+        if scope:
+            for (key, value) in self._incoming_relation_data:
+                if key == scope:
+                    return value
+            return None
 
 
 class TestHooks(mocker.MockerTestCase):
@@ -208,6 +232,65 @@ class TestHooks(mocker.MockerTestCase):
 
 
 class TestHooksService(TestHooks):
+
+    def test_data_relation_departed_stops_postgresql(self):
+        """
+        When the storage subordinate charm relation departs firing the
+        C{data-relation-departed} hook, the charm stops the postgresql service
+        and logs a message.
+        """
+        postgresql_stop = self.mocker.replace(hooks.postgresql_stop)
+        postgresql_stop()
+        self.mocker.replay()
+        hooks.stop_postgres_on_data_relation_departed()
+        message = "Data relation departing. Stopping PostgreSQL"
+        self.assertIn(
+            message, hooks.hookenv._log_DEBUG, "Not logged- %s" % message)
+
+    def test_data_relation_joined_requests_configured_mountpoint(self):
+        """
+        When postgresql is related to the storage subordinate charm via the
+        'data' relation it will read the configured C{storage_mount_point} and
+        set C{mountpoint} in the relation in order to request a specific
+        mountpoint from the storage charm.
+        """
+        mount = hooks.external_volume_mount
+        hooks.data_relation_joined()
+        message = "Setting mount point in the relation: %s" % mount
+        self.assertIn(
+            message, hooks.hookenv._log_DEBUG, "Not logged- %s" % message)
+
+    def test_data_relation_changed_waits_for_data_relation_mountpoint(self):
+        """
+        C{data_relation_changed} will wait for the storage charm to respond
+        with the properly configured C{mountpoint} in the 'data' relation
+        before calling C{config_changed}.
+        """
+        mount = hooks.external_volume_mount
+        hooks.hookenv._config["storage_mount_point"] = mount
+        self.assertEqual(hooks.hookenv._incoming_relation_data, ())
+        hooks.data_relation_changed()
+        message = "Waiting for mountpoint from the relation: %s" % mount
+        self.assertIn(
+            message, hooks.hookenv._log_DEBUG, "Not logged- %s" % message)
+
+    def test_data_relation_changed_mountpoint_present(self):
+        """
+        C{data_relation_changed} will call C{config_changed} when it receives
+        the successfuly mounted C{mountpoint} from storage charm.
+        """
+        mount = hooks.external_volume_mount
+        self.addCleanup(
+            setattr, hooks.hookenv, "_incoming_relation_data", ())
+        hooks.hookenv._incoming_relation_data = (("mountpoint", mount),)
+        config_changed = self.mocker.replace(hooks.config_changed)
+        config_changed(mount_point=mount)
+        self.mocker.replay()
+
+        hooks.data_relation_changed()
+        message = "Storage ready and mounted"
+        self.assertIn(
+            message, hooks.hookenv._log_DEBUG, "Not logged- %s" % message)
 
     def test_create_postgresql_config_wal_no_replication(self):
         """
