@@ -16,8 +16,6 @@ import sys
 from tempfile import NamedTemporaryFile
 from textwrap import dedent
 import time
-import yaml
-from yaml.constructor import ConstructorError
 
 from charmhelpers import fetch
 from charmhelpers.core import hookenv, host
@@ -149,85 +147,8 @@ class State(dict):
         self.save()
 
 
-###############################################################################
-# Volume managment
-###############################################################################
-#------------------------------
-# Get volume-id from juju config "volume-map" dictionary as
-#     volume-map[JUJU_UNIT_NAME]
-# @return  volid
-#
-#------------------------------
-def volume_get_volid_from_volume_map():
-    volume_map = {}
-    try:
-        volume_map = yaml.load(hookenv.config('volume-map').strip())
-        if volume_map:
-            return volume_map.get(os.environ['JUJU_UNIT_NAME'])
-    except ConstructorError as e:
-        log("invalid YAML in 'volume-map': {}".format(e), WARNING)
-    return None
-
-
-# Is this volume_id permanent ?
-# @returns  True if volid set and not --ephemeral, else:
-#           False
-def volume_is_permanent(volid):
-    if volid and volid != "--ephemeral":
-        return True
-    return False
-
-
-#------------------------------
-# Returns a mount point from passed vol-id, e.g. /srv/juju/vol-000012345
-#
-# @param  volid          volume id (as e.g. EBS volid)
-# @return mntpoint_path  eg /srv/juju/vol-000012345
-#------------------------------
-def volume_mount_point_from_volid(volid):
-    if volid and volume_is_permanent(volid):
-        return "/srv/juju/%s" % volid
-    return None
-
-
-# Do we have a valid storage state?
-# @returns  volid
-#           None    config state is invalid - we should not serve
-def volume_get_volume_id():
-    ephemeral_storage = hookenv.config('volume-ephemeral-storage')
-    volid = volume_get_volid_from_volume_map()
-    juju_unit_name = hookenv.local_unit()
-    if ephemeral_storage in [True, 'yes', 'Yes', 'true', 'True']:
-        if volid:
-            log(
-                "volume-ephemeral-storage is True, but " +
-                "volume-map[{!r}] -> {}".format(juju_unit_name, volid), ERROR)
-            return None
-        else:
-            return "--ephemeral"
-    else:
-        if not volid:
-            log(
-                "volume-ephemeral-storage is False, but "
-                "no volid found for volume-map[{!r}]".format(
-                    hookenv.local_unit()), ERROR)
-            return None
-    return volid
-
-
-# Initialize and/or mount permanent storage, it straightly calls
-# shell helper
-def volume_init_and_mount(volid):
-    command = ("scripts/volume-common.sh call " +
-               "volume_init_and_mount %s" % volid)
-    output = run(command)
-    if output.find("ERROR") >= 0:
-        return False
-    return True
-
-
 def volume_get_all_mounted():
-    command = ("mount |egrep /srv/juju")
+    command = ("mount |egrep %s" % external_volume_mount)
     status, output = commands.getstatusoutput(command)
     if status != 0:
         return None
@@ -883,8 +804,8 @@ def validate_config():
 
 def ensure_package_status(package, status):
     selections = ''.join(['{} {}\n'.format(package, status)])
-    dpkg = subprocess.Popen(['dpkg', '--set-selections'],
-                                stdin=subprocess.PIPE)
+    dpkg = subprocess.Popen(
+        ['dpkg', '--set-selections'], stdin=subprocess.PIPE)
     dpkg.communicate(input=selections)
 
 
@@ -893,111 +814,89 @@ def ensure_package_status(package, status):
 # NOTE the only 2 "True" return points:
 #   1) symlink already pointing to existing storage (no-op)
 #   2) new storage properly initialized:
-#     - volume: initialized if not already (fdisk, mkfs),
-#       mounts it to e.g.:  /srv/juju/vol-000012345
 #     - if fresh new storage dir: rsync existing data
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
 #------------------------------------------------------------------------------
-def config_changed_volume_apply():
+def config_changed_volume_apply(mount_point):
     version = pg_version()
     cluster_name = hookenv.config('cluster_name')
     data_directory_path = os.path.join(
         postgresql_data_dir, version, cluster_name)
 
     assert(data_directory_path)
-    volid = volume_get_volume_id()
-    if volid:
-        if volume_is_permanent(volid):
-            if not volume_init_and_mount(volid):
-                log(
-                    "volume_init_and_mount failed, not applying changes",
-                    ERROR)
-                return False
 
-        if not os.path.exists(data_directory_path):
-            log(
-                "postgresql data dir {} not found, "
-                "not applying changes.".format(data_directory_path),
-                CRITICAL)
-            return False
-
-        mount_point = volume_mount_point_from_volid(volid)
-        new_pg_dir = os.path.join(mount_point, "postgresql")
-        new_pg_version_cluster_dir = os.path.join(
-            new_pg_dir, version, cluster_name)
-        if not mount_point:
-            log(
-                "invalid mount point from volid = {}, "
-                "not applying changes.".format(mount_point), ERROR)
-            return False
-
-        if ((os.path.islink(data_directory_path) and
-             os.readlink(data_directory_path) == new_pg_version_cluster_dir and
-             os.path.isdir(new_pg_version_cluster_dir))):
-            log(
-                "postgresql data dir '%s' already points "
-                "to {}, skipping storage changes.".format(
-                    data_directory_path, new_pg_version_cluster_dir))
-            log(
-                "existing-symlink: to fix/avoid UID changes from "
-                "previous units, doing: "
-                "chown -R postgres:postgres {}".format(new_pg_dir))
-            run("chown -R postgres:postgres %s" % new_pg_dir)
-            return True
-
-        # Create a directory structure below "new" mount_point, as e.g.:
-        #   /srv/juju/vol-000012345/postgresql/9.1/main  , which "mimics":
-        #   /var/lib/postgresql/9.1/main
-        curr_dir_stat = os.stat(data_directory_path)
-        for new_dir in [new_pg_dir,
-                        os.path.join(new_pg_dir, version),
-                        new_pg_version_cluster_dir]:
-            if not os.path.isdir(new_dir):
-                log("mkdir %s".format(new_dir))
-                os.mkdir(new_dir)
-                # copy permissions from current data_directory_path
-                os.chown(new_dir, curr_dir_stat.st_uid, curr_dir_stat.st_gid)
-                os.chmod(new_dir, curr_dir_stat.st_mode)
-        # Carefully build this symlink, e.g.:
-        # /var/lib/postgresql/9.1/main ->
-        # /srv/juju/vol-000012345/postgresql/9.1/main
-        # but keep previous "main/"  directory, by renaming it to
-        # main-$TIMESTAMP
-        try:
-            postgresql_stop()
-        except subprocess.CalledProcessError:
-            log("postgresql_stop() failed - can't migrate data.", ERROR)
-            return False
-        if not os.path.exists(os.path.join(
-                new_pg_version_cluster_dir, "PG_VERSION")):
-            log("migrating PG data {}/ -> {}/".format(
-                data_directory_path, new_pg_version_cluster_dir), WARNING)
-            # void copying PID file to perm storage (shouldn't be any...)
-            command = "rsync -a --exclude postmaster.pid {}/ {}/".format(
-                data_directory_path, new_pg_version_cluster_dir)
-            log("run: {}".format(command))
-            run(command)
-        try:
-            os.rename(data_directory_path, "{}-{}".format(
-                data_directory_path, int(time.time())))
-            log("NOTICE: symlinking {} -> {}".format(
-                new_pg_version_cluster_dir, data_directory_path))
-            os.symlink(new_pg_version_cluster_dir, data_directory_path)
-            log(
-                "after-symlink: to fix/avoid UID changes from "
-                "previous units, doing: "
-                "chown -R postgres:postgres {}".format(new_pg_dir))
-            run("chown -R postgres:postgres {}".format(new_pg_dir))
-            return True
-        except OSError:
-            log("failed to symlink {} -> {}".format(
-                data_directory_path, mount_point), CRITICAL)
-            return False
-    else:
+    if not os.path.exists(data_directory_path):
         log(
-            "Invalid volume storage configuration, not applying changes",
-            ERROR)
-    return False
+            "postgresql data dir {} not found, "
+            "not applying changes.".format(data_directory_path),
+            CRITICAL)
+        return False
+
+    new_pg_dir = os.path.join(mount_point, "postgresql")
+    new_pg_version_cluster_dir = os.path.join(
+        new_pg_dir, version, cluster_name)
+    if not mount_point:
+        log(
+            "invalid mount point = {}, "
+            "not applying changes.".format(mount_point), ERROR)
+        return False
+
+    if ((os.path.islink(data_directory_path) and
+         os.readlink(data_directory_path) == new_pg_version_cluster_dir and
+         os.path.isdir(new_pg_version_cluster_dir))):
+        log(
+            "postgresql data dir '{}' already points "
+            "to {}, skipping storage changes.".format(
+                data_directory_path, new_pg_version_cluster_dir))
+        log(
+            "existing-symlink: to fix/avoid UID changes from "
+            "previous units, doing: "
+            "chown -R postgres:postgres {}".format(new_pg_dir))
+        run("chown -R postgres:postgres %s" % new_pg_dir)
+        return True
+
+    # Create a directory structure below "new" mount_point as
+    #   external_volume_mount/postgresql/9.1/main
+    for new_dir in [new_pg_dir,
+                    os.path.join(new_pg_dir, version),
+                    new_pg_version_cluster_dir]:
+        if not os.path.isdir(new_dir):
+            log("mkdir %s".format(new_dir))
+            host.mkdir(new_dir, owner="postgres", perms=0o700)
+    # Carefully build this symlink, e.g.:
+    # /var/lib/postgresql/9.1/main ->
+    # external_volume_mount/postgresql/9.1/main
+    # but keep previous "main/"  directory, by renaming it to
+    # main-$TIMESTAMP
+    if not postgresql_stop() and postgresql_is_running():
+        log("postgresql_stop() failed - can't migrate data.", ERROR)
+        return False
+    if not os.path.exists(os.path.join(
+            new_pg_version_cluster_dir, "PG_VERSION")):
+        log("migrating PG data {}/ -> {}/".format(
+            data_directory_path, new_pg_version_cluster_dir), WARNING)
+        # void copying PID file to perm storage (shouldn't be any...)
+        command = "rsync -a --exclude postmaster.pid {}/ {}/".format(
+            data_directory_path, new_pg_version_cluster_dir)
+        log("run: {}".format(command))
+        run(command)
+    try:
+        os.rename(data_directory_path, "{}-{}".format(
+            data_directory_path, int(time.time())))
+        log("NOTICE: symlinking {} -> {}".format(
+            new_pg_version_cluster_dir, data_directory_path))
+        os.symlink(new_pg_version_cluster_dir, data_directory_path)
+        run("chown -h postgres:postgres {}".format(data_directory_path))
+        log(
+            "after-symlink: to fix/avoid UID changes from "
+            "previous units, doing: "
+            "chown -R postgres:postgres {}".format(new_pg_dir))
+        run("chown -R postgres:postgres {}".format(new_pg_dir))
+        return True
+    except OSError:
+        log("failed to symlink {} -> {}".format(
+            data_directory_path, mount_point), CRITICAL)
+        return False
 
 
 def token_sql_safe(value):
@@ -1008,30 +907,15 @@ def token_sql_safe(value):
 
 
 @hooks.hook()
-def config_changed(force_restart=False):
+def config_changed(force_restart=False, mount_point=None):
     validate_config()
     config_data = hookenv.config()
     update_repos_and_packages()
 
-    # Trigger volume initialization logic for permanent storage
-    volid = volume_get_volume_id()
-    if not volid:
-        ## Invalid configuration (whether ephemeral, or permanent)
-        postgresql_autostart(False)
-        postgresql_stop()
-        mounts = volume_get_all_mounted()
-        if mounts:
-            log("current mounted volumes: {}".format(mounts))
-        log(
-            "Disabled and stopped postgresql service, "
-            "because of broken volume configuration - check "
-            "'volume-ephemeral-storage' and 'volume-map'", ERROR)
-        sys.exit(1)
-
-    if volume_is_permanent(volid):
-        ## config_changed_volume_apply will stop the service if it founds
+    if mount_point is not None:
+        ## config_changed_volume_apply will stop the service if it finds
         ## it necessary, ie: new volume setup
-        if config_changed_volume_apply():
+        if config_changed_volume_apply(mount_point=mount_point):
             postgresql_autostart(True)
         else:
             postgresql_autostart(False)
@@ -1139,8 +1023,89 @@ def install(run_pre=True):
 
 @hooks.hook()
 def upgrade_charm():
+    """Handle saving state during an upgrade-charm hook.
+
+    When upgrading from an installation using volume-map, we migrate
+    that installation to use the storage subordinate charm by remounting
+    a mountpath that the storage subordinate maintains. We exit(1) only to
+    raise visibility to manual procedure that we log in juju logs below for the
+    juju admin to finish the migration by relating postgresql to the storage
+    and block-storage-broker services. These steps are generalised in the
+    README as well.
+    """
     install(run_pre=False)
     snapshot_relations()
+    version = pg_version()
+    cluster_name = hookenv.config('cluster_name')
+    data_directory_path = os.path.join(
+        postgresql_data_dir, version, cluster_name)
+    if (os.path.islink(data_directory_path)):
+        link_target = os.readlink(data_directory_path)
+        if "/srv/juju" in link_target:
+            # Then we just upgraded from an installation that was using
+            # charm config volume_map definitions. We need to stop postgresql
+            # and remount the device where the storage subordinate expects to
+            # control the mount in the future if relations/units change
+            volume_id = link_target.split("/")[3]
+            unit_name = hookenv.local_unit()
+            new_mount_root = external_volume_mount
+            new_pg_version_cluster_dir = os.path.join(
+                new_mount_root, "postgresql", version, cluster_name)
+            if not os.exists(new_mount_root):
+                os.mkdir(new_mount_root)
+            log("\n"
+                "WARNING: %s unit has external volume id %s mounted via the\n"
+                "deprecated volume-map and volume-ephemeral-storage\n"
+                "configuration parameters.\n"
+                "These parameters are no longer available in the postgresql\n"
+                "charm in favor of using the volume_map parameter in the\n"
+                "storage subordinate charm.\n"
+                "We are migrating the attached volume to a mount path which\n"
+                "can be managed by the storage subordinate charm. To\n"
+                "continue using this volume_id with the storage subordinate\n"
+                "follow this procedure.\n-----------------------------------\n"
+                "1. cat > storage.cfg <<EOF\nstorage:\n"
+                "  provider: block-storage-broker\n"
+                "  root: %s\n"
+                "  volume_map: \"{%s: %s}\"\nEOF\n2. juju deploy "
+                "--config storage.cfg storage\n"
+                "3. juju deploy block-storage-broker\n4. juju add-relation "
+                "block-storage-broker storage\n5. juju resolved --retry "
+                "%s\n6. juju add-relation postgresql storage\n"
+                "-----------------------------------\n" %
+                (unit_name, volume_id, new_mount_root, unit_name, volume_id,
+                 unit_name), WARNING)
+            postgresql_stop()
+            os.unlink(data_directory_path)
+            log("Unmounting external storage due to charm upgrade: %s" %
+                link_target)
+            try:
+                subprocess.check_output(
+                    "umount /srv/juju/%s" % volume_id, shell=True)
+                # Since e2label truncates labels to 16 characters use only the
+                # first 16 characters of the volume_id as that's what was
+                # set by old versions of postgresql charm
+                subprocess.check_call(
+                    "mount -t ext4 LABEL=%s %s" %
+                    (volume_id[:16], new_mount_root), shell=True)
+            except subprocess.CalledProcessError, e:
+                log("upgrade-charm mount migration failed. %s" % str(e), ERROR)
+                sys.exit(1)
+
+            log("NOTICE: symlinking {} -> {}".format(
+                new_pg_version_cluster_dir, data_directory_path))
+            os.symlink(new_pg_version_cluster_dir, data_directory_path)
+            run("chown -h postgres:postgres {}".format(data_directory_path))
+            postgresql_start()  # Will exit(1) if issues
+            log("Remount and restart success for this external volume.\n"
+                "This current running installation will break upon\n"
+                "add/remove postgresql units or relations if you do not\n"
+                "follow the above procedure to ensure your external\n"
+                "volumes are preserved by the storage subordinate charm.",
+                WARNING)
+            # So juju admins can see the hook fail and note the steps to fix
+            # per our WARNINGs above
+            sys.exit(1)
 
 
 @hooks.hook()
@@ -1604,7 +1569,7 @@ def update_repos_and_packages():
     packages = fetch.filter_installed_packages(packages)
     # Set package state for main postgresql package if installed
     if 'postgresql-{}'.format(version) not in packages:
-        ensure_package_status('postgresql-{}'.format(version), 
+        ensure_package_status('postgresql-{}'.format(version),
                               hookenv.config('package_status'))
     fetch.apt_install(packages, fatal=True)
 
@@ -2304,6 +2269,32 @@ def rsyslog_conf_path(remote_unit):
         sanitize(hookenv.local_unit()), sanitize(remote_unit))
 
 
+@hooks.hook('data-relation-changed')
+def data_relation_changed():
+    """Listen for configured mountpoint from storage subordinate relation"""
+    if not hookenv.relation_get("mountpoint"):
+        hookenv.log("Waiting for mountpoint from the relation: %s"
+                    % external_volume_mount, hookenv.DEBUG)
+    else:
+        hookenv.log("Storage ready and mounted", hookenv.DEBUG)
+        config_changed(mount_point=external_volume_mount)
+
+
+@hooks.hook('data-relation-joined')
+def data_relation_joined():
+    """Request mountpoint from storage subordinate by setting mountpoint"""
+    hookenv.log("Setting mount point in the relation: %s"
+                % external_volume_mount, hookenv.DEBUG)
+    hookenv.relation_set(mountpoint=external_volume_mount)
+
+
+@hooks.hook('data-relation-departed')
+def stop_postgres_on_data_relation_departed():
+    hookenv.log("Data relation departing. Stopping PostgreSQL",
+                hookenv.DEBUG)
+    postgresql_stop()
+
+
 def _get_postgresql_config_dir(config_data=None):
     """ Return the directory path of the postgresql configuration files. """
     if config_data is None:
@@ -2327,6 +2318,7 @@ replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')
 hook_name = os.path.basename(sys.argv[0])
 juju_log_dir = "/var/log/juju"
+external_volume_mount = "/srv/data"
 
 
 if __name__ == '__main__':
