@@ -241,6 +241,33 @@ Python::
         hooks.execute(sys.argv)
 
 
+## Upgrade-charm hook notes
+
+The PostgreSQL charm has deprecated volume-map and volume-ephemeral-storage
+configuration options in favor of using the storage subordinate charm for
+general external storage management. If the installation being upgraded is
+using these deprecated options, there are a couple of manual steps necessary 
+to finish migration and continue using the current external volumes.
+Even though all data will remain intact, and PostgreSQL service will continue
+running, the upgrade-charm hook will intentionally fail and exit 1 as well to
+raise awareness of the manual procedure which will also be documented in the
+juju logs on the PostgreSQL units.
+
+The following steps must be additionally performed to continue using external
+volume maps for the PostgreSQL units once juju upgrade-charm is run from the
+command line:
+  1. cat > storage.cfg <<EOF
+     storage:
+       provider:block-storage-broker
+       root: /srv/data
+       volume_map: "{postgresql/0: your-vol-id, postgresql/1: your-2nd-vol-id}"
+     EOF
+  2. juju deploy --config storage.cfg storage
+  3. juju deploy block-storage-broker
+  4. juju add-relation block-storage-broker storage
+  5. juju resolved --retry postgresql/0   # for each postgresql unit running
+  6. juju add-relation postgresql storage
+
 
 # Contact Information
 
