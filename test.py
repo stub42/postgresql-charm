@@ -767,6 +767,15 @@ class PG93Tests(
     PGDG = False if SERIES == 'trusty' else True
 
 
+class PG94Tests(
+        PostgreSQLCharmBaseTestCase,
+        testtools.TestCase, fixtures.TestWithFixtures):
+    # 9.4 is still in beta, with packages only available in the PGDG
+    # archive.
+    VERSION = '9.4'
+    PGDG = True
+
+
 def unit_sorted(units):
     """Return a correctly sorted list of unit names."""
     return sorted(

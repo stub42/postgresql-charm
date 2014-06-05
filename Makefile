@@ -10,6 +10,7 @@ default:
 	@echo "    make integration_test_91"
 	@echo "    make integration_test_92"
 	@echo "    make integration_test_93"
+	@echo "    make integration_test_94"
 
 test: lint unit_test integration_test
 
@@ -18,8 +19,10 @@ unit_test:
 	cd hooks && trial test_hooks.py
 
 integration_test:
-	@echo "PostgreSQL integration tests, all versions"
-	trial test
+	@echo "PostgreSQL integration tests, all non-beta versions"
+	@make integration_test_91
+	@make integration_test_92
+	@make integration_test_93
 
 integration_test_91:
 	@echo "PostgreSQL 9.1 integration tests"
@@ -32,6 +35,10 @@ integration_test_92:
 integration_test_93:
 	@echo "PostgreSQL 9.3 integration tests"
 	trial test.PG93Tests
+
+integration_test_94:
+	@echo "PostgreSQL 9.4 (beta) integration tests"
+	trial test.PG94Tests
 
 lint:
 	@echo "Lint check (flake8)"

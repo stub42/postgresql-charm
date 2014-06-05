@@ -755,7 +755,7 @@ def validate_config():
 
     version = config_data.get('version', None)
     if version:
-        if version not in ('9.1', '9.2', '9.3'):
+        if version not in ('9.1', '9.2', '9.3', '9.4'):
             valid = False
             log("Invalid or unsupported version {!r} requested".format(
                 version), CRITICAL)
@@ -1494,6 +1494,8 @@ def db_admin_relation_broken():
 def update_repos_and_packages():
     need_upgrade = False
 
+    version = pg_version()
+
     # Add the PGDG APT repository if it is enabled. Setting this boolean
     # is simpler than requiring the magic URL and key be added to
     # install_sources and install_keys. In addition, per Bug #1271148,
@@ -1514,6 +1516,16 @@ def update_repos_and_packages():
             run("apt-key add lib/{}.asc".format(pgdg_key))
             open(pgdg_list, 'w').write('deb {} {}-pgdg main'.format(
                 'http://apt.postgresql.org/pub/repos/apt/', distro_codename()))
+        if version == '9.4':
+            pgdg_94_list = '/etc/apt/sources.list.d/pgdg_94_{}.list'.format(
+                sanitize(hookenv.local_unit()))
+            if not os.path.exists(pgdg_94_list):
+                need_upgrade = True
+                open(pgdg_94_list, 'w').write(
+                    'deb {} {}-pgdg main 9.4'.format(
+                        'http://apt.postgresql.org/pub/repos/apt/',
+                        distro_codename()))
+
     elif os.path.exists(pgdg_list):
         log(
             "PGDG apt source not requested, but already in place in this "
@@ -1549,7 +1561,6 @@ def update_repos_and_packages():
     if need_upgrade:
         run("apt-get -y upgrade")
 
-    version = pg_version()
     # It might have been better for debversion and plpython to only get
     # installed if they were listed in the extra-packages config item,
     # but they predate this feature.
@@ -1559,9 +1570,9 @@ def update_repos_and_packages():
                 "postgresql-contrib-{}".format(version),
                 "postgresql-plpython-{}".format(version),
                 "python-jinja2", "python-psycopg2"]
-    # PGDG currently doesn't have debversion for 9.3. Put this back when
-    # it does.
-    if not (hookenv.config('pgdg') and version == '9.3'):
+    # PGDG currently doesn't have debversion for 9.3 & 9.4. Put this back
+    # when it does.
+    if not (hookenv.config('pgdg') and version in ('9.3', '9.4')):
         packages.append("postgresql-{}-debversion".format(version))
     if hookenv.config('performance_tuning').lower() != 'manual':
         packages.append('pgtune')
