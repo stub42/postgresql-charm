@@ -733,11 +733,11 @@ class PostgreSQLCharmBaseTestCase(object):
             self.failUnless('hot standby {}'.format(token) in out)
 
         # Confirm that the relation tears down correctly.
-        self.juju.do(['destroy-service', 'rsyslog:aggregator'])
-        timeout = time.time() + 60
+        self.juju.do(['destroy-service', 'rsyslog'])
+        timeout = time.time() + 120
         while time.time() < timeout:
             status = self.juju.refresh_status()
-            if 'rsyslog' in status['services']:
+            if 'rsyslog' not in status['services']:
                 break
         self.assert_(
             'rsyslog' not in status['services'], 'rsyslog failed to die')
