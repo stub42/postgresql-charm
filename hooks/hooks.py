@@ -961,7 +961,6 @@ def install(run_pre=True):
 
     config_data = hookenv.config()
     update_repos_and_packages()
-
     if not 'state' in local_state:
         # Fresh installation. Because this function is invoked by both
         # the install hook and the upgrade-charm hook, we need to guard
