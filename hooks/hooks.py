@@ -961,6 +961,7 @@ def install(run_pre=True):
 
     config_data = hookenv.config()
     update_repos_and_packages()
+
     if not 'state' in local_state:
         # Fresh installation. Because this function is invoked by both
         # the install hook and the upgrade-charm hook, we need to guard
@@ -1011,6 +1012,12 @@ def install(run_pre=True):
         os.path.join(postgresql_scripts_dir, 'pg_backup_job'),
         backup_job, perms=0755)
     install_postgresql_crontab(postgresql_crontab)
+
+    # Create this empty log file on installation to avoid triggering
+    # spurious monitoring system alerts, per Bug #1329816.
+    if not os.path.exists(backup_log):
+        host.write_file(backup_log, '', 'postgres', 'postgres', 0664)
+
     hookenv.open_port(get_service_port())
 
     # Ensure at least minimal access granted for hooks to run.
@@ -2202,7 +2209,6 @@ def update_nrpe_checks():
             .format(get_service_port()))
     # pgsql backups
     nrpe_check_file = '/etc/nagios/nrpe.d/check_pgsql_backups.cfg'
-    backup_log = "{}/backups.log".format(postgresql_logs_dir)
     # XXX: these values _should_ be calculated from the backup schedule
     #      perhaps warn = backup_frequency * 1.5, crit = backup_frequency * 2
     warn_age = 172800
@@ -2330,6 +2336,8 @@ local_state = State('local_state.pickle')
 hook_name = os.path.basename(sys.argv[0])
 juju_log_dir = "/var/log/juju"
 external_volume_mount = "/srv/data"
+
+backup_log = os.path.join(postgresql_logs_dir, "backups.log")
 
 
 if __name__ == '__main__':
