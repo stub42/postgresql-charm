@@ -89,6 +89,14 @@ options:
     default: False
     type: boolean
     description: Log disconnections
+  log_temp_files:
+    default: "-1"
+    type: string
+    description: |
+        Log creation of temporary files larger than the threshold.
+        -1 disables the feature, 0 logs all temporary files, or specify
+        the threshold size with an optional unit (eg. "512KB", default
+        unit is kilobytes).
   log_line_prefix:
     default: "%t [%p]: [%l-1] db=%d,user=%u "
     type: string
