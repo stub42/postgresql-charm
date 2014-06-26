@@ -733,11 +733,11 @@ class PostgreSQLCharmBaseTestCase(object):
             self.failUnless('hot standby {}'.format(token) in out)
 
         # Confirm that the relation tears down correctly.
-        self.juju.do(['destroy-service', 'rsyslog:aggregator'])
-        timeout = time.time() + 60
+        self.juju.do(['destroy-service', 'rsyslog'])
+        timeout = time.time() + 120
         while time.time() < timeout:
             status = self.juju.refresh_status()
-            if 'rsyslog' in status['services']:
+            if 'rsyslog' not in status['services']:
                 break
         self.assert_(
             'rsyslog' not in status['services'], 'rsyslog failed to die')
@@ -765,6 +765,15 @@ class PG93Tests(
     # Test automatic version selection under trusty.
     VERSION = None if SERIES == 'trusty' else '9.3'
     PGDG = False if SERIES == 'trusty' else True
+
+
+class PG94Tests(
+        PostgreSQLCharmBaseTestCase,
+        testtools.TestCase, fixtures.TestWithFixtures):
+    # 9.4 is still in beta, with packages only available in the PGDG
+    # archive.
+    VERSION = '9.4'
+    PGDG = True
 
 
 def unit_sorted(units):
