@@ -17,8 +17,10 @@ class JujuFixture(fixtures.Fixture):
     Assumes juju environment is bootstrapped.
     """
 
-    def __init__(self, reuse_machines=False, do_teardown=True):
+    def __init__(self, series, reuse_machines=False, do_teardown=True):
         super(JujuFixture, self).__init__()
+
+        self.series = series
 
         self.reuse_machines = reuse_machines
 
@@ -92,6 +94,7 @@ class JujuFixture(fixtures.Fixture):
             int(k) for k, m in self.status['machines'].items()
             if k != '0'
             and m.get('life', None) not in ('dead', 'dying')
+            and m.get('series', None) == self.series
             and m.get('agent-state', 'pending') in ('started', 'ready'))
         for service in self.status.get('services', {}).values():
             for unit in service.get('units', {}).values():
