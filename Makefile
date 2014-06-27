@@ -4,6 +4,7 @@ SERIES := $(juju get-environment default-series)
 
 default:
 	@echo "One of:"
+	@echo "    make testdep"
 	@echo "    make lint"
 	@echo "    make test"
 	@echo "    make unit_test"
@@ -14,6 +15,9 @@ default:
 	@echo "    make integration_test_94"
 
 test: lint unit_test integration_test
+
+testdep:
+	tests/00_setup.test
 
 unit_test:
 	@echo "Unit tests of hooks"
