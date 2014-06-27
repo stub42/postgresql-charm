@@ -10,6 +10,7 @@ Usage:
 """
 
 import os.path
+import signal
 import socket
 import subprocess
 import time
@@ -23,9 +24,9 @@ import testtools
 from testing.jujufixture import JujuFixture, run
 
 
-SERIES = 'precise'
-TEST_CHARM = 'local:postgresql'
-PSQL_CHARM = 'cs:postgresql-psql'
+SERIES = os.environ.get('SERIES', 'precise').strip()
+TEST_CHARM = 'local:{}/postgresql'.format(SERIES)
+PSQL_CHARM = 'local:{}/postgresql-psql'.format(SERIES)
 
 
 class NotReady(Exception):
@@ -55,7 +56,7 @@ class PostgreSQLCharmBaseTestCase(object):
         self.pg_config = dict(version=self.VERSION, pgdg=self.PGDG)
 
         self.juju = self.useFixture(JujuFixture(
-            reuse_machines=True,
+            series=SERIES, reuse_machines=True,
             do_teardown='TEST_DONT_TEARDOWN_JUJU' not in os.environ))
 
         # If the charms fail, we don't want tests to hang indefinitely.
@@ -287,14 +288,15 @@ class PostgreSQLCharmBaseTestCase(object):
         local_port = s.getsockname()[1]
         s.close()
 
-        # Open the tunnel and wait for it to come up. The new process
-        # group is to ensure we can reap all the ssh tunnels, as simply
-        # killing the 'juju ssh' process doesn't seem to be enough.
+        # Open the tunnel and wait for it to come up.
+        # The new process group is to ensure we can reap all the ssh
+        # tunnels, as simply killing the 'juju ssh' process doesn't seem
+        # to be enough.
         tunnel_cmd = [
             'juju', 'ssh', psql_unit, '-N', '-L',
             '{}:{}:{}'.format(local_port, rel_info['host'], rel_info['port'])]
         tunnel_proc = subprocess.Popen(
-            tunnel_cmd, stdin=subprocess.PIPE)
+            tunnel_cmd, stdin=subprocess.PIPE, preexec_fn=os.setpgrp)
             # Don't disable stdout, so we can see when there are SSH
             # failures like bad host keys.
             #stdout=open('/dev/null', 'ab'), stderr=subprocess.STDOUT)
@@ -330,6 +332,7 @@ class PostgreSQLCharmBaseTestCase(object):
             con.close()
             return rv
         finally:
+            os.killpg(tunnel_proc.pid, signal.SIGTERM)
             tunnel_proc.kill()
             tunnel_proc.wait()
 
@@ -733,11 +736,11 @@ class PostgreSQLCharmBaseTestCase(object):
             self.failUnless('hot standby {}'.format(token) in out)
 
         # Confirm that the relation tears down correctly.
-        self.juju.do(['destroy-service', 'rsyslog:aggregator'])
-        timeout = time.time() + 60
+        self.juju.do(['destroy-service', 'rsyslog'])
+        timeout = time.time() + 120
         while time.time() < timeout:
             status = self.juju.refresh_status()
-            if 'rsyslog' in status['services']:
+            if 'rsyslog' not in status['services']:
                 break
         self.assert_(
             'rsyslog' not in status['services'], 'rsyslog failed to die')
@@ -765,6 +768,15 @@ class PG93Tests(
     # Test automatic version selection under trusty.
     VERSION = None if SERIES == 'trusty' else '9.3'
     PGDG = False if SERIES == 'trusty' else True
+
+
+class PG94Tests(
+        PostgreSQLCharmBaseTestCase,
+        testtools.TestCase, fixtures.TestWithFixtures):
+    # 9.4 is still in beta, with packages only available in the PGDG
+    # archive.
+    VERSION = '9.4'
+    PGDG = True
 
 
 def unit_sorted(units):
