@@ -194,22 +194,8 @@ Python::
         relation_set('database', config('database'))  # Explicit database name
         relation_set('roles', 'reporting,standard')  # DB roles required
 
-    @hook
+    @hook('db-relation-changed', 'db-relation-departed')
     def db_relation_changed():
-        db_changed(related_units())
-
-    @hook
-    def db_relation_departed():
-        # Note we currently have to explicitly filter the dying unit
-        # from our list of database units due to LP Bug #1192433
-        db_changed(
-            unit for unit in related_units() if unit != remote_unit())
-
-    @hook
-    def db_relation_broken():
-        db_changed([])
-
-    def db_changed(active_db_units):
         # Rather than try to merge in just this particular database
         # connection that triggered the hook into our existing connections,
         # it is easier to iterate over all active related databases and
@@ -217,7 +203,7 @@ Python::
         conn_str_tmpl = "dbname={dbname} user={user} host={host} port={port}"
         master_conn_str = None
         slave_conn_strs = []
-        for db_unit in active_db_units:
+        for db_unit in related_units():
             if relation_get('database', db_unit) != config('database'):
                 continue  # Not yet acknowledged requested database name.
 
