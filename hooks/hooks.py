@@ -899,13 +899,6 @@ def config_changed_volume_apply(mount_point):
         return False
 
 
-def token_sql_safe(value):
-    # Only allow alphanumeric + underscore in database identifiers
-    if re.search('[^A-Za-z0-9_]', value):
-        return False
-    return True
-
-
 @hooks.hook()
 def config_changed(force_restart=False, mount_point=None):
     validate_config()
