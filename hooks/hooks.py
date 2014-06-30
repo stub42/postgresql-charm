@@ -2305,7 +2305,6 @@ postgresql_logs_dir = os.path.join(postgresql_data_dir, 'logs')
 postgresql_sysctl = "/etc/sysctl.d/50-postgresql.conf"
 postgresql_crontab = "/etc/cron.d/postgresql"
 postgresql_service_config_dir = "/var/run/postgresql"
-replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')
 hook_name = os.path.basename(sys.argv[0])
 juju_log_dir = "/var/log/juju"
