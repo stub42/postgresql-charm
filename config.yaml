@@ -172,9 +172,10 @@ options:
     default: False
     type: boolean
     description: |
+        DEPRECATED.
         Hot standby or warm standby. When True, queries can be run against
         the database when in recovery or standby mode (ie. replicated).
-        Overridden by juju when master/slave relations are used.
+        Overridden when service contains multiple units.
   hot_standby_feedback:
     default: False
     type: boolean
@@ -189,7 +190,7 @@ options:
         'minimal', 'archive' or 'hot_standby'. Defines how much information
         is written to the WAL. Set to 'minimal' for stand alone databases
         and 'hot_standby' for replicated setups. Overridden by juju when
-        replication s used.
+        replication is used.
   max_wal_senders:
     default: 0
     type: int
@@ -386,12 +387,12 @@ options:
         to change it unless it happens to conflict with an advisory lock key
         being used by your applications.
   # Swift backups and PITR via SwiftWAL
-  swiftwal_container_prefix:
+  swiftwal_container:
     type: string
     default: ""
     description: |
       EXPERIMENTAL.
-      Swift container prefix for SwiftWAL to use. Must be set if any
+      Swift container for SwiftWAL to use. Must be set if any
       SwiftWAL features are enabled.
   swiftwal_backup_schedule:
     type: string

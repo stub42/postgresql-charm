@@ -395,11 +395,19 @@ def create_postgresql_config(config_file):
         log('Ensuring minimal replication settings')
         config_data['hot_standby'] = True
         config_data['wal_level'] = 'hot_standby'
-        config_data['max_wal_senders'] = max(
-            num_slaves, config_data['max_wal_senders'])
+        if config_data['streaming_replication']:
+            config_data['max_wal_senders'] = max(
+                num_slaves, config_data['max_wal_senders'])
         config_data['wal_keep_segments'] = max(
             config_data['wal_keep_segments'],
             config_data['replicated_wal_keep_segments'])
+
+    # Log shipping to Swift using SwiftWAL. This could be for
+    # non-streaming replication, or for PITR.
+    if config_data['swiftwal_log_shipping']:
+        config_data['archive_mode'] = True
+        config_data['wal_level'] = 'hot_standby'
+        config_data['archive_command'] = swiftwal_archive_command()
 
     # Send config data to the template
     # Return it as pg_config
@@ -596,15 +604,14 @@ def generate_postgresql_hba(
 def install_postgresql_crontab(output_file):
     '''Create the postgres user's crontab'''
     config_data = hookenv.config()
-    crontab_data = {
-        'backup_schedule': config_data["backup_schedule"],
-        'scripts_dir': postgresql_scripts_dir,
-        'backup_days': config_data["backup_retention_count"],
-    }
+    config_data['scripts_dir'] = postgresql_scripts_dir
+    config_data['swiftwal_backup_command'] = swiftwal_backup_command()
+    config_data['swiftwal_prune_command'] = swiftwal_prune_command()
+
     charm_dir = hookenv.charm_dir()
     template_file = "{}/templates/postgres.cron.tmpl".format(charm_dir)
     crontab_template = Template(
-        open(template_file).read()).render(crontab_data)
+        open(template_file).read()).render(config_data)
     host.write_file(output_file, crontab_template, perms=0600)
 
 
@@ -627,7 +634,8 @@ def create_recovery_conf(master_host, master_port, restart_on_change=False):
         'host': master_host,
         'port': master_port,
         'password': local_state['replication_password'],
-        'streaming_replication': streaming_replication})
+        'streaming_replication': streaming_replication,
+        'restore_command': swiftwal_restore_command()})
     log(recovery_conf, DEBUG)
     host.write_file(
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
@@ -636,6 +644,47 @@ def create_recovery_conf(master_host, master_port, restart_on_change=False):
     if restart_on_change and old_recovery_conf != recovery_conf:
         log("recovery.conf updated. Restarting to take effect.")
         postgresql_restart()
+
+
+def swiftwal_config():
+    postgresql_config_dir = _get_postgresql_config_dir()
+    return os.path.join(postgresql_config_dir, "swiftwal.conf")
+
+
+def create_swiftwal_config():
+    template_file = os.path.join(hookenv.charm_dir(),
+                                 'templates', 'swiftwal.conf.tmpl')
+    content = Template(open(template_file).read()).render(hookenv.config())
+    host.write_file(swiftwal_config(), content, "postgres", "postgres", 0o600)
+
+
+def swiftwal_archive_command():
+    '''Return the archive_command needed in postgresql.conf'''
+    if not hookenv.config('swiftwal_log_shipping'):
+        return None
+    return 'swiftwal --config={} archive-wal %p'.format(swiftwal_config())
+
+
+def swiftwal_restore_command():
+    '''Return the restore_command needed in recovery.conf'''
+    if not hookenv.config('swiftwal_log_shipping'):
+        return None
+    return 'swiftwal --config={} restore-wal %f %p'.format(swiftwal_config())
+
+
+def swiftwal_backup_command():
+    '''Return the backup command needed in postgres' crontab'''
+    cmd = 'swiftwal --config={} backup --host=localhost --port={}'.format(
+        swiftwal_config(), get_service_port())
+    if not hookenv.config('swiftwal_log_shipping'):
+        cmd += ' --xlog'
+    return cmd
+
+
+def swiftwal_prune_command():
+    '''Return the backup & wal pruning command needed in postgres' crontab'''
+    return 'swiftwal --config={} prune --keep-backups={} --keep-wals=0'.format(
+        swiftwal_config(), hookenv.config('swiftwal_backup_retention'))
 
 
 #------------------------------------------------------------------------------
@@ -938,6 +987,7 @@ def config_changed(force_restart=False, mount_point=None):
     generate_postgresql_hba(postgresql_hba)
     create_ssl_cert(os.path.join(
         postgresql_data_dir, pg_version(), config_data['cluster_name']))
+    create_swiftwal_config()
     update_service_port()
     update_nrpe_checks()
     if force_restart:
@@ -1576,12 +1626,18 @@ def update_repos_and_packages():
                 "postgresql-contrib-{}".format(version),
                 "postgresql-plpython-{}".format(version),
                 "python-jinja2", "python-psycopg2"]
+
     # PGDG currently doesn't have debversion for 9.3 & 9.4. Put this back
     # when it does.
     if not (hookenv.config('pgdg') and version in ('9.3', '9.4')):
         packages.append("postgresql-{}-debversion".format(version))
+
     if hookenv.config('performance_tuning').lower() != 'manual':
         packages.append('pgtune')
+
+    if hookenv.config('swiftwal_container'):
+        packages.append('swiftwal')
+
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
     # Set package state for main postgresql package if installed
