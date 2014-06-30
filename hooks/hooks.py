@@ -638,19 +638,6 @@ def create_recovery_conf(master_host, master_port, restart_on_change=False):
         postgresql_restart()
 
 
-#------------------------------------------------------------------------------
-# load_postgresql_config:  Convenience function that loads (as a string) the
-#                          current postgresql configuration file.
-#                          Returns a string containing the postgresql config or
-#                          None
-#------------------------------------------------------------------------------
-def load_postgresql_config(config_file):
-    if os.path.isfile(config_file):
-        return(open(config_file).read())
-    else:
-        return(None)
-
-
 def update_service_port():
     old_port = local_state.get('listen_port', None)
     new_port = get_service_port()
