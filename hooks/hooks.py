@@ -395,12 +395,14 @@ def create_postgresql_config(config_file):
         log('Ensuring minimal replication settings')
         config_data['hot_standby'] = True
         config_data['wal_level'] = 'hot_standby'
-        if config_data['streaming_replication']:
-            config_data['max_wal_senders'] = max(
-                num_slaves, config_data['max_wal_senders'])
         config_data['wal_keep_segments'] = max(
             config_data['wal_keep_segments'],
             config_data['replicated_wal_keep_segments'])
+        # We need this set even if config_data['streaming_replication']
+        # is False, because the replication connection is still needed
+        # by pg_basebackup to build a hot standby.
+        config_data['max_wal_senders'] = max(
+            num_slaves, config_data['max_wal_senders'])
 
     # Log shipping to Swift using SwiftWAL. This could be for
     # non-streaming replication, or for PITR.
@@ -652,23 +654,36 @@ def swiftwal_config():
 
 
 def create_swiftwal_config():
+    if not hookenv.config('swiftwal_container_prefix'):
+        return
+
+    # Until juju provides us with proper leader election, we have a
+    # state where units do not know if they are alone or part of a
+    # cluster. To avoid units stomping on each others WAL and backups,
+    # we use a unique Swift container for each unit when they are not
+    # part of the peer relation. Once they are part of the peer
+    # relation, they share a container.
+    if local_state.get('state', 'standalone') == 'standalone':
+        container = '{}_{}'.format(hookenv.config('swiftwal_container_prefix'),
+                                   hookenv.local_unit().split('/')[-1])
+    else:
+        container = hookenv.config('swiftwal_container_prefix')
+
     template_file = os.path.join(hookenv.charm_dir(),
                                  'templates', 'swiftwal.conf.tmpl')
-    content = Template(open(template_file).read()).render(hookenv.config())
+    params = dict(hookenv.config())
+    params['swiftwal_container'] = container
+    content = Template(open(template_file).read()).render(params)
     host.write_file(swiftwal_config(), content, "postgres", "postgres", 0o600)
 
 
 def swiftwal_archive_command():
     '''Return the archive_command needed in postgresql.conf'''
-    if not hookenv.config('swiftwal_log_shipping'):
-        return None
     return 'swiftwal --config={} archive-wal %p'.format(swiftwal_config())
 
 
 def swiftwal_restore_command():
     '''Return the restore_command needed in recovery.conf'''
-    if not hookenv.config('swiftwal_log_shipping'):
-        return None
     return 'swiftwal --config={} restore-wal %f %p'.format(swiftwal_config())
 
 
@@ -1635,7 +1650,7 @@ def update_repos_and_packages():
     if hookenv.config('performance_tuning').lower() != 'manual':
         packages.append('pgtune')
 
-    if hookenv.config('swiftwal_container'):
+    if hookenv.config('swiftwal_container_prefix'):
         packages.append('swiftwal')
 
     packages.extend((hookenv.config('extra-packages') or '').split())

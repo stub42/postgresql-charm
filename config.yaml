@@ -387,13 +387,15 @@ options:
         to change it unless it happens to conflict with an advisory lock key
         being used by your applications.
   # Swift backups and PITR via SwiftWAL
-  swiftwal_container:
+  swiftwal_container_prefix:
     type: string
     default: ""
     description: |
       EXPERIMENTAL.
-      Swift container for SwiftWAL to use. Must be set if any
-      SwiftWAL features are enabled.
+      Swift container prefix for SwiftWAL to use. Must be set if any
+      SwiftWAL features are enabled. This will become a simple
+      swiftwal_container config item when proper leader election is
+      implemented in juju.
   swiftwal_backup_schedule:
     type: string
     default: ""
