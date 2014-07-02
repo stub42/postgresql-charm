@@ -689,8 +689,8 @@ def swiftwal_restore_command():
 
 def swiftwal_backup_command():
     '''Return the backup command needed in postgres' crontab'''
-    cmd = 'swiftwal --config={} backup --host=localhost --port={}'.format(
-        swiftwal_config(), get_service_port())
+    cmd = 'swiftwal --config={} backup --port={}'.format(swiftwal_config(),
+                                                         get_service_port())
     if not hookenv.config('swiftwal_log_shipping'):
         cmd += ' --xlog'
     return cmd
@@ -698,8 +698,12 @@ def swiftwal_backup_command():
 
 def swiftwal_prune_command():
     '''Return the backup & wal pruning command needed in postgres' crontab'''
-    return 'swiftwal --config={} prune --keep-backups={} --keep-wals=0'.format(
-        swiftwal_config(), hookenv.config('swiftwal_backup_retention'))
+    config = hookenv.config()
+    args = '--keep-backups={} --keep-wals={}'.format(
+        config.get('swiftwal_backup_retention', 0),
+        max(config['wal_keep_segments'],
+            config['replicated_wal_keep_segments']))
+    return 'swiftwal --config={} prune {}'.format(swiftwal_config(), args)
 
 
 #------------------------------------------------------------------------------
@@ -1915,6 +1919,11 @@ def replication_relation_joined_changed():
         postgresql_hba = os.path.join(
             _get_postgresql_config_dir(), "pg_hba.conf")
         generate_postgresql_hba(postgresql_hba)
+
+    # Swift container name make have changed, so regenerate the SwiftWAL
+    # config. This can go away when we have real leader election and can
+    # safely share a single container.
+    create_swiftwal_config()
 
     local_state.publish()
 

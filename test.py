@@ -9,6 +9,7 @@ Usage:
     juju destroy-environment
 """
 
+from datetime import datetime
 import os.path
 import signal
 import socket
@@ -31,6 +32,15 @@ PSQL_CHARM = 'local:{}/postgresql-psql'.format(SERIES)
 
 class NotReady(Exception):
     pass
+
+
+def skip_if_swift_is_unavailable():
+    os_keys = set(['OS_TENANT_NAME', 'OS_AUTH_URL',
+                   'OS_USERNAME', 'OS_PASSWORD'])
+    for os_key in os_keys:
+        if os_key not in os.environ:
+            return unittest.skip('Swift is unavailable')
+    return lambda x: x
 
 
 class PostgreSQLCharmBaseTestCase(object):
@@ -371,6 +381,54 @@ class PostgreSQLCharmBaseTestCase(object):
 
         self.assertEqual(num_slaves, 1, 'Slave not connected')
 
+    @skip_if_swift_is_unavailable()
+    def test_swiftwal_logshipping_replication(self):
+        os_keys = set(['OS_TENANT_NAME', 'OS_AUTH_URL',
+                       'OS_USERNAME', 'OS_PASSWORD'])
+        for os_key in os_keys:
+            self.pg_config[os_key.lower()] = os.environ[os_key]
+        self.pg_config['streaming_replication'] = False
+        self.pg_config['swiftwal_log_shipping'] = True
+        self.pg_config['swiftwal_container_prefix'] = '{}_{}'.format(
+            '_juju_pg_tests', datetime.utcnow().strftime('%Y%m%dT%H%M%SZ'))
+        self.pg_config['install_sources'] = 'ppa:stub/pgcharm'
+
+        def swift_cleanup():
+            prefix = self.pg_config['swiftwal_container_prefix']
+            for container in [prefix, prefix + '_1', prefix + '_2']:
+                # Ignore errors and output
+                subprocess.call(['swift', 'delete', container],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT)
+        self.addCleanup(swift_cleanup)
+
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['add-relation', 'postgresql:db-admin', 'psql:db-admin'])
+        self.wait_until_ready(['postgresql/0', 'postgresql/1'])
+
+        # Confirm that the slave has not opened a streaming
+        # replication connection.
+        num_slaves = self.sql('SELECT COUNT(*) FROM pg_stat_replication',
+                              'master', dbname='postgres')[0][0]
+        self.assertEqual(num_slaves, 0, 'Streaming connection found')
+
+        # Confirm that replication is actually happening.
+        # Create a table and force a WAL change.
+        self.sql('CREATE TABLE foo AS SELECT generate_series(0,100)',
+                 'master', dbname='postgres')
+        self.sql('SELECT pg_switch_xlog()',
+                 'master', dbname='postgres')
+        timeout = time.time() + 120
+        table_found = False
+        while time.time() < timeout and not table_found:
+            time.sleep(1)
+            if self.sql("SELECT TRUE from pg_class WHERE relname='foo'",
+                        'hot standby', dbname='postgres'):
+                table_found = True
+        self.assertTrue(table_found, "Replication not replicating")
+
     def test_basic_admin(self):
         '''Connect to a single unit service via the db-admin relationship.'''
         self.juju.deploy(TEST_CHARM, 'postgresql', config=self.pg_config)
@@ -546,7 +604,6 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertIs(False, self.is_master(standby_unit_1, 'postgres'))
 
     def test_admin_addresses(self):
-
         # This test also tests explicit port assignment. We need
         # a different port for each PostgreSQL version we might be
         # testing, because clusters from previous tests of different
