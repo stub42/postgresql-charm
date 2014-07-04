@@ -411,6 +411,11 @@ def create_postgresql_config(config_file):
         config_data['wal_level'] = 'hot_standby'
         config_data['archive_command'] = swiftwal_archive_command()
 
+    if config_data['wal_e_storage_uri']:
+        config_data['archive_mode'] = True
+        config_data['wal_level'] = 'hot_standby'
+        config_data['archive_command'] = wal_e_archive_command()
+
     # Send config data to the template
     # Return it as pg_config
     charm_dir = hookenv.charm_dir()
@@ -705,10 +710,10 @@ def create_wal_e_envdir():
 
     # Regenerate the envdir(1) environment recommended by WAL-E.
     # All possible keys are rewritten to ensure we remove old secrets.
-    host.mkdir(wal_e_envdir, 'postgres', 'postgres', 0o750)
+    host.mkdir(wal_e_envdir(), 'postgres', 'postgres', 0o750)
     for k, v in env.items():
         host.write_file(
-            os.path.join(wal_e_envdir, k), v.strip(),
+            os.path.join(wal_e_envdir(), k), v.strip(),
             'postgres', 'postgres', 0o640)
 
 
@@ -1092,6 +1097,7 @@ def config_changed(force_restart=False, mount_point=None):
     create_ssl_cert(os.path.join(
         postgresql_data_dir, pg_version(), config_data['cluster_name']))
     create_swiftwal_config()
+    create_wal_e_envdir()
     update_service_port()
     update_nrpe_checks()
     if force_restart:
@@ -1743,7 +1749,7 @@ def update_repos_and_packages():
         packages.append('swiftwal')
 
     if hookenv.config('wal_e_storage_uri'):
-        packages.append('wal-e')
+        packages.extend(['wal-e', 'daemontools'])
 
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
@@ -2012,6 +2018,7 @@ def replication_relation_joined_changed():
     # config. This can go away when we have real leader election and can
     # safely share a single container.
     create_swiftwal_config()
+    create_wal_e_envdir()
 
     local_state.publish()
 
