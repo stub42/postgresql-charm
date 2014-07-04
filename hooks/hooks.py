@@ -609,6 +609,8 @@ def install_postgresql_crontab(output_file):
     config_data['scripts_dir'] = postgresql_scripts_dir
     config_data['swiftwal_backup_command'] = swiftwal_backup_command()
     config_data['swiftwal_prune_command'] = swiftwal_prune_command()
+    config_data['wal_e_backup_command'] = wal_e_backup_command()
+    config_data['wal_e_prune_command'] = wal_e_prune_command()
 
     charm_dir = hookenv.charm_dir()
     template_file = "{}/templates/postgres.cron.tmpl".format(charm_dir)
@@ -632,12 +634,15 @@ def create_recovery_conf(master_host, master_port, restart_on_change=False):
     charm_dir = hookenv.charm_dir()
     streaming_replication = hookenv.config('streaming_replication')
     template_file = "{}/templates/recovery.conf.tmpl".format(charm_dir)
-    recovery_conf = Template(open(template_file).read()).render({
-        'host': master_host,
-        'port': master_port,
-        'password': local_state['replication_password'],
-        'streaming_replication': streaming_replication,
-        'restore_command': swiftwal_restore_command()})
+    params = dict(
+        host=master_host, port=master_port,
+        password=local_state['replication_password'],
+        streaming_replication=streaming_replication)
+    if hookenv.config('wal_e_storage_uri'):
+        params['restore_command'] = wal_e_restore_command()
+    elif hookenv.config('swiftwal_log_shipping'):
+        params['restore_command'] = swiftwal_restore_command()
+    recovery_conf = Template(open(template_file).read()).render(params)
     log(recovery_conf, DEBUG)
     host.write_file(
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
@@ -646,6 +651,86 @@ def create_recovery_conf(master_host, master_port, restart_on_change=False):
     if restart_on_change and old_recovery_conf != recovery_conf:
         log("recovery.conf updated. Restarting to take effect.")
         postgresql_restart()
+
+
+def wal_e_envdir():
+    '''The envdir(1) environment location used to drive WAL-E.'''
+    return os.path.join(_get_postgresql_config_dir(), 'wal-e.env')
+
+
+def create_wal_e_envdir():
+    '''Regenerate the envdir(1) environment used to drive WAL-E.'''
+    config = hookenv.config()
+    env = dict(
+        SWIFT_AUTHURL=config.get('os_auth_url', ''),
+        SWIFT_TENANT=config.get('os_tenant_name', ''),
+        SWIFT_USER=config.get('os_username', ''),
+        SWIFT_PASSWORD=config.get('os_password', ''),
+        AWS_ACCESS_KEY_ID=config.get('aws_access_key_id', ''),
+        AWS_SECRET_ACCESS_KEY=config.get('aws_secret_access_key', ''),
+        WABS_ACCOUNT_NAME=config.get('wabs_account_name', ''),
+        WABS_ACCESS_KEY=config.get('wabs_access_key', ''),
+        WALE_SWIFT_PREFIX='',
+        WALE_S3_PREFIX='',
+        WALE_WABS_PREFIX='')
+
+    uri = config['wal_e_storage_uri'] or ''
+
+    # Until juju provides us with proper leader election, we have a
+    # state where units do not know if they are alone or part of a
+    # cluster. To avoid units stomping on each others WAL and backups,
+    # we use a unique container for each unit when they are not
+    # part of the peer relation. Once they are part of the peer
+    # relation, they share a container.
+    if local_state.get('state', 'standalone') == 'standalone':
+        uri = '{}/{}'.format(uri, hookenv.local_unit().split('/')[-1])
+
+    required_env = []
+    if uri.startswith('swift://'):
+        env['WALE_SWIFT_PREFIX'] = uri
+        required_env = ['SWIFT_AUTHURL', 'SWIFT_TENANT',
+                        'SWIFT_USER', 'SWIFT_PASSWORD']
+    elif uri.startswith('s3://'):
+        env['WALE_S3_PREFIX'] = uri
+        required_env = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
+    elif uri.startswith('wabs://'):
+        env['WALE_WABS_PREFIX'] = uri
+        required_env = ['WABS_ACCOUNT_NAME', 'WABS_ACCESS_KEY']
+    else:
+        log('Invalid wal_e_storage_uri {}'.format(uri), ERROR)
+
+    for env_key in required_env:
+        if not env[env_key].strip():
+            log('Missing {}'.format(env_key), ERROR)
+
+    # Regenerate the envdir(1) environment recommended by WAL-E.
+    # All possible keys are rewritten to ensure we remove old secrets.
+    host.mkdir(wal_e_envdir, 'postgres', 'postgres', 0o750)
+    for k, v in env.items():
+        host.write_file(
+            os.path.join(wal_e_envdir, k), v.strip(),
+            'postgres', 'postgres', 0o640)
+
+
+def wal_e_archive_command():
+    '''Return the archive_command needed in postgresql.conf.'''
+    return 'envdir {} wal-e wal-push %p'.format(wal_e_envdir())
+
+
+def wal_e_restore_command():
+    return 'envdir {} wal-e wal-fetch "%f" "%p"'.format(wal_e_envdir())
+
+
+def wal_e_backup_command():
+    postgresql_cluster_dir = os.path.join(
+        postgresql_data_dir, pg_version(), hookenv.config('cluster_name'))
+    return 'envdir {} wal-e backup-push {}'.format(
+        wal_e_envdir(), postgresql_cluster_dir)
+
+
+def wal_e_prune_command():
+    return 'envdir {} wal-e delete --confirm retain {}'.format(
+        wal_e_envdir(), hookenv.config('wal_e_backup_retention'))
 
 
 def swiftwal_config():
@@ -1656,6 +1741,9 @@ def update_repos_and_packages():
 
     if hookenv.config('swiftwal_container_prefix'):
         packages.append('swiftwal')
+
+    if hookenv.config('wal_e_storage_uri'):
+        packages.append('wal-e')
 
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)

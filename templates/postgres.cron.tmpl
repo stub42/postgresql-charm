@@ -9,3 +9,8 @@
 {{swiftwal_backup_schedule}} postgres \
     {{swiftwal_backup_command}} && {{swiftwal_prune_command}}
 {% endif -%}
+
+{% if wal_e_backup_schedule -%}
+{{wal_e_backup_schedule}} postgres \
+    {{wal_e_backup_command}} && {{wal_e_prune_command}}
+{% endif -%}

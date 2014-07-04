@@ -389,7 +389,7 @@ options:
   # Swift backups and PITR via SwiftWAL
   swiftwal_container_prefix:
     type: string
-    default: ""
+    default: null
     description: |
       EXPERIMENTAL.
       Swift container prefix for SwiftWAL to use. Must be set if any
@@ -398,7 +398,7 @@ options:
       implemented in juju.
   swiftwal_backup_schedule:
     type: string
-    default: ""
+    default: null
     description: |
       EXPERIMENTAL.
       Cron-formatted schedule for SwiftWAL database backups.
@@ -416,34 +416,83 @@ options:
     description: |
       EXPERIMENTAL.
       Archive WAL files into Swift. If swiftwal_backup_schedule is set,
-      this allows point-in-time recovery and WAL files are removed
+      allows point-in-time recovery and WAL files are removed
       automatically with old backups. If swiftwal_backup_schedule is not set
       then WAL files are never removed. Enabling this option will override
       the archive_mode and archive_command settings.
+  wal_e_storage_uri:
+    type: string
+    default: null
+    description: |
+      EXPERIMENTAL.
+      Specify storage to be used by WAL-E. Every PostgreSQL service must use
+      a unique URI. Backups will be unrecoverable if it is not unique. The
+      URI's scheme must be one of 'swift' (OpenStack Swift), 's3' (Amazon AWS)
+      or 'wabs' (Windows Azure). For example:
+        'swift://some-container/directory/or/whatever'
+        's3://some-bucket/directory/or/whatever'
+        'wabs://some-bucket/directory/or/whatever'
+      Setting the wal_e_storage_uri enables regular WAL-E filesystem level
+      backups (per wal_e_backup_schedule), and log shipping to the configured
+      storage. Point-in-time recovery becomes possible, as is disabling the
+      streaming_replication configuration item and relying solely on
+      log shipping for replication.
+  wal_e_backup_schedule:
+    type: string
+    default: "13 0 * * *"
+    description: |
+      EXPERIMENTAL.
+      Cron-formatted schedule for WAL-E database backups. If
+      wal_e_backup_schedule is unset, WAL files will never be removed from
+      WAL-E storage.
+  wal_e_backup_retention:
+    type: int
+    default: 2
+    description: |
+      EXPERIMENTAL.
+      Number of recent base backups and WAL files to retain.
+      You need enough space for this many backups plus one more, as
+      an old backup will only be removed after a new one has been
+      successfully made to replace it.
   streaming_replication:
     type: boolean
     default: true
     description: |
-      EXPERIMENTAL.
       Enable streaming replication. Normally, streaming replication is
       always used, and any log shipping configured is used as a fallback.
       Turning this off without configuring log shipping is an error.
   os_username:
     type: string
-    default: ""
+    default: null
     description: EXPERIMENTAL. OpenStack Swift username.
   os_password:
     type: string
-    default: ""
+    default: null
     description: EXPERIMENTAL. OpenStack Swift password.
   os_auth_url:
     type: string
-    default: ""
+    default: null
     description: EXPERIMENTAL. OpenStack Swift authentication URL.
   os_tenant_name:
     type: string
-    default: ""
+    default: null
     description: EXPERIMENTAL. OpenStack Swift tenant name.
+  aws_access_key_id:
+    type: string
+    default: null
+    description: EXPERIMENTAL. Amazon AWS access key id.
+  aws_secret_access_key:
+    type: string
+    default: null
+    description: EXPERIMENTAL. Amazon AWS secret access key.
+  wabs_account_name:
+    type: string
+    default: null
+    description: EXPERIMENTAL. Windows Azure account name.
+  wabs_access_key:
+    type: string
+    default: null
+    description: EXPERIMENTAL. Windows Azure access key.
   package_status:
     default: "install"
     type: string
