@@ -16,6 +16,7 @@ import sys
 from tempfile import NamedTemporaryFile
 from textwrap import dedent
 import time
+import urlparse
 
 from charmhelpers import fetch
 from charmhelpers.core import hookenv, host
@@ -658,6 +659,22 @@ def create_recovery_conf(master_host, master_port, restart_on_change=False):
         postgresql_restart()
 
 
+def ensure_swift_container(container):
+    from swiftclient import client as swiftclient
+    config = hookenv.config()
+    con = swiftclient.Connection(
+        authurl=config.get('os_auth_url', ''),
+        user=config.get('os_username', ''),
+        key=config.get('os_password', ''),
+        tenant_name=config.get('os_tenant_name', ''),
+        auth_version='2.0',
+        retries=0)
+    try:
+        con.head_container(container)
+    except swiftclient.ClientException:
+        con.put_container(container)
+
+
 def wal_e_envdir():
     '''The envdir(1) environment location used to drive WAL-E.'''
     return os.path.join(_get_postgresql_config_dir(), 'wal-e.env')
@@ -688,17 +705,22 @@ def create_wal_e_envdir():
     # part of the peer relation. Once they are part of the peer
     # relation, they share a container.
     if local_state.get('state', 'standalone') == 'standalone':
-        uri = '{}/{}'.format(uri, hookenv.local_unit().split('/')[-1])
+        if not uri.endswith('/'):
+            uri += '/'
+        uri += hookenv.local_unit().split('/')[-1]
+
+    parsed_uri = urlparse.urlparse(uri)
 
     required_env = []
-    if uri.startswith('swift://'):
+    if parsed_uri.scheme == 'swift':
         env['WALE_SWIFT_PREFIX'] = uri
         required_env = ['SWIFT_AUTHURL', 'SWIFT_TENANT',
                         'SWIFT_USER', 'SWIFT_PASSWORD']
-    elif uri.startswith('s3://'):
+        ensure_swift_container(parsed_uri.netloc)
+    elif parsed_uri.scheme == 's3':
         env['WALE_S3_PREFIX'] = uri
         required_env = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
-    elif uri.startswith('wabs://'):
+    elif parsed_url.scheme == 'wabs':
         env['WALE_WABS_PREFIX'] = uri
         required_env = ['WABS_ACCOUNT_NAME', 'WABS_ACCESS_KEY']
     else:

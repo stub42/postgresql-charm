@@ -25,7 +25,7 @@ import testtools
 from testing.jujufixture import JujuFixture, run
 
 
-SERIES = os.environ.get('SERIES', 'precise').strip()
+SERIES = os.environ.get('SERIES', 'trusty').strip()
 TEST_CHARM = 'local:{}/postgresql'.format(SERIES)
 PSQL_CHARM = 'local:{}/postgresql-psql'.format(SERIES)
 
