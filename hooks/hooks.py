@@ -721,7 +721,7 @@ def create_wal_e_envdir():
         elif parsed_uri.scheme == 's3':
             env['WALE_S3_PREFIX'] = uri
             required_env = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
-        elif parsed_url.scheme == 'wabs':
+        elif parsed_uri.scheme == 'wabs':
             env['WALE_WABS_PREFIX'] = uri
             required_env = ['WABS_ACCOUNT_NAME', 'WABS_ACCESS_KEY']
         else:
