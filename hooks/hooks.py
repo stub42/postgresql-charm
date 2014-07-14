@@ -407,12 +407,12 @@ def create_postgresql_config(config_file):
 
     # Log shipping to Swift using SwiftWAL. This could be for
     # non-streaming replication, or for PITR.
-    if config_data['swiftwal_log_shipping']:
+    if config_data.get('swiftwal_log_shipping', None):
         config_data['archive_mode'] = True
         config_data['wal_level'] = 'hot_standby'
         config_data['archive_command'] = swiftwal_archive_command()
 
-    if config_data['wal_e_storage_uri']:
+    if config_data.get('wal_e_storage_uri', None):
         config_data['archive_mode'] = True
         config_data['wal_level'] = 'hot_standby'
         config_data['archive_command'] = wal_e_archive_command()
@@ -696,39 +696,40 @@ def create_wal_e_envdir():
         WALE_S3_PREFIX='',
         WALE_WABS_PREFIX='')
 
-    uri = config['wal_e_storage_uri'] or ''
+    uri = config.get('wal_e_storage_uri', None)
 
-    # Until juju provides us with proper leader election, we have a
-    # state where units do not know if they are alone or part of a
-    # cluster. To avoid units stomping on each others WAL and backups,
-    # we use a unique container for each unit when they are not
-    # part of the peer relation. Once they are part of the peer
-    # relation, they share a container.
-    if local_state.get('state', 'standalone') == 'standalone':
-        if not uri.endswith('/'):
-            uri += '/'
-        uri += hookenv.local_unit().split('/')[-1]
+    if uri:
+        # Until juju provides us with proper leader election, we have a
+        # state where units do not know if they are alone or part of a
+        # cluster. To avoid units stomping on each others WAL and backups,
+        # we use a unique container for each unit when they are not
+        # part of the peer relation. Once they are part of the peer
+        # relation, they share a container.
+        if local_state.get('state', 'standalone') == 'standalone':
+            if not uri.endswith('/'):
+                uri += '/'
+            uri += hookenv.local_unit().split('/')[-1]
 
-    parsed_uri = urlparse.urlparse(uri)
+        parsed_uri = urlparse.urlparse(uri)
 
-    required_env = []
-    if parsed_uri.scheme == 'swift':
-        env['WALE_SWIFT_PREFIX'] = uri
-        required_env = ['SWIFT_AUTHURL', 'SWIFT_TENANT',
-                        'SWIFT_USER', 'SWIFT_PASSWORD']
-        ensure_swift_container(parsed_uri.netloc)
-    elif parsed_uri.scheme == 's3':
-        env['WALE_S3_PREFIX'] = uri
-        required_env = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
-    elif parsed_url.scheme == 'wabs':
-        env['WALE_WABS_PREFIX'] = uri
-        required_env = ['WABS_ACCOUNT_NAME', 'WABS_ACCESS_KEY']
-    else:
-        log('Invalid wal_e_storage_uri {}'.format(uri), ERROR)
+        required_env = []
+        if parsed_uri.scheme == 'swift':
+            env['WALE_SWIFT_PREFIX'] = uri
+            required_env = ['SWIFT_AUTHURL', 'SWIFT_TENANT',
+                            'SWIFT_USER', 'SWIFT_PASSWORD']
+            ensure_swift_container(parsed_uri.netloc)
+        elif parsed_uri.scheme == 's3':
+            env['WALE_S3_PREFIX'] = uri
+            required_env = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
+        elif parsed_url.scheme == 'wabs':
+            env['WALE_WABS_PREFIX'] = uri
+            required_env = ['WABS_ACCOUNT_NAME', 'WABS_ACCESS_KEY']
+        else:
+            log('Invalid wal_e_storage_uri {}'.format(uri), ERROR)
 
-    for env_key in required_env:
-        if not env[env_key].strip():
-            log('Missing {}'.format(env_key), ERROR)
+        for env_key in required_env:
+            if not env[env_key].strip():
+                log('Missing {}'.format(env_key), ERROR)
 
     # Regenerate the envdir(1) environment recommended by WAL-E.
     # All possible keys are rewritten to ensure we remove old secrets.
