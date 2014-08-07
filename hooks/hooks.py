@@ -145,6 +145,7 @@ class State(dict):
         for relid in hookenv.relation_ids('replication'):
             hookenv.relation_set(relid, replication_state)
 
+        log('saving local state', DEBUG)
         self.save()
 
 
@@ -1145,11 +1146,13 @@ def install(run_pre=True):
     config_data = hookenv.config()
     update_repos_and_packages()
     if not 'state' in local_state:
+        log('state not in {}'.format(local_state.keys()), DEBUG)
         # Fresh installation. Because this function is invoked by both
         # the install hook and the upgrade-charm hook, we need to guard
         # any non-idempotent setup. We should probably fix this; it
         # seems rather fragile.
         local_state.setdefault('state', 'standalone')
+        log(repr(local_state.keys()), DEBUG)
 
         # Drop the cluster created when the postgresql package was
         # installed, and rebuild it with the requested locale and encoding.
@@ -1169,6 +1172,7 @@ def install(run_pre=True):
             'allocated port {!r} != {!r}'.format(
                 get_service_port(), config_data['listen_port']))
         local_state['port'] = get_service_port()
+        log('publishing state', DEBUG)
         local_state.publish()
 
     postgresql_backups_dir = (

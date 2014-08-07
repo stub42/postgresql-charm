@@ -302,8 +302,9 @@ class PostgreSQLCharmBaseTestCase(object):
             if postgres_unit in full_rel_info[rel_name][rel_id]:
                 rel_info = full_rel_info[rel_name][rel_id][postgres_unit]
                 break
-        assert rel_info is not None, 'Unable to find pg rel info {!r}'.format(
-            full_rel_info[rel_name])
+        assert rel_info is not None, (
+            'Unable to find pg rel info {} {!r}'.format(
+                postgres_unit, full_rel_info[rel_name]))
 
         if dbname is None:
             dbname = rel_info['database']
@@ -863,6 +864,27 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assert_(
             'rsyslog' not in status['services'], 'rsyslog failed to die')
         self.wait_until_ready(pg_units)
+
+    def test_upgrade_charm(self):
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
+        pg_units = ['postgresql/0', 'postgresql/1']
+        self.wait_until_ready(pg_units)
+
+        # Create something
+        self.sql("CREATE TABLE Foo AS SELECT TRUE", 'master')
+
+        # Kick off the upgrade-charm hook
+        self.juju.do(['upgrade-charm', 'postgresql'])
+        self.wait_until_ready(pg_units)
+
+        # Ensure that our data has perservered.
+        master_data = self.sql('SELECT * FROM Foo', 'master')[0][0]
+        self.assertTrue(master_data)
+        standby_data = self.sql('SELECT * FROM Foo', 'hot standby')[0][0]
+        self.assertTrue(standby_data)
 
 
 class PG91Tests(
