@@ -90,6 +90,14 @@ def distro_codename():
     return host.lsb_release()['DISTRIB_CODENAME']
 
 
+def render_template(template_name, vars):
+    # deferred import so install hook can install jinja2
+    templates_dir = os.path.join(os.environ['CHARM_DIR'], 'templates')
+    template_env = Environment(loader=FileSystemLoader(templates_dir))
+    template = template_env.get_template(template_name)
+    return template.render(vars)
+
+
 class State(dict):
     """Encapsulate state common to the unit for republishing to relations."""
     def __init__(self, state_file):
@@ -940,6 +948,8 @@ def config_changed(force_restart=False, mount_point=None):
         postgresql_data_dir, pg_version(), config_data['cluster_name']))
     update_service_port()
     update_nrpe_checks()
+    write_metrics_cronjob('/usr/local/bin/postgres_to_statsd.py',
+        '/etc/cron.d/postgres_metrics')
     if force_restart:
         postgresql_restart()
     postgresql_reload_or_restart()
@@ -2156,6 +2166,50 @@ def unit_sorted(units):
         units, lambda a, b: cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
 
 
+def delete_metrics_cronjob(cron_path):
+    try:
+        os.unlink(cron_path)
+    except OSError:
+        pass
+
+
+def write_metrics_cronjob(script_path, cron_path):
+    config_data = hookenv.config()
+
+    # need the following two configs to be valid
+    metrics_target = config_data['metrics_target'].strip()
+    metrics_sample_interval = config_data['metrics_sample_interval']
+    if (not metrics_target
+            or ':' not in metrics_target
+            or not metrics_sample_interval):
+        log("Required config not found or invalid "
+            "(metrics_target, metrics_sample_interval), "
+            "disabling metrics")
+        delete_metrics_cronjob(cron_path)
+        return
+
+    charm_dir = os.environ['CHARM_DIR']
+    statsd_host, statsd_port = metrics_target.split(':', 1)
+    metrics_prefix = config_data['metrics_prefix'].strip()
+    metrics_prefix = metrics_prefix.replace(
+        "$UNIT", hookenv.local_unit().replace('.', '-').replace('/', '-'))
+
+    # ensure script installed
+    shutil.copy2('%s/files/metrics/postgres_to_statsd.py' % charm_dir,
+                 script_path)
+
+    # write the crontab
+    with open(cron_path, 'w') as cronjob:
+        cronjob.write(render_template("metrics_cronjob.template", {
+            'interval': config_data['metrics_sample_interval'],
+            'script': script_path,
+            'metrics_prefix': metrics_prefix,
+            'metrics_sample_interval': metrics_sample_interval,
+            'statsd_host': statsd_host,
+            'statsd_port': statsd_port,
+        }))
+
+
 @hooks.hook('nrpe-external-master-relation-changed')
 def update_nrpe_checks():
     config_data = hookenv.config()
@@ -2186,15 +2240,11 @@ def update_nrpe_checks():
             os.remove(os.path.join('/var/lib/nagios/export/', f))
 
     # --- exported service configuration file
-    template_env = Environment(
-        loader=FileSystemLoader(
-            os.path.join(os.environ['CHARM_DIR'], 'templates')))
     templ_vars = {
         'nagios_hostname': nagios_hostname,
         'nagios_servicegroup': config_data['nagios_context'],
     }
-    template = \
-        template_env.get_template('nrpe_service.tmpl').render(templ_vars)
+    template = render_template('nrpe_service.tmpl', templ_vars)
     with open(nrpe_service_file, 'w') as nrpe_service_config:
         nrpe_service_config.write(str(template))
 
