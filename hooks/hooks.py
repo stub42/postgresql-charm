@@ -4,6 +4,7 @@
 from contextlib import contextmanager
 import commands
 import cPickle as pickle
+from distutils.version import StrictVersion
 import glob
 from grp import getgrnam
 import os.path
@@ -341,8 +342,17 @@ def createcluster():
             "-e", hookenv.config('encoding')]
         if hookenv.config('listen_port'):
             create_cmd.extend(["-p", str(hookenv.config('listen_port'))])
-        create_cmd.append(pg_version())
+        version = pg_version()
+        create_cmd.append(version)
         create_cmd.append(hookenv.config('cluster_name'))
+
+        # With 9.3+, we make an opinionated decision to always enable
+        # data checksums. This seems to be best practice. We could
+        # turn this into a configuration item if there is need. There
+        # is no way to enable this option on existing clusters.
+        if StrictVersion(version) >= StrictVersion('9.3'):
+            create_cmd.extend(['--', '--data-checksums'])
+
         run(create_cmd)
         # Ensure SSL certificates exist, as we enable SSL by default.
         create_ssl_cert(os.path.join(
