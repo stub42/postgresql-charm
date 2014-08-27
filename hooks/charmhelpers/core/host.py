@@ -12,7 +12,8 @@ import random
 import string
 import subprocess
 import hashlib
-import apt_pkg
+import shutil
+from contextlib import contextmanager
 
 from collections import OrderedDict
 
@@ -53,7 +54,7 @@ def service(action, service_name):
 def service_running(service):
     """Determine whether a system service is running"""
     try:
-        output = subprocess.check_output(['service', service, 'status'])
+        output = subprocess.check_output(['service', service, 'status'], stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError:
         return False
     else:
@@ -61,6 +62,16 @@ def service_running(service):
             return True
         else:
             return False
+
+
+def service_available(service_name):
+    """Determine whether a system service is available"""
+    try:
+        subprocess.check_output(['service', service_name, 'status'], stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError:
+        return False
+    else:
+        return True
 
 
 def adduser(username, password=None, shell='/bin/bash', system_user=False):
@@ -212,13 +223,13 @@ def file_hash(path):
 def restart_on_change(restart_map, stopstart=False):
     """Restart services based on configuration files changing
 
-    This function is used a decorator, for example
+    This function is used a decorator, for example::
 
         @restart_on_change({
             '/etc/ceph/ceph.conf': [ 'cinder-api', 'cinder-volume' ]
             })
         def ceph_client_changed():
-            ...
+            pass  # your code here
 
     In this example, the cinder-api and cinder-volume services
     would be restarted if /etc/ceph/ceph.conf is changed by the
@@ -314,12 +325,36 @@ def get_nic_hwaddr(nic):
 
 def cmp_pkgrevno(package, revno, pkgcache=None):
     '''Compare supplied revno with the revno of the installed package
-       1 => Installed revno is greater than supplied arg
-       0 => Installed revno is the same as supplied arg
-      -1 => Installed revno is less than supplied arg
+
+    *  1 => Installed revno is greater than supplied arg
+    *  0 => Installed revno is the same as supplied arg
+    * -1 => Installed revno is less than supplied arg
+
     '''
+    import apt_pkg
+    from charmhelpers.fetch import apt_cache
     if not pkgcache:
-        apt_pkg.init()
-        pkgcache = apt_pkg.Cache()
+        pkgcache = apt_cache()
     pkg = pkgcache[package]
     return apt_pkg.version_compare(pkg.current_ver.ver_str, revno)
+
+
+@contextmanager
+def chdir(d):
+    cur = os.getcwd()
+    try:
+        yield os.chdir(d)
+    finally:
+        os.chdir(cur)
+
+
+def chownr(path, owner, group):
+    uid = pwd.getpwnam(owner).pw_uid
+    gid = grp.getgrnam(group).gr_gid
+
+    for root, dirs, files in os.walk(path):
+        for name in dirs + files:
+            full = os.path.join(root, name)
+            broken_symlink = os.path.lexists(full) and not os.path.exists(full)
+            if not broken_symlink:
+                os.chown(full, uid, gid)
