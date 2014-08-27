@@ -1,6 +1,5 @@
 destination: hooks/charmhelpers
-#branch: lp:charm-helpers
-branch: lp:~stub/charm-helpers/fix-configure_sources
+branch: lp:charm-helpers
 include:
     - core
     - fetch
