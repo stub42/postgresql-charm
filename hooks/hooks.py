@@ -638,19 +638,6 @@ def create_recovery_conf(master_host, master_port, restart_on_change=False):
         postgresql_restart()
 
 
-#------------------------------------------------------------------------------
-# load_postgresql_config:  Convenience function that loads (as a string) the
-#                          current postgresql configuration file.
-#                          Returns a string containing the postgresql config or
-#                          None
-#------------------------------------------------------------------------------
-def load_postgresql_config(config_file):
-    if os.path.isfile(config_file):
-        return(open(config_file).read())
-    else:
-        return(None)
-
-
 def update_service_port():
     old_port = local_state.get('listen_port', None)
     new_port = get_service_port()
@@ -897,13 +884,6 @@ def config_changed_volume_apply(mount_point):
         log("failed to symlink {} -> {}".format(
             data_directory_path, mount_point), CRITICAL)
         return False
-
-
-def token_sql_safe(value):
-    # Only allow alphanumeric + underscore in database identifiers
-    if re.search('[^A-Za-z0-9_]', value):
-        return False
-    return True
 
 
 @hooks.hook()
@@ -2330,7 +2310,6 @@ postgresql_logs_dir = os.path.join(postgresql_data_dir, 'logs')
 postgresql_sysctl = "/etc/sysctl.d/50-postgresql.conf"
 postgresql_crontab = "/etc/cron.d/postgresql"
 postgresql_service_config_dir = "/var/run/postgresql"
-replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')
 hook_name = os.path.basename(sys.argv[0])
 juju_log_dir = "/var/log/juju"

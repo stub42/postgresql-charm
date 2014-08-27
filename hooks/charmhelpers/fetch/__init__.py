@@ -1,4 +1,5 @@
 import importlib
+from tempfile import NamedTemporaryFile
 import time
 from yaml import safe_load
 from charmhelpers.core.host import (
@@ -225,10 +226,23 @@ def add_source(source, key=None):
         release = lsb_release()['DISTRIB_CODENAME']
         with open('/etc/apt/sources.list.d/proposed.list', 'w') as apt:
             apt.write(PROPOSED_POCKET.format(release))
+    else:
+        raise SourceConfigError("Unknown source: {!r}".format(source))
+
     if key:
-        subprocess.check_call(['apt-key', 'adv', '--keyserver',
-                               'hkp://keyserver.ubuntu.com:80', '--recv',
-                               key])
+        if '-----BEGIN PGP PUBLIC KEY BLOCK-----' in key:
+            with NamedTemporaryFile() as key_file:
+                key_file.write(key)
+                key_file.flush()
+                key_file.seek(0)
+                subprocess.check_call(['apt-key', 'add', '-'], stdin=key_file)
+        else:
+            # Note that hkp: is in no way a secure protocol. Using a
+            # GPG key id is pointless from a security POV unless you
+            # absolutely trust your network and DNS.
+            subprocess.check_call(['apt-key', 'adv', '--keyserver',
+                                   'hkp://keyserver.ubuntu.com:80', '--recv',
+                                   key])
 
 
 def configure_sources(update=False,
