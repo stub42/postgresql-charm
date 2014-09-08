@@ -1,14 +1,16 @@
-{{backup_schedule}} postgres {{scripts_dir}}/pg_backup_job {{backup_days}}
-{% if swiftwal_container -%}
+# Maintained by juju
+#
+{% if backup_schedule -%}
+{{backup_schedule}} postgres \
+    {{scripts_dir}}/pg_backup_job {{backup_retention_count}}
+{% endif -%}
+
 {% if swiftwal_backup_schedule -%}
-{% if swiftwal_log_shipping -%}
 {{swiftwal_backup_schedule}} postgres \
-  swiftwal --config={{swiftwal_config}} backup && \
-  swiftwal --config={{swiftwal_config}} prune -n {{swiftwal_backup_retention}}
-{% else -%}
-{{swiftwal_backup_schedule}} postgres \
-  swiftwal --config={{swiftwal_config}} backup --xlog && \
-  swiftwal --config={{swiftwal_config}} prune -n {{swiftwal_backup_retention}}
+    {{swiftwal_backup_command}} && {{swiftwal_prune_command}}
 {% endif -%}
-{% endif -%}
+
+{% if wal_e_backup_schedule -%}
+{{wal_e_backup_schedule}} postgres \
+    {{wal_e_backup_command}} && {{wal_e_prune_command}}
 {% endif -%}
