@@ -940,6 +940,22 @@ def config_changed(force_restart=False, mount_point=None):
         postgresql_data_dir, pg_version(), config_data['cluster_name']))
     update_service_port()
     update_nrpe_checks()
+
+    # Ensure client credentials match in the case that an external mountpoint
+    # has been mounted with an existing DB.
+    for relid in hookenv.relation_ids('db'):
+        rel = hookenv.relation_get(rid=relid, unit=hookenv.local_unit())
+
+        database = rel.get('database')
+        roles = filter(None, (rel.get('roles') or '').split(","))
+        user = rel['user']
+        password = create_user(user)
+        reset_user_roles(user, roles)
+        schema_user = rel['schema_user']
+        schema_password = create_user(schema_user)
+        if database is not None:
+            ensure_database(user, schema_user, database)
+
     if force_restart:
         postgresql_restart()
     postgresql_reload_or_restart()
