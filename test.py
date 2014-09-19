@@ -130,7 +130,7 @@ class PostgreSQLCharmBaseTestCase(object):
             except NotReady:
                 if time.time() > timeout:
                     raise
-                time.sleep(3)
+                time.sleep(10)
 
     def confirm_psql_unit_ready(self, psql_unit, pg_units):
         # Confirm the db and db-admin relations are all in a useful
