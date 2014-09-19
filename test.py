@@ -98,7 +98,7 @@ class PostgreSQLCharmBaseTestCase(object):
         # is at this particular instant in the expected state, hoping
         # that the system is stable enough to continue testing.
 
-        timeout = time.time() + 180
+        timeout = time.time() + 300
         pg_units = frozenset(pg_units)
 
         # The list of PG units we expect to be related to the psql unit.

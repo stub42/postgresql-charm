@@ -144,10 +144,7 @@ class JujuFixture(fixtures.Fixture):
                         res[rel_name][rel_id][rel_unit] = json.loads(
                             json_rel_info)
                     except subprocess.CalledProcessError as x:
-                        if x.returncode == 2:
-                            res[rel_name][rel_id][rel_unit] = None
-                        else:
-                            raise
+                        res[rel_name][rel_id][rel_unit] = None
         return res
 
     def wait_until_ready(self, extra=60):
