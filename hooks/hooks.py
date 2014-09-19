@@ -988,14 +988,14 @@ def ensure_package_status(package, status):
     dpkg.communicate(input=selections)
 
 
-#------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Core logic for permanent storage changes:
 # NOTE the only 2 "True" return points:
 #   1) symlink already pointing to existing storage (no-op)
 #   2) new storage properly initialized:
 #     - if fresh new storage dir: rsync existing data
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
-#------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def config_changed_volume_apply(mount_point):
     version = pg_version()
     cluster_name = hookenv.config('cluster_name')
@@ -1085,8 +1085,8 @@ def config_changed(force_restart=False, mount_point=None):
     update_repos_and_packages()
 
     if mount_point is not None:
-        ## config_changed_volume_apply will stop the service if it finds
-        ## it necessary, ie: new volume setup
+        # config_changed_volume_apply will stop the service if it finds
+        # it necessary, ie: new volume setup
         if config_changed_volume_apply(mount_point=mount_point):
             postgresql_autostart(True)
         else:
@@ -1135,7 +1135,7 @@ def install(run_pre=True):
 
     config_data = hookenv.config()
     update_repos_and_packages()
-    if not 'state' in local_state:
+    if 'state' not in local_state:
         log('state not in {}'.format(local_state.keys()), DEBUG)
         # Fresh installation. Because this function is invoked by both
         # the install hook and the upgrade-charm hook, we need to guard
