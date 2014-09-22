@@ -143,7 +143,7 @@ class JujuFixture(fixtures.Fixture):
                                     rel_id, rel_unit)])
                         res[rel_name][rel_id][rel_unit] = json.loads(
                             json_rel_info)
-                    except subprocess.CalledProcessError as x:
+                    except subprocess.CalledProcessError:
                         res[rel_name][rel_id][rel_unit] = None
         return res
 

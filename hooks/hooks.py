@@ -445,7 +445,7 @@ def create_postgresql_config(config_file):
 
     tune_postgresql_config(config_file)
 
-    local_state['saved_config'] = config_data
+    local_state['saved_config'] = dict(config_data)
     local_state.save()
 
 
@@ -2054,6 +2054,13 @@ def publish_hot_standby_credentials():
     the master and hot standby joined the client relation.
     '''
     master = local_state['following']
+    if not master:
+        log("I will be a hot standby, but no master yet")
+        return
+
+    if not authorized_by(master):
+        log("Master {} has not yet authorized us".format(master))
+        return
 
     client_relations = hookenv.relation_get(
         'client_relations', master, hookenv.relation_ids('replication')[0])
