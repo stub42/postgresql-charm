@@ -86,7 +86,7 @@ class PostgreSQLCharmBaseTestCase(object):
             do_teardown='TEST_DONT_TEARDOWN_JUJU' not in os.environ))
 
         # If the charms fail, we don't want tests to hang indefinitely.
-        timeout = int(os.environ.get('TEST_TIMEOUT', 900))
+        timeout = int(os.environ.get('TEST_TIMEOUT', 1200))
         if timeout > 0:
             self.useFixture(fixtures.Timeout(timeout, gentle=True))
 
@@ -98,7 +98,7 @@ class PostgreSQLCharmBaseTestCase(object):
         # is at this particular instant in the expected state, hoping
         # that the system is stable enough to continue testing.
 
-        timeout = time.time() + 300
+        timeout = time.time() + 600
         pg_units = frozenset(pg_units)
 
         # The list of PG units we expect to be related to the psql unit.

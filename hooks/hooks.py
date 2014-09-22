@@ -2545,3 +2545,4 @@ if __name__ == '__main__':
         log("Relation {} with {}".format(
             hookenv.relation_id(), hookenv.remote_unit()))
     hooks.execute(sys.argv)
+    log("Completed {} hook".format(hook_name))
