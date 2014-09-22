@@ -25,7 +25,9 @@ unit_test:
 
 integration_test:
 	@echo "PostgreSQL integration tests, all non-beta versions, ${SERIES}"
-	trial test.PG91Tests test.PG92Tests test.PG93Tests
+	trial test.PG91Tests
+	trial test.PG92Tests
+	trial test.PG93Tests
 
 integration_test_91:
 	@echo "PostgreSQL 9.1 integration tests, ${SERIES}"
