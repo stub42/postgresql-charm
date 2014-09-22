@@ -989,6 +989,27 @@ def config_changed(force_restart=False, mount_point=None):
     create_swiftwal_config()
     update_service_port()
     update_nrpe_checks()
+
+    # Ensure client credentials match in the case that an external mountpoint
+    # has been mounted with an existing DB.
+    client_relids = (hookenv.relation_ids('db')
+                     + hookenv.relation_ids('db-admin'))
+    for relid in client_relids:
+        rel = hookenv.relation_get(rid=relid, unit=hookenv.local_unit())
+
+        database = rel.get('database')
+        roles = filter(None, (rel.get('roles') or '').split(","))
+        user = rel['user']
+        password = create_user(user)
+        reset_user_roles(user, roles)
+        schema_user = rel['schema_user']
+        schema_password = create_user(schema_user)
+        hookenv.relation_set(relid,
+                             password=password,
+                             schema_password=schema_password)
+        if not (database is None or database == 'all'):
+            ensure_database(user, schema_user, database)
+
     if force_restart:
         postgresql_restart()
     postgresql_reload_or_restart()
