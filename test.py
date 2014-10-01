@@ -27,7 +27,16 @@ from testing.jujufixture import JujuFixture, run
 
 SERIES = os.environ.get('SERIES', 'trusty').strip()
 TEST_CHARM = 'local:{}/postgresql'.format(SERIES)
-PSQL_CHARM = 'local:{}/postgresql-psql'.format(SERIES)
+if SERIES == 'precise':
+    PSQL_CHARM = 'cs:precise/postgresql-psql'
+else:
+    # The postgresql-psql charm does not exist in Trusty, and I
+    # have put off requesting it to be promulgated as I'm not sure
+    # it should exist in the charm store. I'd like to get the client
+    # charm for testing included inside the main PostgreSQL charm,
+    # and make it much more plesant to drive from the test suite,
+    # rather than continue to use postgresql-psql from the charm store.
+    PSQL_CHARM = 'local:{}/postgresql-psql'.format(SERIES)
 
 
 class NotReady(Exception):

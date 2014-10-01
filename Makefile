@@ -14,7 +14,7 @@ default:
 	@echo "    make integration_test_93"
 	@echo "    make integration_test_94"
 
-test: lint unit_test integration_test
+test: testdep lint unit_test integration_test
 
 testdep:
 	tests/00_setup.test
@@ -52,8 +52,8 @@ lint:
 	    hooks testing tests test.py
 
 sync:
-	    @bzr cat \
+	@bzr cat \
 	    lp:charm-helpers/tools/charm_helpers_sync/charm_helpers_sync.py \
 		> .charm_helpers_sync.py
-	    @python .charm_helpers_sync.py -c charm-helpers.yaml
-	    @rm .charm_helpers_sync.py
+	@python .charm_helpers_sync.py -c charm-helpers.yaml
+	@rm .charm_helpers_sync.py
