@@ -1118,26 +1118,32 @@ def config_changed(force_restart=False, mount_point=None):
 
     # Ensure client credentials match in the case that an external mountpoint
     # has been mounted with an existing DB.
-    client_relids = (hookenv.relation_ids('db')
-                     + hookenv.relation_ids('db-admin'))
-    for relid in client_relids:
-        rel = hookenv.relation_get(rid=relid, unit=hookenv.local_unit())
+    if local_state['state'] in ('standalone', 'master'):
+        client_relids = (
+            hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
+        for relid in client_relids:
+            rel = hookenv.relation_get(rid=relid, unit=hookenv.local_unit())
 
-        database = rel.get('database')
-        if database is None:
-            continue  # The relation exists, but we haven't joined it yet.
+            database = rel.get('database')
+            if database is None:
+                continue  # The relation exists, but we haven't joined it yet.
 
-        roles = filter(None, (rel.get('roles') or '').split(","))
-        user = rel['user']
-        password = create_user(user)
-        reset_user_roles(user, roles)
-        schema_user = rel['schema_user']
-        schema_password = create_user(schema_user)
-        hookenv.relation_set(relid,
-                             password=password,
-                             schema_password=schema_password)
-        if not (database is None or database == 'all'):
-            ensure_database(user, schema_user, database)
+            roles = filter(None, (rel.get('roles') or '').split(","))
+            user = rel.get('user')
+            if user:
+                admin = relid.startswith('db-admin')
+                password = create_user(user, admin=admin)
+                reset_user_roles(user, roles)
+                hookenv.relation_set(relid, password=password)
+
+            schema_user = rel.get('schema_user')
+            if schema_user:
+                schema_password = create_user(schema_user)
+                hookenv.relation_set(relid, schema_password=schema_password)
+
+            if user and schema_user and not (
+                    database is None or database == 'all'):
+                ensure_database(user, schema_user, database)
 
     if force_restart:
         postgresql_restart()
@@ -2128,7 +2134,7 @@ def publish_hot_standby_credentials():
         # Block until users and database has replicated, so we know the
         # connection details we publish are actually valid. This will
         # normally be pretty much instantaneous.
-        timeout = 90
+        timeout = 60
         start = time.time()
         while time.time() < start + timeout:
             cur = db_cursor(autocommit=True)
