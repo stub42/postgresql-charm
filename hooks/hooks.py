@@ -372,7 +372,8 @@ def _get_page_size():
 
 def _run_sysctl(postgresql_sysctl):
     """sysctl -p postgresql_sysctl, helper for easy test mocking."""
-    return run("sysctl -p {}".format(postgresql_sysctl))
+    # Do not error out when this fails. It is not likely to work under LXC.
+    return run("sysctl -p {}".format(postgresql_sysctl), exit_on_error=False)
 
 
 def create_postgresql_config(config_file):
@@ -1114,6 +1115,27 @@ def config_changed(force_restart=False, mount_point=None):
     create_wal_e_envdir()
     update_service_port()
     update_nrpe_checks()
+
+    # Ensure client credentials match in the case that an external mountpoint
+    # has been mounted with an existing DB.
+    client_relids = (hookenv.relation_ids('db')
+                     + hookenv.relation_ids('db-admin'))
+    for relid in client_relids:
+        rel = hookenv.relation_get(rid=relid, unit=hookenv.local_unit())
+
+        database = rel.get('database')
+        roles = filter(None, (rel.get('roles') or '').split(","))
+        user = rel['user']
+        password = create_user(user)
+        reset_user_roles(user, roles)
+        schema_user = rel['schema_user']
+        schema_password = create_user(schema_user)
+        hookenv.relation_set(relid,
+                             password=password,
+                             schema_password=schema_password)
+        if not (database is None or database == 'all'):
+            ensure_database(user, schema_user, database)
+
     if force_restart:
         postgresql_restart()
     postgresql_reload_or_restart()
