@@ -1124,6 +1124,9 @@ def config_changed(force_restart=False, mount_point=None):
         rel = hookenv.relation_get(rid=relid, unit=hookenv.local_unit())
 
         database = rel.get('database')
+        if database is None:
+            continue  # The relation exists, but we haven't joined it yet.
+
         roles = filter(None, (rel.get('roles') or '').split(","))
         user = rel['user']
         password = create_user(user)
@@ -2125,7 +2128,7 @@ def publish_hot_standby_credentials():
         # Block until users and database has replicated, so we know the
         # connection details we publish are actually valid. This will
         # normally be pretty much instantaneous.
-        timeout = 900
+        timeout = 90
         start = time.time()
         while time.time() < start + timeout:
             cur = db_cursor(autocommit=True)
