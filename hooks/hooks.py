@@ -1116,19 +1116,25 @@ def config_changed(force_restart=False, mount_point=None):
     update_service_port()
     update_nrpe_checks()
 
-    # Ensure client credentials match in the case that an external mountpoint
-    # has been mounted with an existing DB.
+    # If an external mountpoint has caused an old, existing DB to be
+    # mounted, we need to ensure that all the users, databases, roles
+    # etc. exist with known passwords.
     if local_state['state'] in ('standalone', 'master'):
         client_relids = (
             hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
         for relid in client_relids:
             rel = hookenv.relation_get(rid=relid, unit=hookenv.local_unit())
+            client_rel = None
+            for unit in hookenv.related_units(relid):
+                client_rel = hookenv.relation_get(unit=unit, rid=relid)
+            if not client_rel:
+                continue  # No client units - in between departed and broken?
 
             database = rel.get('database')
             if database is None:
                 continue  # The relation exists, but we haven't joined it yet.
 
-            roles = filter(None, (rel.get('roles') or '').split(","))
+            roles = filter(None, (client_rel.get('roles') or '').split(","))
             user = rel.get('user')
             if user:
                 admin = relid.startswith('db-admin')
@@ -1839,9 +1845,10 @@ def pgpass():
 
 def authorized_by(unit):
     '''Return True if the peer has authorized our database connections.'''
-    relation = hookenv.relation_get(unit=unit)
-    authorized = relation.get('authorized', '').split()
-    return hookenv.local_unit() in authorized
+    for relid in hookenv.relation_ids('replication'):
+        relation = hookenv.relation_get(unit=unit, rid=relid)
+        authorized = relation.get('authorized', '').split()
+        return hookenv.local_unit() in authorized
 
 
 def promote_database():
