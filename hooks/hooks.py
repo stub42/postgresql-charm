@@ -360,7 +360,8 @@ def _get_page_size():
 
 def _run_sysctl(postgresql_sysctl):
     """sysctl -p postgresql_sysctl, helper for easy test mocking."""
-    return run("sysctl -p {}".format(postgresql_sysctl))
+    # Do not error out when this fails. It is not likely to work under LXC.
+    return run("sysctl -p {}".format(postgresql_sysctl), exit_on_error=False)
 
 
 def create_postgresql_config(config_file):
