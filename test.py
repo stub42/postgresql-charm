@@ -297,9 +297,9 @@ class PostgreSQLCharmBaseTestCase(object):
             '{}:{}:{}'.format(local_port, rel_info['host'], rel_info['port'])]
         tunnel_proc = subprocess.Popen(
             tunnel_cmd, stdin=subprocess.PIPE, preexec_fn=os.setpgrp)
-            # Don't disable stdout, so we can see when there are SSH
-            # failures like bad host keys.
-            #stdout=open('/dev/null', 'ab'), stderr=subprocess.STDOUT)
+        # Don't disable stdout, so we can see when there are SSH
+        # failures like bad host keys.
+        # stdout=open('/dev/null', 'ab'), stderr=subprocess.STDOUT)
         tunnel_proc.stdin.close()
 
         try:
