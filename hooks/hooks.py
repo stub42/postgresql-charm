@@ -639,12 +639,12 @@ def create_recovery_conf(master_host, master_port, restart_on_change=False):
         postgresql_restart()
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # load_postgresql_config:  Convenience function that loads (as a string) the
 #                          current postgresql configuration file.
 #                          Returns a string containing the postgresql config or
 #                          None
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 def load_postgresql_config(config_file):
     if os.path.isfile(config_file):
         return(open(config_file).read())
@@ -810,14 +810,14 @@ def ensure_package_status(package, status):
     dpkg.communicate(input=selections)
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Core logic for permanent storage changes:
 # NOTE the only 2 "True" return points:
 #   1) symlink already pointing to existing storage (no-op)
 #   2) new storage properly initialized:
 #     - if fresh new storage dir: rsync existing data
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 def config_changed_volume_apply(mount_point):
     version = pg_version()
     cluster_name = hookenv.config('cluster_name')
@@ -914,8 +914,8 @@ def config_changed(force_restart=False, mount_point=None):
     update_repos_and_packages()
 
     if mount_point is not None:
-        ## config_changed_volume_apply will stop the service if it finds
-        ## it necessary, ie: new volume setup
+        # config_changed_volume_apply will stop the service if it finds
+        # it necessary, ie: new volume setup
         if config_changed_volume_apply(mount_point=mount_point):
             postgresql_autostart(True)
         else:
@@ -983,7 +983,7 @@ def install(run_pre=True):
 
     config_data = hookenv.config()
     update_repos_and_packages()
-    if not 'state' in local_state:
+    if 'state' not in local_state:
         # Fresh installation. Because this function is invoked by both
         # the install hook and the upgrade-charm hook, we need to guard
         # any non-idempotent setup. We should probably fix this; it
