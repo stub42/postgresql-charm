@@ -6,18 +6,24 @@ default:
 	@echo "One of:"
 	@echo "    make testdep"
 	@echo "    make lint"
-	@echo "    make test"
 	@echo "    make unit_test"
 	@echo "    make integration_test"
 	@echo "    make integration_test_91"
 	@echo "    make integration_test_92"
 	@echo "    make integration_test_93"
 	@echo "    make integration_test_94"
+	@echo
+	@echo "There is no 'make test'"
 
-test: lint unit_test integration_test
+test_bot_tests:
+	@echo "Installing dependencies and running automatic-testrunner tests"
+	tests/00-setup.sh
+	tests/01-lint.sh
+	tests/02-unit-tests.sh
+	tests/03-basic-amulet.py
 
 testdep:
-	tests/00_setup.test
+	tests/00-setup.sh
 
 unit_test:
 	@echo "Unit tests of hooks"
