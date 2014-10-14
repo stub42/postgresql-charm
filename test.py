@@ -11,6 +11,7 @@ Usage:
 
 from datetime import datetime
 import os.path
+import shutil
 import signal
 import socket
 import subprocess
@@ -26,8 +27,8 @@ from testing.jujufixture import JujuFixture, run
 
 
 SERIES = os.environ.get('SERIES', 'trusty').strip()
-TEST_CHARM = 'local:{}/postgresql'.format(SERIES)
-PSQL_CHARM = 'local:{}/postgresql-psql'.format(SERIES)
+TEST_CHARM = os.path.dirname(__file__)
+PSQL_CHARM = os.path.join(TEST_CHARM, 'lib', 'test-client-charm')
 
 
 class NotReady(Exception):
@@ -80,6 +81,16 @@ class PostgreSQLCharmBaseTestCase(object):
         # Generate a basic config for all PostgreSQL charm deploys.
         # Tests may add or change options.
         self.pg_config = dict(version=self.VERSION, pgdg=self.PGDG)
+
+        # Mirror charmhelpers into our support charms, since charms
+        # can't symlink out of their subtree.
+        here = os.path.abspath(os.path.dirname(__file__))
+        main_charmhelpers = os.path.join(here, 'hooks', 'charmhelpers')
+        psql_charmhelpers = os.path.join(here, 'lib', 'test-client-charm',
+                                         'hooks', 'charmhelpers')
+        if os.path.exists(psql_charmhelpers):
+            shutil.rmtree(psql_charmhelpers)
+        shutil.copytree(main_charmhelpers, psql_charmhelpers)
 
         self.juju = self.useFixture(JujuFixture(
             series=SERIES, reuse_machines=True,
