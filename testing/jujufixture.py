@@ -48,7 +48,8 @@ class JujuFixture(fixtures.Fixture):
     def deploy(self, charm, name=None, num_units=1, config=None):
         cmd = ['deploy']
 
-        charm = self.charm_uri(charm)
+        if not charm.startswith('cs:'):
+            charm = self.charm_uri(charm)
 
         if config:
             config_path = os.path.join(
