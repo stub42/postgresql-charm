@@ -120,6 +120,9 @@ log_line_prefix = '{{log_line_prefix}}'
 {% if log_lock_waits  != "" -%}
 log_lock_waits = {{log_lock_waits}}
 {% endif -%}
+{% if log_temp_files != "" -%}
+log_temp_files = {{log_temp_files}}
+{% endif -%}
 
 log_timezone = UTC
 

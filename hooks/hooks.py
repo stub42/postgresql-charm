@@ -4,6 +4,7 @@
 from contextlib import contextmanager
 import commands
 import cPickle as pickle
+from distutils.version import StrictVersion
 import glob
 from grp import getgrnam
 import os.path
@@ -16,6 +17,7 @@ import sys
 from tempfile import NamedTemporaryFile
 from textwrap import dedent
 import time
+import urlparse
 
 from charmhelpers import fetch
 from charmhelpers.core import hookenv, host
@@ -144,6 +146,7 @@ class State(dict):
         for relid in hookenv.relation_ids('replication'):
             hookenv.relation_set(relid, replication_state)
 
+        log('saving local state', DEBUG)
         self.save()
 
 
@@ -339,8 +342,17 @@ def createcluster():
             "-e", hookenv.config('encoding')]
         if hookenv.config('listen_port'):
             create_cmd.extend(["-p", str(hookenv.config('listen_port'))])
-        create_cmd.append(pg_version())
+        version = pg_version()
+        create_cmd.append(version)
         create_cmd.append(hookenv.config('cluster_name'))
+
+        # With 9.3+, we make an opinionated decision to always enable
+        # data checksums. This seems to be best practice. We could
+        # turn this into a configuration item if there is need. There
+        # is no way to enable this option on existing clusters.
+        if StrictVersion(version) >= StrictVersion('9.3'):
+            create_cmd.extend(['--', '--data-checksums'])
+
         run(create_cmd)
         # Ensure SSL certificates exist, as we enable SSL by default.
         create_ssl_cert(os.path.join(
@@ -396,11 +408,26 @@ def create_postgresql_config(config_file):
         log('Ensuring minimal replication settings')
         config_data['hot_standby'] = True
         config_data['wal_level'] = 'hot_standby'
-        config_data['max_wal_senders'] = max(
-            num_slaves, config_data['max_wal_senders'])
         config_data['wal_keep_segments'] = max(
             config_data['wal_keep_segments'],
             config_data['replicated_wal_keep_segments'])
+        # We need this set even if config_data['streaming_replication']
+        # is False, because the replication connection is still needed
+        # by pg_basebackup to build a hot standby.
+        config_data['max_wal_senders'] = max(
+            num_slaves, config_data['max_wal_senders'])
+
+    # Log shipping to Swift using SwiftWAL. This could be for
+    # non-streaming replication, or for PITR.
+    if config_data.get('swiftwal_log_shipping', None):
+        config_data['archive_mode'] = True
+        config_data['wal_level'] = 'hot_standby'
+        config_data['archive_command'] = swiftwal_archive_command()
+
+    if config_data.get('wal_e_storage_uri', None):
+        config_data['archive_mode'] = True
+        config_data['wal_level'] = 'hot_standby'
+        config_data['archive_command'] = wal_e_archive_command()
 
     # Send config data to the template
     # Return it as pg_config
@@ -419,7 +446,7 @@ def create_postgresql_config(config_file):
 
     tune_postgresql_config(config_file)
 
-    local_state['saved_config'] = config_data
+    local_state['saved_config'] = dict(config_data)
     local_state.save()
 
 
@@ -597,15 +624,16 @@ def generate_postgresql_hba(
 def install_postgresql_crontab(output_file):
     '''Create the postgres user's crontab'''
     config_data = hookenv.config()
-    crontab_data = {
-        'backup_schedule': config_data["backup_schedule"],
-        'scripts_dir': postgresql_scripts_dir,
-        'backup_days': config_data["backup_retention_count"],
-    }
+    config_data['scripts_dir'] = postgresql_scripts_dir
+    config_data['swiftwal_backup_command'] = swiftwal_backup_command()
+    config_data['swiftwal_prune_command'] = swiftwal_prune_command()
+    config_data['wal_e_backup_command'] = wal_e_backup_command()
+    config_data['wal_e_prune_command'] = wal_e_prune_command()
+
     charm_dir = hookenv.charm_dir()
     template_file = "{}/templates/postgres.cron.tmpl".format(charm_dir)
     crontab_template = Template(
-        open(template_file).read()).render(crontab_data)
+        open(template_file).read()).render(config_data)
     host.write_file(output_file, crontab_template, perms=0600)
 
 
@@ -624,11 +652,15 @@ def create_recovery_conf(master_host, master_port, restart_on_change=False):
     charm_dir = hookenv.charm_dir()
     streaming_replication = hookenv.config('streaming_replication')
     template_file = "{}/templates/recovery.conf.tmpl".format(charm_dir)
-    recovery_conf = Template(open(template_file).read()).render({
-        'host': master_host,
-        'port': master_port,
-        'password': local_state['replication_password'],
-        'streaming_replication': streaming_replication})
+    params = dict(
+        host=master_host, port=master_port,
+        password=local_state['replication_password'],
+        streaming_replication=streaming_replication)
+    if hookenv.config('wal_e_storage_uri'):
+        params['restore_command'] = wal_e_restore_command()
+    elif hookenv.config('swiftwal_log_shipping'):
+        params['restore_command'] = swiftwal_restore_command()
+    recovery_conf = Template(open(template_file).read()).render(params)
     log(recovery_conf, DEBUG)
     host.write_file(
         os.path.join(postgresql_cluster_dir, 'recovery.conf'),
@@ -639,17 +671,164 @@ def create_recovery_conf(master_host, master_port, restart_on_change=False):
         postgresql_restart()
 
 
-# ------------------------------------------------------------------------------
-# load_postgresql_config:  Convenience function that loads (as a string) the
-#                          current postgresql configuration file.
-#                          Returns a string containing the postgresql config or
-#                          None
-# ------------------------------------------------------------------------------
-def load_postgresql_config(config_file):
-    if os.path.isfile(config_file):
-        return(open(config_file).read())
+def ensure_swift_container(container):
+    from swiftclient import client as swiftclient
+    config = hookenv.config()
+    con = swiftclient.Connection(
+        authurl=config.get('os_auth_url', ''),
+        user=config.get('os_username', ''),
+        key=config.get('os_password', ''),
+        tenant_name=config.get('os_tenant_name', ''),
+        auth_version='2.0',
+        retries=0)
+    try:
+        con.head_container(container)
+    except swiftclient.ClientException:
+        con.put_container(container)
+
+
+def wal_e_envdir():
+    '''The envdir(1) environment location used to drive WAL-E.'''
+    return os.path.join(_get_postgresql_config_dir(), 'wal-e.env')
+
+
+def create_wal_e_envdir():
+    '''Regenerate the envdir(1) environment used to drive WAL-E.'''
+    config = hookenv.config()
+    env = dict(
+        SWIFT_AUTHURL=config.get('os_auth_url', ''),
+        SWIFT_TENANT=config.get('os_tenant_name', ''),
+        SWIFT_USER=config.get('os_username', ''),
+        SWIFT_PASSWORD=config.get('os_password', ''),
+        AWS_ACCESS_KEY_ID=config.get('aws_access_key_id', ''),
+        AWS_SECRET_ACCESS_KEY=config.get('aws_secret_access_key', ''),
+        WABS_ACCOUNT_NAME=config.get('wabs_account_name', ''),
+        WABS_ACCESS_KEY=config.get('wabs_access_key', ''),
+        WALE_SWIFT_PREFIX='',
+        WALE_S3_PREFIX='',
+        WALE_WABS_PREFIX='')
+
+    uri = config.get('wal_e_storage_uri', None)
+
+    if uri:
+        # Until juju provides us with proper leader election, we have a
+        # state where units do not know if they are alone or part of a
+        # cluster. To avoid units stomping on each others WAL and backups,
+        # we use a unique container for each unit when they are not
+        # part of the peer relation. Once they are part of the peer
+        # relation, they share a container.
+        if local_state.get('state', 'standalone') == 'standalone':
+            if not uri.endswith('/'):
+                uri += '/'
+            uri += hookenv.local_unit().split('/')[-1]
+
+        parsed_uri = urlparse.urlparse(uri)
+
+        required_env = []
+        if parsed_uri.scheme == 'swift':
+            env['WALE_SWIFT_PREFIX'] = uri
+            required_env = ['SWIFT_AUTHURL', 'SWIFT_TENANT',
+                            'SWIFT_USER', 'SWIFT_PASSWORD']
+            ensure_swift_container(parsed_uri.netloc)
+        elif parsed_uri.scheme == 's3':
+            env['WALE_S3_PREFIX'] = uri
+            required_env = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
+        elif parsed_uri.scheme == 'wabs':
+            env['WALE_WABS_PREFIX'] = uri
+            required_env = ['WABS_ACCOUNT_NAME', 'WABS_ACCESS_KEY']
+        else:
+            log('Invalid wal_e_storage_uri {}'.format(uri), ERROR)
+
+        for env_key in required_env:
+            if not env[env_key].strip():
+                log('Missing {}'.format(env_key), ERROR)
+
+    # Regenerate the envdir(1) environment recommended by WAL-E.
+    # All possible keys are rewritten to ensure we remove old secrets.
+    host.mkdir(wal_e_envdir(), 'postgres', 'postgres', 0o750)
+    for k, v in env.items():
+        host.write_file(
+            os.path.join(wal_e_envdir(), k), v.strip(),
+            'postgres', 'postgres', 0o640)
+
+
+def wal_e_archive_command():
+    '''Return the archive_command needed in postgresql.conf.'''
+    return 'envdir {} wal-e wal-push %p'.format(wal_e_envdir())
+
+
+def wal_e_restore_command():
+    return 'envdir {} wal-e wal-fetch "%f" "%p"'.format(wal_e_envdir())
+
+
+def wal_e_backup_command():
+    postgresql_cluster_dir = os.path.join(
+        postgresql_data_dir, pg_version(), hookenv.config('cluster_name'))
+    return 'envdir {} wal-e backup-push {}'.format(
+        wal_e_envdir(), postgresql_cluster_dir)
+
+
+def wal_e_prune_command():
+    return 'envdir {} wal-e delete --confirm retain {}'.format(
+        wal_e_envdir(), hookenv.config('wal_e_backup_retention'))
+
+
+def swiftwal_config():
+    postgresql_config_dir = _get_postgresql_config_dir()
+    return os.path.join(postgresql_config_dir, "swiftwal.conf")
+
+
+def create_swiftwal_config():
+    if not hookenv.config('swiftwal_container_prefix'):
+        return
+
+    # Until juju provides us with proper leader election, we have a
+    # state where units do not know if they are alone or part of a
+    # cluster. To avoid units stomping on each others WAL and backups,
+    # we use a unique Swift container for each unit when they are not
+    # part of the peer relation. Once they are part of the peer
+    # relation, they share a container.
+    if local_state.get('state', 'standalone') == 'standalone':
+        container = '{}_{}'.format(hookenv.config('swiftwal_container_prefix'),
+                                   hookenv.local_unit().split('/')[-1])
     else:
-        return(None)
+        container = hookenv.config('swiftwal_container_prefix')
+
+    template_file = os.path.join(hookenv.charm_dir(),
+                                 'templates', 'swiftwal.conf.tmpl')
+    params = dict(hookenv.config())
+    params['swiftwal_container'] = container
+    content = Template(open(template_file).read()).render(params)
+    host.write_file(swiftwal_config(), content, "postgres", "postgres", 0o600)
+
+
+def swiftwal_archive_command():
+    '''Return the archive_command needed in postgresql.conf'''
+    return 'swiftwal --config={} archive-wal %p'.format(swiftwal_config())
+
+
+def swiftwal_restore_command():
+    '''Return the restore_command needed in recovery.conf'''
+    return 'swiftwal --config={} restore-wal %f %p'.format(swiftwal_config())
+
+
+def swiftwal_backup_command():
+    '''Return the backup command needed in postgres' crontab'''
+    cmd = 'swiftwal --config={} backup --port={}'.format(swiftwal_config(),
+                                                         get_service_port())
+    if not hookenv.config('swiftwal_log_shipping'):
+        cmd += ' --xlog'
+    return cmd
+
+
+def swiftwal_prune_command():
+    '''Return the backup & wal pruning command needed in postgres' crontab'''
+    config = hookenv.config()
+    args = '--keep-backups={} --keep-wals={}'.format(
+        config.get('swiftwal_backup_retention', 0),
+        max(config['wal_keep_segments'],
+            config['replicated_wal_keep_segments']))
+    return 'swiftwal --config={} prune {}'.format(swiftwal_config(), args)
 
 
 def update_service_port():
@@ -810,14 +989,14 @@ def ensure_package_status(package, status):
     dpkg.communicate(input=selections)
 
 
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Core logic for permanent storage changes:
 # NOTE the only 2 "True" return points:
 #   1) symlink already pointing to existing storage (no-op)
 #   2) new storage properly initialized:
 #     - if fresh new storage dir: rsync existing data
 #     - manipulate /var/lib/postgresql/VERSION/CLUSTER symlink
-# ------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def config_changed_volume_apply(mount_point):
     version = pg_version()
     cluster_name = hookenv.config('cluster_name')
@@ -900,13 +1079,6 @@ def config_changed_volume_apply(mount_point):
         return False
 
 
-def token_sql_safe(value):
-    # Only allow alphanumeric + underscore in database identifiers
-    if re.search('[^A-Za-z0-9_]', value):
-        return False
-    return True
-
-
 @hooks.hook()
 def config_changed(force_restart=False, mount_point=None):
     validate_config()
@@ -939,28 +1111,45 @@ def config_changed(force_restart=False, mount_point=None):
     generate_postgresql_hba(postgresql_hba)
     create_ssl_cert(os.path.join(
         postgresql_data_dir, pg_version(), config_data['cluster_name']))
+    create_swiftwal_config()
+    create_wal_e_envdir()
     update_service_port()
     update_nrpe_checks()
 
-    # Ensure client credentials match in the case that an external mountpoint
-    # has been mounted with an existing DB.
-    client_relids = (hookenv.relation_ids('db')
-                     + hookenv.relation_ids('db-admin'))
-    for relid in client_relids:
-        rel = hookenv.relation_get(rid=relid, unit=hookenv.local_unit())
+    # If an external mountpoint has caused an old, existing DB to be
+    # mounted, we need to ensure that all the users, databases, roles
+    # etc. exist with known passwords.
+    if local_state['state'] in ('standalone', 'master'):
+        client_relids = (
+            hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
+        for relid in client_relids:
+            rel = hookenv.relation_get(rid=relid, unit=hookenv.local_unit())
+            client_rel = None
+            for unit in hookenv.related_units(relid):
+                client_rel = hookenv.relation_get(unit=unit, rid=relid)
+            if not client_rel:
+                continue  # No client units - in between departed and broken?
 
-        database = rel.get('database')
-        roles = filter(None, (rel.get('roles') or '').split(","))
-        user = rel['user']
-        password = create_user(user)
-        reset_user_roles(user, roles)
-        schema_user = rel['schema_user']
-        schema_password = create_user(schema_user)
-        hookenv.relation_set(relid,
-                             password=password,
-                             schema_password=schema_password)
-        if not (database is None or database == 'all'):
-            ensure_database(user, schema_user, database)
+            database = rel.get('database')
+            if database is None:
+                continue  # The relation exists, but we haven't joined it yet.
+
+            roles = filter(None, (client_rel.get('roles') or '').split(","))
+            user = rel.get('user')
+            if user:
+                admin = relid.startswith('db-admin')
+                password = create_user(user, admin=admin)
+                reset_user_roles(user, roles)
+                hookenv.relation_set(relid, password=password)
+
+            schema_user = rel.get('schema_user')
+            if schema_user:
+                schema_password = create_user(schema_user)
+                hookenv.relation_set(relid, schema_password=schema_password)
+
+            if user and schema_user and not (
+                    database is None or database == 'all'):
+                ensure_database(user, schema_user, database)
 
     if force_restart:
         postgresql_restart()
@@ -984,11 +1173,13 @@ def install(run_pre=True):
     config_data = hookenv.config()
     update_repos_and_packages()
     if 'state' not in local_state:
+        log('state not in {}'.format(local_state.keys()), DEBUG)
         # Fresh installation. Because this function is invoked by both
         # the install hook and the upgrade-charm hook, we need to guard
         # any non-idempotent setup. We should probably fix this; it
         # seems rather fragile.
         local_state.setdefault('state', 'standalone')
+        log(repr(local_state.keys()), DEBUG)
 
         # Drop the cluster created when the postgresql package was
         # installed, and rebuild it with the requested locale and encoding.
@@ -1008,6 +1199,7 @@ def install(run_pre=True):
             'allocated port {!r} != {!r}'.format(
                 get_service_port(), config_data['listen_port']))
         local_state['port'] = get_service_port()
+        log('publishing state', DEBUG)
         local_state.publish()
 
     postgresql_backups_dir = (
@@ -1598,12 +1790,21 @@ def update_repos_and_packages():
                 "postgresql-contrib-{}".format(version),
                 "postgresql-plpython-{}".format(version),
                 "python-jinja2", "python-psycopg2"]
+
     # PGDG currently doesn't have debversion for 9.3 & 9.4. Put this back
     # when it does.
     if not (hookenv.config('pgdg') and version in ('9.3', '9.4')):
         packages.append("postgresql-{}-debversion".format(version))
+
     if hookenv.config('performance_tuning').lower() != 'manual':
         packages.append('pgtune')
+
+    if hookenv.config('swiftwal_container_prefix'):
+        packages.append('swiftwal')
+
+    if hookenv.config('wal_e_storage_uri'):
+        packages.extend(['wal-e', 'daemontools'])
+
     packages.extend((hookenv.config('extra-packages') or '').split())
     packages = fetch.filter_installed_packages(packages)
     # Set package state for main postgresql package if installed
@@ -1644,9 +1845,10 @@ def pgpass():
 
 def authorized_by(unit):
     '''Return True if the peer has authorized our database connections.'''
-    relation = hookenv.relation_get(unit=unit)
-    authorized = relation.get('authorized', '').split()
-    return hookenv.local_unit() in authorized
+    for relid in hookenv.relation_ids('replication'):
+        relation = hookenv.relation_get(unit=unit, rid=relid)
+        authorized = relation.get('authorized', '').split()
+        return hookenv.local_unit() in authorized
 
 
 def promote_database():
@@ -1867,6 +2069,12 @@ def replication_relation_joined_changed():
             _get_postgresql_config_dir(), "pg_hba.conf")
         generate_postgresql_hba(postgresql_hba)
 
+    # Swift container name make have changed, so regenerate the SwiftWAL
+    # config. This can go away when we have real leader election and can
+    # safely share a single container.
+    create_swiftwal_config()
+    create_wal_e_envdir()
+
     local_state.publish()
 
 
@@ -1884,6 +2092,13 @@ def publish_hot_standby_credentials():
     the master and hot standby joined the client relation.
     '''
     master = local_state['following']
+    if not master:
+        log("I will be a hot standby, but no master yet")
+        return
+
+    if not authorized_by(master):
+        log("Master {} has not yet authorized us".format(master))
+        return
 
     client_relations = hookenv.relation_get(
         'client_relations', master, hookenv.relation_ids('replication')[0])
@@ -1926,7 +2141,7 @@ def publish_hot_standby_credentials():
         # Block until users and database has replicated, so we know the
         # connection details we publish are actually valid. This will
         # normally be pretty much instantaneous.
-        timeout = 900
+        timeout = 60
         start = time.time()
         while time.time() < start + timeout:
             cur = db_cursor(autocommit=True)
@@ -2352,7 +2567,6 @@ postgresql_logs_dir = os.path.join(postgresql_data_dir, 'logs')
 postgresql_sysctl = "/etc/sysctl.d/50-postgresql.conf"
 postgresql_crontab = "/etc/cron.d/postgresql"
 postgresql_service_config_dir = "/var/run/postgresql"
-replication_relation_types = ['master', 'slave', 'replication']
 local_state = State('local_state.pickle')
 hook_name = os.path.basename(sys.argv[0])
 juju_log_dir = "/var/log/juju"
@@ -2369,3 +2583,4 @@ if __name__ == '__main__':
         log("Relation {} with {}".format(
             hookenv.relation_id(), hookenv.remote_unit()))
     hooks.execute(sys.argv)
+    log("Completed {} hook".format(hook_name))

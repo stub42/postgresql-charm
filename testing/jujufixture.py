@@ -21,6 +21,7 @@ class JujuFixture(fixtures.Fixture):
         super(JujuFixture, self).__init__()
 
         self.series = series
+        assert series, 'series not set'
 
         self.reuse_machines = reuse_machines
 
@@ -46,6 +47,9 @@ class JujuFixture(fixtures.Fixture):
 
     def deploy(self, charm, name=None, num_units=1, config=None):
         cmd = ['deploy']
+
+        if not charm.startswith('cs:'):
+            charm = self.charm_uri(charm)
 
         if config:
             config_path = os.path.join(
@@ -143,11 +147,8 @@ class JujuFixture(fixtures.Fixture):
                                     rel_id, rel_unit)])
                         res[rel_name][rel_id][rel_unit] = json.loads(
                             json_rel_info)
-                    except subprocess.CalledProcessError as x:
-                        if x.returncode == 2:
-                            res[rel_name][rel_id][rel_unit] = None
-                        else:
-                            raise
+                    except subprocess.CalledProcessError:
+                        res[rel_name][rel_id][rel_unit] = None
         return res
 
     def wait_until_ready(self, extra=60):
@@ -184,6 +185,27 @@ class JujuFixture(fixtures.Fixture):
         self.reset()
         if self.do_teardown:
             self.addCleanup(self.reset)
+
+        # Setup a temporary repository with the magic to find our charms.
+        self.repo_dir = self.useFixture(fixtures.TempDir()).path
+        self.useFixture(fixtures.EnvironmentVariable('JUJU_REPOSITORY',
+                                                     self.repo_dir))
+        self.repo_series_dir = os.path.join(self.repo_dir, self.series)
+        os.mkdir(self.repo_series_dir)
+
+    def charm_uri(self, charm):
+        meta = yaml.safe_load(open(os.path.join(charm, 'metadata.yaml'), 'rb'))
+        name = meta.get('name')
+        assert name, 'charm {} has no name in metadata.yaml'.format(charm)
+        charm_link = os.path.join(self.repo_series_dir, name)
+
+        # Recreate the charm link, which might have changed from the
+        # last deploy.
+        if os.path.exists(charm_link):
+            os.remove(charm_link)
+        os.symlink(charm, os.path.join(self.repo_series_dir, name))
+
+        return 'local:{}/{}'.format(self.series, name)
 
     def reset(self):
         # Tear down any services left running that we know we spawned.

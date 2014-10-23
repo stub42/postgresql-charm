@@ -1,0 +1,13 @@
+name: postgresql-psql
+summary: psql command line access to PostgreSQL services.
+maintainer: stuart.bishop@canonical.com
+description: |
+    Access to related PostgreSQL services via the
+    standard psql command line utility.
+categories:
+    - databases
+requires:
+    db:
+        interface: pgsql
+    db-admin:
+        interface: pgsql
