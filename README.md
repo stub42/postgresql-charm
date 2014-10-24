@@ -100,6 +100,61 @@ The `db-admin` relation may be used similarly to the `db` relation.  The
 automatically generated user for `db-admin` relations is a PostgreSQL
 superuser.
 
+## Database Permissions and Disaster Recovery
+
+⚠ These two topics are entwined, because failing to follow best
+  practice with your database permissions will make your life difficult
+  when you need to recover after failure.
+
+_Always_ set the 'roles' relationship setting when joining a
+relationship. _Always_ grant permissions to database roles for _all_
+database objects your charm creates. _Never_ rely on access permissions
+given directly to a user, either explicitly or implicitly (such as being
+the user who created a table). Consider the users you are provided by
+the PostgreSQL charm as ephemeral. Any rights granted directly to them
+will be lost if relations are recreated, as the generated usernames will
+be different. _If you don't follow this advice, you will need to
+manually repair permissions on all your database objects after any of
+the available recovery mechanisms._
+
+Learn about the SQL `GRANT` statement in the excellect [PostgreSQL
+reference guide][3].
+
+### block-storage-broker
+
+If you are using external storage provided by the block storage broker,
+recovery or a failed unit is simply a matter of ensuring the old unit
+is fully shut down, and then bringing up a fresh unit with the old
+external storage mounted. The charm will see the old database there
+and use it.
+
+If you are unable or do not wish to to simply remount the same
+filesystem, you can of course copy all the data from the old filesystem
+to the new one before bringing up the new unit.
+
+### dump/restore
+
+PostgreSQL dumps, such as those that can be scheduled in the charm, can
+be recovered on a new unit by using 'juju ssh' to connect to the new unit
+and using the standard PostgreSQL `pg_restore(1)` tool. This new unit must
+be standalone, or the master unit. Any hot standbys will replicate the
+recovered data from the master.
+
+You will need to use `pg_restore(1)` with the `--no-owner` option, as
+users that existed in the old service will not exist in the new
+service.
+
+### PITR
+
+If you had configured WAL-E, you can recover a WAL-E backup and replay
+to a point in time of your choosing using the `wal-e` tool. This
+will recover the whole database cluster, so all databases will be
+replaced.
+
+If there are any hot standby units, they will need to be destroyed
+and recreated after the PITR recovery.
+
+
 ## During db-relation-joined
 
 ### the client service provides:
@@ -304,3 +359,4 @@ similar to the following::
 
   [1]: https://bugs.launchpad.net/charms/+source/postgresql/+bug/1258485
   [2]: https://github.com/wal-e/wal-e
+  [3]: http://www.postgresql.org/docs/9.3/static/sql-grant.html
