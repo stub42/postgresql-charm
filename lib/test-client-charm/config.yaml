@@ -1,0 +1,13 @@
+options:
+  database:
+    default: ""
+    type: string
+    description: |
+        Database to connect 'db' relationships to, overriding the
+        generated default database name.
+  roles:
+    default: ""
+    type: string
+    description: |
+        Comma separated list of roles for PostgreSQL to grant to the database
+        user.

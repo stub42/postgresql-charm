@@ -255,6 +255,44 @@ command line:
   6. juju add-relation postgresql storage
 
 
+# Point In Time Recovery
+
+The PostgreSQL charm has experimental support for log shipping and point
+in time recovery. This feature uses the wal-e[2] tool, and requires access
+to Amazon S3, Microsoft Azure Block Storage or Swift. This feature is
+flagged as experimental because it has only been tested with Swift, and
+not yet been tested under load. It also may require some API changes,
+particularly on how authentication credentials are accessed when a standard
+emerges. The charm can be configured to perform regular filesystem backups
+and ship WAL files to the object store. Hot standbys will make use of the
+archived WAL files, allowing them to resync after extended netsplits or
+even let you turn off streaming replication entirely.
+
+With a base backup and the WAL archive you can perform point in time
+recovery, but this is still a manual process and the charm does not
+yet help you do it. The simplest approach would be to create a new
+PostgreSQL service containing a single unit, 'juju ssh' in and use
+wal-e to replace the database after shutting it down, create a
+recovery.conf to replay the archived WAL files using wal-e, restart the
+database and wait for it to recover. Once recovered, new hot standby
+units can be added and client services related to the new database
+service.
+
+To enable the experimental wal-e support with Swift, you will need to
+use Ubuntu 14.04 (Trusty), and set the service configuration settings
+similar to the following::
+
+    postgresql:
+        wal_e_storage_uri: swift://mycontainer
+        os_username: my_swift_username
+        os_password: my_swift_password
+        os_auth_url: https://keystone.auth.url.example.com:8080/v2/
+        os_tenant_name: my_tenant_name
+        install_sources: |
+            - ppa:stub/pgcharm
+            - cloud:icehouse
+
+
 # Contact Information
 
 ## PostgreSQL 
@@ -265,3 +303,4 @@ command line:
 - [PostgreSQL Mailing List](http://www.postgresql.org/list/)
 
   [1]: https://bugs.launchpad.net/charms/+source/postgresql/+bug/1258485
+  [2]: https://github.com/wal-e/wal-e

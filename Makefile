@@ -31,7 +31,9 @@ unit_test:
 
 integration_test:
 	@echo "PostgreSQL integration tests, all non-beta versions, ${SERIES}"
-	trial test.PG91Tests test.PG92Tests test.PG93Tests
+	trial test.PG91Tests
+	trial test.PG92Tests
+	trial test.PG93Tests
 
 integration_test_91:
 	@echo "PostgreSQL 9.1 integration tests, ${SERIES}"
@@ -54,3 +56,10 @@ lint:
 	@flake8 -v \
 	    --exclude hooks/charmhelpers,hooks/_trial_temp \
 	    hooks testing tests test.py
+
+sync:
+	@bzr cat \
+	    lp:charm-helpers/tools/charm_helpers_sync/charm_helpers_sync.py \
+		> .charm_helpers_sync.py
+	@python .charm_helpers_sync.py -c charm-helpers.yaml
+	@rm .charm_helpers_sync.py
