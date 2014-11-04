@@ -2167,18 +2167,21 @@ def publish_hot_standby_credentials():
 
         # Block until users and database has replicated, so we know the
         # connection details we publish are actually valid. This will
-        # normally be pretty much instantaneous.
-        timeout = 60
-        start = time.time()
-        while time.time() < start + timeout:
-            cur = db_cursor(autocommit=True)
-            cur.execute('select datname from pg_database')
-            if cur.fetchone() is not None:
-                break
-            del cur
-            log('Waiting for database {} to be replicated'.format(
-                connection_settings['database']))
-            time.sleep(10)
+        # normally be pretty much instantaneous. Do not block if we are
+        # running in manual replication mode, as it is outside of juju's
+        # control when replication is actually setup and running.
+        if not hookenv.config('manual_replication'):
+            timeout = 60
+            start = time.time()
+            while time.time() < start + timeout:
+                cur = db_cursor(autocommit=True)
+                cur.execute('select datname from pg_database')
+                if cur.fetchone() is not None:
+                    break
+                del cur
+                log('Waiting for database {} to be replicated'.format(
+                    connection_settings['database']))
+                time.sleep(10)
 
         log("Relation {} connection settings {!r}".format(
             client_relation, connection_settings), DEBUG)
