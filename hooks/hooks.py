@@ -638,6 +638,10 @@ def install_postgresql_crontab(output_file):
 
 
 def create_recovery_conf(master_host, master_port, restart_on_change=False):
+    if hookenv.config('manual_replication'):
+        log('manual_replication; should not be here', CRITICAL)
+        raise RuntimeError('manual_replication; should not be here')
+
     version = pg_version()
     cluster_name = hookenv.config('cluster_name')
     postgresql_cluster_dir = os.path.join(
@@ -1079,6 +1083,21 @@ def config_changed_volume_apply(mount_point):
         return False
 
 
+def reset_manual_replication_state():
+    '''In manual replication mode, the state of the local database cluster
+    is outside of Juju's control. We need to detect and update the charm
+    state to match reality.
+    '''
+    if hookenv.config('manual_replication'):
+        if os.path.exists('recovery.conf'):
+            local_state['state'] = 'hot standby'
+        elif slave_count():
+            local_state['state'] = 'master'
+        else:
+            local_state['state'] = 'standalone'
+        local_state.publish()
+
+
 @hooks.hook()
 def config_changed(force_restart=False, mount_point=None):
     validate_config()
@@ -1100,6 +1119,8 @@ def config_changed(force_restart=False, mount_point=None):
                 "Disabled and stopped postgresql service "
                 "(config_changed_volume_apply failure)", ERROR)
             sys.exit(1)
+
+    reset_manual_replication_state()
 
     postgresql_config_dir = _get_postgresql_config_dir(config_data)
     postgresql_config = os.path.join(postgresql_config_dir, "postgresql.conf")
@@ -1568,6 +1589,7 @@ def snapshot_relations():
 
 @hooks.hook('db-relation-joined', 'db-relation-changed')
 def db_relation_joined_changed():
+    reset_manual_replication_state()
     if local_state['state'] == 'hot standby':
         publish_hot_standby_credentials()
         return
@@ -1620,6 +1642,7 @@ def db_relation_joined_changed():
 
 @hooks.hook('db-admin-relation-joined', 'db-admin-relation-changed')
 def db_admin_relation_joined_changed():
+    reset_manual_replication_state()
     if local_state['state'] == 'hot standby':
         publish_hot_standby_credentials()
         return
@@ -1990,6 +2013,10 @@ def replication_relation_joined_changed():
     for unit in hookenv.related_units():
         authorized_units.add(unit)
     local_state['authorized'] = authorized_units
+
+    if hookenv.config('manual_replication'):
+        log('manual_replication, nothing to do')
+        return
 
     master = elected_master()
 
