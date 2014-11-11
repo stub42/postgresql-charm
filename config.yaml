@@ -437,8 +437,9 @@ options:
     default: "install"
     type: string
     description: |
-        The status of service-affecting packages will be set to this value in the dpkg database.
-        Useful valid values are "install" and "hold".
+        The status of service-affecting packages will be set to this
+        value in the dpkg database. Useful valid values are "install"
+        and "hold".
   # statsd-compatible metrics
   metrics_target:
     default: ""
