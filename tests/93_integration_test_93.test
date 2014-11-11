@@ -1,3 +1,0 @@
-#!/bin/bash
-
-make -C $(dirname $0)/.. integration_test_93

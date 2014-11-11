@@ -1,3 +1,4 @@
 _trial_temp
 hooks/_trial_temp
 hooks/local_state.pickle
+lib/test-client-charm/hooks/charmhelpers
