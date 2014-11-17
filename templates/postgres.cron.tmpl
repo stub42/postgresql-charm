@@ -1,16 +1,13 @@
 # Maintained by juju
 #
 {% if backup_schedule -%}
-{{backup_schedule}} postgres \
-    {{scripts_dir}}/pg_backup_job {{backup_retention_count}}
+{{backup_schedule}} postgres {{scripts_dir}}/pg_backup_job {{backup_retention_count}}
 {% endif -%}
 
 {% if swiftwal_backup_schedule -%}
-{{swiftwal_backup_schedule}} postgres \
-    {{swiftwal_backup_command}} && {{swiftwal_prune_command}}
+{{swiftwal_backup_schedule}} postgres {{swiftwal_backup_command}} && {{swiftwal_prune_command}}
 {% endif -%}
 
 {% if wal_e_backup_schedule -%}
-{{wal_e_backup_schedule}} postgres \
-    {{wal_e_backup_command}} && {{wal_e_prune_command}}
+{{wal_e_backup_schedule}} postgres {{wal_e_backup_command}} && {{wal_e_prune_command}}
 {% endif -%}
