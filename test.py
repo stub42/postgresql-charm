@@ -913,7 +913,7 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertTrue(self.is_master('postgresql/0'))
         self.assertTrue(self.is_master('postgresql/1'))
 
-        # Both units are advertised as master too the relation.
+        # Both units are advertised as master on the relation.
         rel_info = self.juju.relation_info('psql/0')
         for relname in rel_info:
             for relid in rel_info[relname]:
