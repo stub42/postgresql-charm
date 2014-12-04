@@ -512,5 +512,23 @@ options:
     default: "install"
     type: string
     description: |
-        The status of service-affecting packages will be set to this value in the dpkg database.
-        Useful valid values are "install" and "hold".
+        The status of service-affecting packages will be set to this
+        value in the dpkg database. Useful valid values are "install"
+        and "hold".
+  # statsd-compatible metrics
+  metrics_target:
+    default: ""
+    type: string
+    description: |
+        Destination for statsd-format metrics, format "host:port". If
+        not present and valid, metrics disabled.
+  metrics_prefix:
+    default: "dev.$UNIT.postgresql"
+    type: string
+    description: |
+        Prefix for metrics. Special value $UNIT can be used to include the
+        name of the unit in the prefix.
+  metrics_sample_interval:
+    default: 5
+    type: int
+    description: Period for metrics cron job to run in minutes
