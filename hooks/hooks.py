@@ -1124,7 +1124,7 @@ def config_changed(force_restart=False, mount_point=None):
     update_service_port()
     update_nrpe_checks()
     write_metrics_cronjob('/usr/local/bin/postgres_to_statsd.py',
-        '/etc/cron.d/postgres_metrics')
+                          '/etc/cron.d/postgres_metrics')
 
     # If an external mountpoint has caused an old, existing DB to be
     # mounted, we need to ensure that all the users, databases, roles
