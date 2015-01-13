@@ -331,7 +331,22 @@ options:
         This will be written to the pg_hba.conf file, one line per rule.
         Note that this should not be needed as db relations already create
         those rules the right way. Only use this if you really need too
-        (e.g. on a development environment)
+        (e.g. on a development environment), or are connecting juju managed
+        databases to external managed systems, or configuring replication
+        between unrelated PostgreSQL services using the manual_replication
+        option.
+  manual_replication:
+    type: boolean
+    default: False
+    description: |
+        Enable or disable charm managed replication. When manual_replication
+        is True, the operator is responsible for maintaining recovery.conf
+        and performing any necessary database mirroring. The charm will
+        still advertise the unit as standalone, master or hot standby to
+        relations based on whether the system is in recovery mode or not.
+        Note that this option makes it possible to create a PostgreSQL
+        service with multiple master units, which is probably a very silly
+        thing to do.
   backup_dir:
     default: "/var/lib/postgresql/backups"
     type: string

@@ -209,10 +209,11 @@ class PostgreSQLCharmBaseTestCase(object):
                             '{} not yet authorized by {} ({})'.format(
                                 psql_unit, unit, allowed_units))
 
+                # Alas, this is no longer true with manual replication.
                 # We must not have multiple masters in this relation.
-                if len(rel_pg_units) > 1 and num_masters != 1:
-                    raise NotReady(
-                        '{} masters'.format(num_masters))
+                # if len(rel_pg_units) > 1 and num_masters != 1:
+                #     raise NotReady(
+                #         '{} masters'.format(num_masters))
 
         if pg_units != all_rel_pg_units:
             raise NotReady(
@@ -271,8 +272,9 @@ class PostgreSQLCharmBaseTestCase(object):
             elif peer_state != 'hot standby':
                 raise NotReady('Peer {} in state {}'.format(peer, peer_state))
 
-        if num_masters != 1:
-            raise NotReady('No masters seen from {}'.format(pg_unit))
+        # No longer true with manual replication.
+        # if num_masters < 1:
+        #     raise NotReady('No masters seen from {}'.format(pg_unit))
 
     def sql(self, sql, postgres_unit=None, psql_unit=None, dbname=None):
         '''Run some SQL on postgres_unit from psql_unit.
@@ -895,6 +897,29 @@ class PostgreSQLCharmBaseTestCase(object):
         self.assertTrue(master_data)
         standby_data = self.sql('SELECT * FROM Foo', 'hot standby')[0][0]
         self.assertTrue(standby_data)
+
+    def test_manual_replication(self):
+        self.pg_config['manual_replication'] = True
+        self.juju.deploy(
+            TEST_CHARM, 'postgresql', num_units=2, config=self.pg_config)
+        self.juju.deploy(PSQL_CHARM, 'psql')
+        self.juju.do(['add-relation', 'postgresql:db', 'psql:db'])
+        pg_units = ['postgresql/0', 'postgresql/1']
+        self.wait_until_ready(pg_units)
+
+        # Because we have enabled manual_replication mode, and not
+        # actually manually configured replication, we will have
+        # two masters.
+        self.assertTrue(self.is_master('postgresql/0'))
+        self.assertTrue(self.is_master('postgresql/1'))
+
+        # Both units are advertised as master on the relation.
+        rel_info = self.juju.relation_info('psql/0')
+        for relname in rel_info:
+            for relid in rel_info[relname]:
+                for unit in pg_units:
+                    self.assertEqual(rel_info[relname][relid][unit]['state'],
+                                     'master')
 
 
 class PG91Tests(
