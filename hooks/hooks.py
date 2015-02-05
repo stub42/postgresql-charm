@@ -2508,7 +2508,7 @@ def update_nrpe_checks():
             os.remove(os.path.join('/var/lib/nagios/export/', f))
 
     # --- exported service configuration file
-    servicegroups = list(config_data['nagios_context'])
+    servicegroups = [config_data['nagios_context']]
     additional_servicegroups = config_data['nagios_additional_servicegroups']
     if additional_servicegroups != '':
         servicegroups.extend(
