@@ -2508,9 +2508,16 @@ def update_nrpe_checks():
             os.remove(os.path.join('/var/lib/nagios/export/', f))
 
     # --- exported service configuration file
+    servicegroups = list(config_data['nagios_context'])
+    additional_servicegroups = config_data['nagios_additional_servicegroups']
+    if additional_servicegroups != '':
+        servicegroups.extend(
+            servicegroup.strip() for servicegroup
+            in additional_servicegroups.split(',')
+        )
     templ_vars = {
         'nagios_hostname': nagios_hostname,
-        'nagios_servicegroup': config_data['nagios_context'],
+        'nagios_servicegroup': ', '.join(servicegroups),
     }
     template = render_template('nrpe_service.tmpl', templ_vars)
     with open(nrpe_service_file, 'w') as nrpe_service_config:

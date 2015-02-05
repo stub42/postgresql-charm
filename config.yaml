@@ -369,6 +369,15 @@ options:
             juju-postgresql-0
         If you're running multiple environments with the same services in them
         this allows you to differentiate between them.
+  nagios_additional_servicegroups:
+    default: ""
+    type: string
+    description: |
+        Used by the nrpe-external-master subordinate charm.
+        A comma-separated list of servicegroups to include along with
+        nagios_context when generating nagios service check configs.
+        This is useful for nagios installations where servicegroups
+        are used to apply special treatment to particular checks.
   pgdg:
     description: |
         Enable the PostgreSQL Global Development Group APT repository
