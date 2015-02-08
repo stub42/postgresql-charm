@@ -286,8 +286,7 @@ def requires_restart():
 
     saved_config = local_state.get('saved_config', None)
     if not saved_config:
-        # No record of postgresql.conf state, perhaps an upgrade.
-        # Better restart.
+        log("No record of postgresql.conf state. Better restart.")
         return True
 
     live_config = local_state.setdefault('live_config', {})
@@ -1193,7 +1192,7 @@ def config_changed(force_restart=False, mount_point=None):
 
 
 @hooks.hook()
-def install(run_pre=True):
+def install(run_pre=True, force_restart=True):
     if run_pre:
         for f in glob.glob('exec.d/*/charm-pre-install'):
             if os.path.isfile(f) and os.access(f, os.X_OK):
@@ -1267,7 +1266,7 @@ def install(run_pre=True):
     # Ensure at least minimal access granted for hooks to run.
     # Reload because we are using the default cluster setup and started
     # when we installed the PostgreSQL packages.
-    config_changed(force_restart=True)
+    config_changed(force_restart=force_restart)
 
     snapshot_relations()
 
@@ -1284,7 +1283,7 @@ def upgrade_charm():
     and block-storage-broker services. These steps are generalised in the
     README as well.
     """
-    install(run_pre=False)
+    install(run_pre=False, force_restart=False)
     snapshot_relations()
     version = pg_version()
     cluster_name = hookenv.config('cluster_name')
