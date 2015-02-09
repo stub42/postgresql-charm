@@ -115,6 +115,7 @@ class TestJuju(object):
             "backup_schedule": "13 4 * * *",
             "backup_retention_count": 7,
             "nagios_context": "juju",
+            "nagios_additional_servicegroups": "on-call-services",
             "pgdg": False,
             "install_sources": "",
             "install_keys": "",

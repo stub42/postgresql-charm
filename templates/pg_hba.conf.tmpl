@@ -5,7 +5,6 @@
 # Database administrative login by UNIX sockets
 local   all         root,postgres                     ident map=superusers
 local   replication root,postgres                     ident map=superusers
-local   all         nagios                            md5
 
 {% if extra_pg_auth is defined and extra_pg_auth|count > 0 -%}
 # extra_pg_auth
@@ -13,6 +12,10 @@ local   all         nagios                            md5
 {{pg_auth}}
 {% endfor -%}
 {% endif -%}
+
+# monitoring (this is below extra_pg_auth to allow for
+# specialized scenarios involving manual_replication=true)
+local   all         nagios                            md5
 
 {% if access_list is defined -%}
 {% for unit in access_list -%}
