@@ -2502,12 +2502,30 @@ def update_nrpe_checks():
         else:
             raise
 
-    unit_name = hookenv.local_unit().replace('/', '-')
-    nagios_hostname = "%s-%s" % (config_data['nagios_context'], unit_name)
-    nagios_logdir = '/var/log/nagios'
+    relids = hookenv.relation_ids('nrpe-external-master')
+    relations = []
+    for relid in relids:
+        for unit in hookenv.related_units(relid):
+            relations.append(hookenv.relation_get(unit=unit, rid=relid))
+
+    if len(relations) == 1 and 'nagios_hostname' in relations[0]:
+        nagios_hostname = relations[0]['nagios_hostname']
+        log("update_nrpe_checks: Obtained nagios_hostname ({}) "
+            "from nrpe-external-master relation.".format(
+            nagios_hostname))
+    else:
+        unit = hookenv.local_unit()
+        unit_name = unit.replace('/', '-')
+        nagios_hostname = "%s-%s" % (config_data['nagios_context'], unit_name)
+        log("update_nrpe_checks: Deduced nagios_hostname ({}) from charm config "
+            "(nagios_hostname not found in nrpe-external-master relation, or "
+            "wrong number of relations found)".format(
+            nagios_hostname))
+
     nrpe_service_file = \
         '/var/lib/nagios/export/service__{}_check_pgsql.cfg'.format(
             nagios_hostname)
+    nagios_logdir = '/var/log/nagios'
     if not os.path.exists(nagios_logdir):
         os.mkdir(nagios_logdir)
         os.chown(nagios_logdir, nagios_uid, nagios_gid)
