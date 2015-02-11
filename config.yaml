@@ -279,6 +279,16 @@ options:
         disk caching within the database. (50% to 75% of system memory). This
         string should be of the format '###MB'. Ignored unless
         'performance_tuning' is set to 'manual'.
+  default_statistics_target:
+    default: -1
+    type: int
+    description: |
+        Sets the default statistics target for table columns without a
+        column-specific target set via ALTER TABLE SET STATISTICS.
+        Leave unchanged to use the server default, which in recent
+        releases is 100. Ignored unless 'performance_tuning' is 'manual'.
+        Larger values increase the time needed to do ANALYZE, but
+        might improve the quality of the planner's estimates.
   temp_buffers:
     default: "1MB"
     type: string
