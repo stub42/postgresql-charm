@@ -94,6 +94,9 @@ random_page_cost = {{random_page_cost}}
 {% if effective_cache_size  != "" -%}
 effective_cache_size = {{effective_cache_size}}
 {% endif -%}
+{% if default_statistics_target != -1 -%}
+default_statistics_target = {{default_statistics_target}}
+{% endif -%}
 
 
 #------------------------------------------------------------------------------
