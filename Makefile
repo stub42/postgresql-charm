@@ -34,6 +34,7 @@ integration_test:
 	trial test.PG91Tests
 	trial test.PG92Tests
 	trial test.PG93Tests
+	trial test.PG94Tests
 
 integration_test_91:
 	@echo "PostgreSQL 9.1 integration tests, ${SERIES}"
@@ -48,7 +49,7 @@ integration_test_93:
 	trial test.PG93Tests
 
 integration_test_94:
-	@echo "PostgreSQL 9.4 (beta) integration tests, ${SERIES}"
+	@echo "PostgreSQL 9.4 integration tests, ${SERIES}"
 	trial test.PG94Tests
 
 lint:

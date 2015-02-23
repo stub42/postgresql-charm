@@ -948,8 +948,7 @@ class PG93Tests(
 class PG94Tests(
         PostgreSQLCharmBaseTestCase,
         testtools.TestCase, fixtures.TestWithFixtures):
-    # 9.4 is still in beta, with packages only available in the PGDG
-    # archive.
+    # 9.4 is released, but packages are only available in the PGDG archive.
     VERSION = '9.4'
     PGDG = True
 
