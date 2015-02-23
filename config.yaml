@@ -2,7 +2,7 @@ options:
   admin_addresses:
     default: ""
     type: string
-    description: |
+    description: >
       A comma-separated list of IP Addresses (or single IP) admin tools like 
       pgAdmin3 will connect from, this is most useful for developers running 
       juju in local mode who need to connect tools like pgAdmin to a postgres. 
@@ -12,14 +12,14 @@ options:
   locale:
     default: "C"
     type: string
-    description: |
+    description: >
       Locale of service, defining language, default collation order,
       and default formatting of numbers, currency, dates & times. Can only be
       set when deploying the first unit of a service.
   encoding:
     default: "UTF-8"
     type: string
-    description: |
+    description: >
       Default encoding used to store text in this service. Can only be
       set when deploying the first unit of a service.
   extra-packages:
@@ -29,12 +29,12 @@ options:
   dumpfile_location:
     default: "None"
     type: string
-    description: |
+    description: >
         Path to a dumpfile to load into DB when service is initiated.
   config_change_command:
     default: "reload"
     type: string
-    description: |
+    description: >
         The command to run whenever config has changed. Accepted values
         are "reload" or "restart" - any other value will mean neither is
         executed after a config change (which may be desired, if you're
@@ -45,7 +45,7 @@ options:
   version:
     default: null
     type: string
-    description: |
+    description: >
         Version of PostgreSQL that we want to install. Supported versions
         are "9.1", "9.2", "9.3". The default version for the deployed Ubuntu
         release is used when the version is not specified.
@@ -65,6 +65,13 @@ options:
     default: 100
     type: int
     description: Maximum number of connections to allow to the PG database
+  max_prepared_transactions:
+    default: 0
+    type: int
+    description: >
+      Maximum number of prepared two phase commit transactions, waiting
+      to be committed. Defaults to 0. as using two phase commit without
+      a process to monitor and resolve lost transactions is dangerous.
   ssl:
     default: "True"
     type: string
@@ -72,7 +79,7 @@ options:
   log_min_duration_statement:
     default: -1
     type: int
-    description: |
+    description: >
         -1 is disabled, 0 logs all statements
         and their durations, > 0 logs only
         statements running at least this number
@@ -92,7 +99,7 @@ options:
   log_temp_files:
     default: "-1"
     type: string
-    description: |
+    description: >
         Log creation of temporary files larger than the threshold.
         -1 disables the feature, 0 logs all temporary files, or specify
         the threshold size with an optional unit (eg. "512KB", default
@@ -131,13 +138,13 @@ options:
   autovacuum:
     default: True
     type: boolean
-    description: |
+    description: >
         Autovacuum should almost always be running. If you want to turn this
         off, you are probably following out of date documentation.
   log_autovacuum_min_duration:
     default: -1
     type: int
-    description: |
+    description: >
         -1 disables, 0 logs all actions and their durations, > 0 logs only
         actions running at least this number of milliseconds.
   autovacuum_analyze_threshold:
@@ -155,13 +162,13 @@ options:
   autovacuum_vacuum_cost_delay:
     default: "20ms"
     type: string
-    description: |
+    description: >
         Default vacuum cost delay for autovacuum, in milliseconds;
         -1 means use vacuum_cost_delay
   search_path:
     default: "\"$user\",public"
     type: string
-    description: |
+    description: >
         Comma separated list of schema names for
         the default SQL search path.
   standard_conforming_strings:
@@ -171,22 +178,21 @@ options:
   hot_standby:
     default: False
     type: boolean
-    description: |
-        DEPRECATED.
+    description: >
         Hot standby or warm standby. When True, queries can be run against
         the database when in recovery or standby mode (ie. replicated).
         Overridden when service contains multiple units.
   hot_standby_feedback:
     default: False
     type: boolean
-    description: |
+    description: >
         Hot standby feedback, informing a master about in progress
         transactions on a streaming hot standby and allowing the master to
         defer cleanup and avoid query cancelations on the hot standby.
   wal_level:
     default: minimal
     type: string
-    description: |
+    description: >
         'minimal', 'archive' or 'hot_standby'. Defines how much information
         is written to the WAL. Set to 'minimal' for stand alone databases
         and 'hot_standby' for replicated setups. Overridden by juju when
@@ -194,7 +200,7 @@ options:
   max_wal_senders:
     default: 0
     type: int
-    description: |
+    description: >
         Maximum number of hot standbys that can connect using
         streaming replication. Set this to the expected maximum number of
         hot standby units to avoid unnecessary blocking and database restarts.
@@ -202,7 +208,7 @@ options:
   wal_keep_segments:
     default: 0
     type: int
-    description: |
+    description: >
         Number of old WAL files to keep, providing a larger buffer for
         streaming hot standbys to catch up from when lagged. Each WAL file
         is 16MB in size. The WAL files are the buffer of how far a
@@ -212,7 +218,7 @@ options:
   replicated_wal_keep_segments:
     default: 5000
     type: int
-    description: |
+    description: >
         Value of wal_keep_segments used when this service is replicated.
         This setting only exists to provide a sane default when replication
         is requested (so it doesn't fail) and nobody bothered to change the
@@ -220,7 +226,7 @@ options:
   archive_mode:
     default: False
     type: boolean
-    description: |
+    description: >
         Enable archiving of WAL files using the command specified by
         archive_command. If archive_mode is enabled and archive_command not
         set, then archiving is deferred until archive_command is set and the
@@ -228,25 +234,25 @@ options:
   archive_command:
     default: ""
     type: string
-    description: |
+    description: >
         Command used to archive WAL files when archive_mode is set and
         wal_level > minimal.
   work_mem:
     default: "1MB"
     type: string
-    description: |
+    description: >
         Working Memory.
         Ignored unless 'performance_tuning' is set to 'manual'.
   maintenance_work_mem:
     default: "1MB"
     type: string
-    description: |
+    description: >
         Maintenance working memory.
         Ignored unless 'performance_tuning' is set to 'manual'.
   performance_tuning:
     default: "Mixed"
     type: string
-    description: |
+    description: >
         Possible values here are "manual", "DW" (data warehouse),
         "OLTP" (online transaction processing), "Web" (web application),
         "Desktop" or "Mixed". When this is set to a value other than
@@ -267,14 +273,14 @@ options:
   shared_buffers:
     default: ""
     type: string
-    description: |
+    description: >
         The amount of memory the database server uses for shared memory
         buffers. This string should be of the format '###MB'.
         Ignored unless 'performance_tuning' is set to 'manual'.
   effective_cache_size:
     default: ""
     type: string
-    description: |
+    description: >
         Effective cache size is an estimate of how much memory is available for
         disk caching within the database. (50% to 75% of system memory). This
         string should be of the format '###MB'. Ignored unless
@@ -282,52 +288,59 @@ options:
   default_statistics_target:
     default: -1
     type: int
-    description: |
+    description: >
         Sets the default statistics target for table columns without a
         column-specific target set via ALTER TABLE SET STATISTICS.
         Leave unchanged to use the server default, which in recent
         releases is 100. Ignored unless 'performance_tuning' is 'manual'.
         Larger values increase the time needed to do ANALYZE, but
         might improve the quality of the planner's estimates.
+  collapse_limit:
+    default: -1 
+    type: int
+    description: >
+        Sets the from_collapse_limit and join_collapse_limit query planner
+        options, controlling the maximum number of tables that can be joined
+        before the turns off the table collapse query optimization.
   temp_buffers:
     default: "1MB"
     type: string
-    description: |
+    description: >
         The maximum number of temporary buffers used by each database session.
   wal_buffers:
     default: "-1"
     type: string
-    description: |
+    description: >
         min 32kB, -1 sets based on shared_buffers (change requires restart).
         Ignored unless 'performance_tuning' is set to 'manual'.
   checkpoint_segments:
     default: 3
     type: int
-    description: |
+    description: >
         in logfile segments, min 1, 16MB each.
         Ignored unless 'performance_tuning' is set to 'manual'.
   checkpoint_timeout:
     default: ""
     type: string
-    description: |
+    description: >
         Maximum time between automatic WAL checkpoints. range '30s-1h'.
         If left empty, the default postgresql value will be used.
   fsync:
     type: boolean
     default: True
-    description: |
+    description: >
         Turns forced synchronization on/off. If fsync is turned off, database
         failures are likely to involve database corruption and require
         recreating the unit
   synchronous_commit:
     type: boolean
     default: True
-    description: |
+    description: >
         Immediate fsync after commit.
   full_page_writes:
     type: boolean
     default: True
-    description: |
+    description: >
         Recover from partial page writes.
   random_page_cost:
     default: 4.0
@@ -336,7 +349,7 @@ options:
   extra_pg_auth:
     type: string
     default: ""
-    description: |
+    description: >
         A comma separated extra pg_hba.conf auth rules.
         This will be written to the pg_hba.conf file, one line per rule.
         Note that this should not be needed as db relations already create
@@ -348,7 +361,7 @@ options:
   manual_replication:
     type: boolean
     default: False
-    description: |
+    description: >
         Enable or disable charm managed replication. When manual_replication
         is True, the operator is responsible for maintaining recovery.conf
         and performing any necessary database mirroring. The charm will
@@ -372,7 +385,7 @@ options:
   nagios_context:
     default: "juju"
     type: string
-    description: |
+    description: >
         Used by the nrpe-external-master subordinate charm.
         A string that will be prepended to instance name to set the host name
         in nagios. So for instance the hostname would be something like:
@@ -382,14 +395,14 @@ options:
   nagios_additional_servicegroups:
     default: ""
     type: string
-    description: |
+    description: >
         Used by the nrpe-external-master subordinate charm.
         A comma-separated list of servicegroups to include along with
         nagios_context when generating nagios service check configs.
         This is useful for nagios installations where servicegroups
         are used to apply special treatment to particular checks.
   pgdg:
-    description: |
+    description: >
         Enable the PostgreSQL Global Development Group APT repository
         (https://wiki.postgresql.org/wiki/Apt). This package source provides
         official PostgreSQL packages for Ubuntu LTS releases beyond those
@@ -397,13 +410,13 @@ options:
     type: boolean
     default: false
   install_sources:
-    description: |
+    description: >
         List of extra package sources, per charm-helpers standard.
         YAML format.
     type: string
     default: null
   install_keys:
-    description: |
+    description: >
         List of signing keys for install_sources package sources, per
         charmhelpers standard. YAML format.
     type: string
@@ -411,12 +424,12 @@ options:
   extra_archives:
     default: ""
     type: string
-    description: |
+    description: >
         DEPRECATED & IGNORED. Use install_sources and install_keys. 
   advisory_lock_restart_key:
     default: 765
     type: int
-    description: |
+    description: >
         An advisory lock key used internally by the charm. You do not need
         to change it unless it happens to conflict with an advisory lock key
         being used by your applications.
@@ -424,7 +437,7 @@ options:
   swiftwal_container_prefix:
     type: string
     default: null
-    description: |
+    description: >
       EXPERIMENTAL.
       Swift container prefix for SwiftWAL to use. Must be set if any
       SwiftWAL features are enabled. This will become a simple
@@ -433,13 +446,13 @@ options:
   swiftwal_backup_schedule:
     type: string
     default: null
-    description: |
+    description: >
       EXPERIMENTAL.
       Cron-formatted schedule for SwiftWAL database backups.
   swiftwal_backup_retention:
     type: int
     default: 2
-    description: |
+    description: >
       EXPERIMENTAL.
       Number of recent base backups to retain. You need enough space in
       Swift for this many backups plus one more, as an old backup will only
@@ -447,7 +460,7 @@ options:
   swiftwal_log_shipping:
     type: boolean
     default: false
-    description: |
+    description: >
       EXPERIMENTAL.
       Archive WAL files into Swift. If swiftwal_backup_schedule is set,
       allows point-in-time recovery and WAL files are removed
@@ -474,7 +487,7 @@ options:
   wal_e_backup_schedule:
     type: string
     default: "13 0 * * *"
-    description: |
+    description: >
       EXPERIMENTAL.
       Cron-formatted schedule for WAL-E database backups. If
       wal_e_backup_schedule is unset, WAL files will never be removed from
@@ -482,7 +495,7 @@ options:
   wal_e_backup_retention:
     type: int
     default: 2
-    description: |
+    description: >
       EXPERIMENTAL.
       Number of recent base backups and WAL files to retain.
       You need enough space for this many backups plus one more, as
@@ -491,7 +504,7 @@ options:
   streaming_replication:
     type: boolean
     default: true
-    description: |
+    description: >
       Enable streaming replication. Normally, streaming replication is
       always used, and any log shipping configured is used as a fallback.
       Turning this off without configuring log shipping is an error.
@@ -530,7 +543,7 @@ options:
   package_status:
     default: "install"
     type: string
-    description: |
+    description: >
         The status of service-affecting packages will be set to this
         value in the dpkg database. Useful valid values are "install"
         and "hold".
@@ -538,13 +551,13 @@ options:
   metrics_target:
     default: ""
     type: string
-    description: |
+    description: >
         Destination for statsd-format metrics, format "host:port". If
         not present and valid, metrics disabled.
   metrics_prefix:
     default: "dev.$UNIT.postgresql"
     type: string
-    description: |
+    description: >
         Prefix for metrics. Special value $UNIT can be used to include the
         name of the unit in the prefix.
   metrics_sample_interval:

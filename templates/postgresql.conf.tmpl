@@ -58,6 +58,9 @@ work_mem = {{work_mem}}
 {% if maintenance_work_mem != "" -%}
 maintenance_work_mem = {{maintenance_work_mem}}
 {% endif -%}
+{% if max_prepared_transactions != "" -%}
+max_prepared_transactions = {{max_prepared_transactions}}
+{% endif -%}
 
 
 #------------------------------------------------------------------------------
@@ -96,6 +99,10 @@ effective_cache_size = {{effective_cache_size}}
 {% endif -%}
 {% if default_statistics_target != -1 -%}
 default_statistics_target = {{default_statistics_target}}
+{% endif -%}
+{% if collapse_limit != -1 -%}
+from_collapse_limit = {{collapse_limit}}
+join_collapse_limit = {{collapse_limit}}
 {% endif -%}
 
 
