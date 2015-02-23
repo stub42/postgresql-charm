@@ -41,6 +41,9 @@ ssl = {{ssl}}
 max_connections = {{max_connections}}
 {% endif -%}
 
+# Broken under all versions of Ubuntu, per Bug #1018307
+ssl_renegotiation_limit=0
+
 
 #------------------------------------------------------------------------------
 # RESOURCE USAGE (except WAL)
