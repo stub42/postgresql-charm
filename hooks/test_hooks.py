@@ -68,7 +68,6 @@ class TestJuju(object):
             "encoding": "UTF-8",
             "extra_packages": "",
             "dumpfile_location": "None",
-            "config_change_command": "reload",
             "version": "9.1",
             "cluster_name": "main",
             "listen_ip": "*",
