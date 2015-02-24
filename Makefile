@@ -56,6 +56,7 @@ lint:
 	@echo "Lint check (flake8)"
 	@flake8 -v \
 	    --exclude hooks/charmhelpers,hooks/_trial_temp \
+            --ignore=E402 \
 	    hooks testing tests test.py
 
 sync:
