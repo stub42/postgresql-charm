@@ -29,6 +29,7 @@ try:
     import psycopg2
     from jinja2 import Template
 except ImportError:
+    fetch.apt_update(fatal=True)
     fetch.apt_install(['python-psycopg2', 'python-jinja2'], fatal=True)
     import psycopg2
     from jinja2 import Template
@@ -1843,6 +1844,7 @@ def update_repos_and_packages():
     if 'postgresql-{}'.format(version) not in packages:
         ensure_package_status('postgresql-{}'.format(version),
                               hookenv.config('package_status'))
+    fetch.apt_update(fatal=True)
     fetch.apt_install(packages, fatal=True)
 
 
