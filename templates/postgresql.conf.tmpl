@@ -76,6 +76,9 @@ wal_buffers = {{wal_buffers}}
 {% if checkpoint_segments  != "" -%}
 checkpoint_segments = {{checkpoint_segments}}
 {% endif -%}
+{% if checkpoint_completion_target  != "" -%}
+checkpoint_completion_target = {{checkpoint_completion_target}}
+{% endif -%}
 {% if checkpoint_timeout  != "" -%}
 checkpoint_timeout = {{checkpoint_timeout}}
 {% endif -%}

@@ -303,11 +303,17 @@ options:
         min 32kB, -1 sets based on shared_buffers (change requires restart).
         Ignored unless 'performance_tuning' is set to 'manual'.
   checkpoint_segments:
-    default: 3
+    default: 10 
     type: int
     description: >
         in logfile segments, min 1, 16MB each.
         Ignored unless 'performance_tuning' is set to 'manual'.
+  checkpoint_completion_target:
+    default: 0.9
+    type: float
+    description: >
+      checkpoint target duration time, as a fraction of checkpoint_timeout.
+      Range [0.0, 1.0].
   checkpoint_timeout:
     default: ""
     type: string
