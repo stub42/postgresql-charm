@@ -17,8 +17,7 @@ __all__ = [
     'wait_for_machine',
     'wait_for_page_contents',
     'wait_for_relation',
-    'wait_for_unit',
-    ]
+    'wait_for_unit']
 
 from contextlib import contextmanager
 import json
@@ -26,8 +25,7 @@ import operator
 from shelltoolbox import (
     command,
     run,
-    script_name,
-    )
+    script_name)
 import os
 import tempfile
 import time

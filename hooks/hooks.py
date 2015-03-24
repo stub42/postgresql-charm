@@ -22,8 +22,7 @@ import urlparse
 from charmhelpers import fetch
 from charmhelpers.core import hookenv, host
 from charmhelpers.core.hookenv import (
-    CRITICAL, ERROR, WARNING, INFO, DEBUG,
-    )
+    CRITICAL, ERROR, WARNING, INFO, DEBUG)
 
 try:
     import psycopg2
@@ -212,8 +211,8 @@ def run(command, exit_on_error=True, quiet=False):
         log("ERROR: {}".format(p.returncode), ERROR)
         sys.exit(p.returncode)
 
-    raise subprocess.CalledProcessError(
-        p.returncode, command, '\n'.join(lines))
+    raise subprocess.CalledProcessError(p.returncode, command,
+                                        '\n'.join(lines))
 
 
 def postgresql_is_running():
@@ -447,7 +446,7 @@ def create_postgresql_config(config_file):
         open(template_file).read()).render(config_data)
     host.write_file(
         config_file, pg_config,
-        owner="postgres",  group="postgres", perms=0600)
+        owner="postgres", group="postgres", perms=0600)
 
     # Create or update files included from postgresql.conf.
     configure_log_destination(os.path.dirname(config_file))
@@ -963,7 +962,7 @@ def validate_config():
             CRITICAL)
 
     valid_workloads = [
-        'dw',  'oltp', 'web', 'mixed', 'desktop', 'manual', 'auto']
+        'dw', 'oltp', 'web', 'mixed', 'desktop', 'manual', 'auto']
     requested_workload = config_data['performance_tuning'].lower()
     if requested_workload not in valid_workloads:
         valid = False
@@ -2148,9 +2147,10 @@ def publish_hot_standby_credentials():
 
     # Build the set of client relations that both the master and this
     # unit have joined.
-    active_client_relations = set(
-        hookenv.relation_ids('db') + hookenv.relation_ids('db-admin')
-        ).intersection(set(client_relations.split()))
+    possible_client_relations = set(hookenv.relation_ids('db') +
+                                    hookenv.relation_ids('db-admin'))
+    active_client_relations = possible_client_relations.intersection(
+        set(client_relations.split()))
 
     for client_relation in active_client_relations:
         # We need to pull the credentials from the master unit's
@@ -2513,16 +2513,15 @@ def update_nrpe_checks():
     if len(relations) == 1 and 'nagios_hostname' in relations[0]:
         nagios_hostname = relations[0]['nagios_hostname']
         log("update_nrpe_checks: Obtained nagios_hostname ({}) "
-            "from nrpe-external-master relation.".format(
-            nagios_hostname))
+            "from nrpe-external-master relation.".format(nagios_hostname))
     else:
         unit = hookenv.local_unit()
         unit_name = unit.replace('/', '-')
         nagios_hostname = "%s-%s" % (config_data['nagios_context'], unit_name)
-        log("update_nrpe_checks: Deduced nagios_hostname ({}) from charm config "
-            "(nagios_hostname not found in nrpe-external-master relation, or "
-            "wrong number of relations found)".format(
-            nagios_hostname))
+        log("update_nrpe_checks: Deduced nagios_hostname ({}) from charm "
+            "config (nagios_hostname not found in nrpe-external-master "
+            "relation, or wrong number of relations "
+            "found)".format(nagios_hostname))
 
     nrpe_service_file = \
         '/var/lib/nagios/export/service__{}_check_pgsql.cfg'.format(

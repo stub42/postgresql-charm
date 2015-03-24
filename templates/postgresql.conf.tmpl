@@ -41,6 +41,9 @@ ssl = {{ssl}}
 max_connections = {{max_connections}}
 {% endif -%}
 
+# Broken under all versions of Ubuntu, per Bug #1018307
+ssl_renegotiation_limit=0
+
 
 #------------------------------------------------------------------------------
 # RESOURCE USAGE (except WAL)
@@ -58,6 +61,9 @@ work_mem = {{work_mem}}
 {% if maintenance_work_mem != "" -%}
 maintenance_work_mem = {{maintenance_work_mem}}
 {% endif -%}
+{% if max_prepared_transactions != "" -%}
+max_prepared_transactions = {{max_prepared_transactions}}
+{% endif -%}
 
 
 #------------------------------------------------------------------------------
@@ -69,6 +75,9 @@ wal_buffers = {{wal_buffers}}
 {% endif -%}
 {% if checkpoint_segments  != "" -%}
 checkpoint_segments = {{checkpoint_segments}}
+{% endif -%}
+{% if checkpoint_completion_target  != "" -%}
+checkpoint_completion_target = {{checkpoint_completion_target}}
 {% endif -%}
 {% if checkpoint_timeout  != "" -%}
 checkpoint_timeout = {{checkpoint_timeout}}
@@ -96,6 +105,10 @@ effective_cache_size = {{effective_cache_size}}
 {% endif -%}
 {% if default_statistics_target != -1 -%}
 default_statistics_target = {{default_statistics_target}}
+{% endif -%}
+{% if collapse_limit != -1 -%}
+from_collapse_limit = {{collapse_limit}}
+join_collapse_limit = {{collapse_limit}}
 {% endif -%}
 
 
