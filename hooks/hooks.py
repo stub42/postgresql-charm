@@ -561,7 +561,9 @@ def generate_postgresql_hba(
     # every other unit's postgres database and the magic replication
     # database. It also needs to be able to connect to its own postgres
     # database.
-    for relid in hookenv.relation_ids('replication'):
+    relids = (hookenv.relation_ids('replication')
+              + hookenv.relation_ids('replica'))
+    for relid in relids:
         for unit in hookenv.related_units(relid):
             relation = hookenv.relation_get(unit=unit, rid=relid)
             remote_addr = munge_address(relation['private-address'])
@@ -580,7 +582,7 @@ def generate_postgresql_hba(
                            }
             relation_data.append(remote_pgdb)
 
-    # Hooks need permissions too to setup replication.
+    # Local hooks also need permissions to setup replication.
     for relid in hookenv.relation_ids('replication'):
         local_replication = {'database': 'postgres',
                              'user': 'juju_replication',
@@ -2375,6 +2377,8 @@ def slave_count():
     num_slaves = 0
     for relid in hookenv.relation_ids('replication'):
         num_slaves += len(hookenv.related_units(relid))
+    for relid in hookenv.relation_ids('replica'):
+        num_slaves += len(hookenv.related_units(relid))
     return num_slaves
 
 
@@ -2662,6 +2666,13 @@ def stop_postgres_on_data_relation_departed():
                 hookenv.DEBUG)
     postgresql_stop()
 
+
+@hooks.hook()
+def master_relation_joined():
+    # We may need to bump the number of replication connections
+    # (restart), and we will probably need to regenerate pg_hba.conf (reload)
+    config_changed()
+    
 
 def _get_postgresql_config_dir(config_data=None):
     """ Return the directory path of the postgresql configuration files. """
