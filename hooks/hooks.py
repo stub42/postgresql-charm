@@ -2465,9 +2465,7 @@ def write_metrics_cronjob(script_path, cron_path):
     # ensure script installed
     charm_script = os.path.join(charm_dir, 'files', 'metrics',
                                 'postgres_to_statsd.py')
-    host.write_file(
-        script_path,
-        open(charm_script, 'rb').read())
+    host.write_file(script_path, open(charm_script, 'rb').read(), perms=0755)
 
     # write the crontab
     with open(cron_path, 'w') as cronjob:
