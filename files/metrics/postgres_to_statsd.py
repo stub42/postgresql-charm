@@ -41,7 +41,8 @@ STATS = {
             'table': 'pg_stat_user_tables',
             'key': ['schemaname', 'relname'],
             'alias': 'tables',
-            'exclude_columns': ['relid', 'last_vacuum', 'last_autovacuum', 'last_analyze', 'last_autoanalyze'],
+            'exclude_columns': ['relid', 'last_vacuum', 'last_autovacuum',
+                                'last_analyze', 'last_autoanalyze'],
         },
         {
             'table': 'pg_stat_user_indexes',
@@ -86,27 +87,27 @@ STATS = {
            'query': 'select COUNT(*) as connections_waiting from pg_stat_activity where datname=%(dbname)s and waiting=true;',
         },
         {
-           'query': 'select COUNT(*) as connections_active from pg_stat_activity where datname=%(dbname)s and state="active";',
+           'query': "select COUNT(*) as connections_active from pg_stat_activity where datname=%(dbname)s and state='active';",
            'version_required': '9.3',
         },
         {
-           'query': 'select COUNT(*) as connections_idle from pg_stat_activity where datname=%(dbname)s and state="idle";',
+           'query': "select COUNT(*) as connections_idle from pg_stat_activity where datname=%(dbname)s and state='idle';",
            'version_required': '9.3',
         },
         {
-           'query': 'select COUNT(*) as connections_idle_in_transaction from pg_stat_activity where datname=%(dbname)s and state="idle in transaction";',
+           'query': "select COUNT(*) as connections_idle_in_transaction from pg_stat_activity where datname=%(dbname)s and state='idle in transaction';",
            'version_required': '9.3',
         },
         {
-           'query': 'select COUNT(*) as connections_idle_in_transaction_aborted from pg_stat_activity where datname=%(dbname)s and state="idle in transaction (aborted)";',
+           'query': "select COUNT(*) as connections_idle_in_transaction_aborted from pg_stat_activity where datname=%(dbname)s and state='idle in transaction (aborted)';",
            'version_required': '9.3',
         },
         {
-           'query': 'select COUNT(*) as connections_fastpath_function_call from pg_stat_activity where datname=%(dbname)s and state="fastpath function call";',
+           'query': "select COUNT(*) as connections_fastpath_function_call from pg_stat_activity where datname=%(dbname)s and state='fastpath function call';",
            'version_required': '9.3',
         },
         {
-           'query': 'select COUNT(*) as connections_disabled from pg_stat_activity where datname=%(dbname)s and state="disabled";',
+           'query': "select COUNT(*) as connections_disabled from pg_stat_activity where datname=%(dbname)s and state='disabled';",
            'version_required': '9.3',
         },
     ],
