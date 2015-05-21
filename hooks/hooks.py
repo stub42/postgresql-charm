@@ -154,6 +154,9 @@ class State(dict):
         for relid in hookenv.relation_ids('replication'):
             hookenv.relation_set(relid, replication_state)
 
+        for relid in hookenv.relation_ids('master'):
+            hookenv.relation_set(relid, state=self.get('state'))
+
         log('saving local state', DEBUG)
         self.save()
 
@@ -2150,16 +2153,14 @@ def publish_hot_standby_credentials():
     # Build the set of client relations that both the master and this
     # unit have joined.
     possible_client_relations = set(hookenv.relation_ids('db') +
-                                    hookenv.relation_ids('db-admin'))
+                                    hookenv.relation_ids('db-admin') +
+                                    hookenv.relation_ids('master'))
     active_client_relations = possible_client_relations.intersection(
         set(client_relations.split()))
 
     for client_relation in active_client_relations:
         # We need to pull the credentials from the master unit's
-        # end of the client relation. This is problematic as we
-        # have no way of knowing if the master unit has joined
-        # the relation yet. We use the exception handler to detect
-        # this case per Bug #1192803.
+        # end of the client relation.
         log('Hot standby republishing credentials from {} to {}'.format(
             master, client_relation))
 
@@ -2667,12 +2668,54 @@ def stop_postgres_on_data_relation_departed():
     postgresql_stop()
 
 
-@hooks.hook()
-def master_relation_joined():
+@hooks.hook('master-relation-joined', 'master-relation-changed')
+def master_relation_joined_changed():
     # We may need to bump the number of replication connections
     # (restart), and we will probably need to regenerate pg_hba.conf (reload)
     config_changed()
-    
+
+    local_relation = hookenv.relation_get(unit=hookenv.local_unit())
+
+    # Relation settings both master and standbys can set now.
+    allowed_units = local_relation.get('allowed-units', '').split()
+    allowed_units.append(hookenv.remote_unit())
+    hookenv.relation_set(
+        relation_settings={'allowed-units': ' '.join(allowed_units),
+                           'host': hookenv.unit_private_ip(),
+                           'port': get_service_port(),
+                           'version': pg_version()})
+
+    if local_state['state'] == 'hot standby':
+        # Hot standbys cannot create credentials. Publish them from the
+        # master if they are available, or defer until a peer-relation-changed
+        # hook when they are.
+        publish_hot_standby_credentials()
+        return
+
+    # For logical replication, the standby service may request an explicit
+    # database.
+    database = hookenv.relation_get('database')
+    if database:
+        user = hookenv.relation_get('user', unit=hookenv.local_unit())
+        ensure_database(user, user, database)
+        hookenv.relation_set(database=database) # Signal database is ready
+ 
+    user = local_relation.get('user') or user_name(hookenv.relation_id(),
+                                                   hookenv.remote_unit())
+    password = local_relation.get('password') or create_user(user,
+                                                             replication=True)
+
+    # Credentials only the master can set.
+    hookenv.relation_set(user=user, password=password, database=database)
+
+
+@hooks.hook()
+def master_relation_departed():
+    config_changed()
+    allowed_units = hookenv.relation_get('allowed-units', hookenv.local_unit())
+    allowed_units.remove(hookenv.remote_unit())
+    hookenv.relation_set(relation_settings={'allowed-units': allowed_units})
+
 
 def _get_postgresql_config_dir(config_data=None):
     """ Return the directory path of the postgresql configuration files. """
