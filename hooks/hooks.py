@@ -562,7 +562,7 @@ def generate_postgresql_hba(
     # database. It also needs to be able to connect to its own postgres
     # database.
     relids = (hookenv.relation_ids('replication')
-              + hookenv.relation_ids('replica'))
+              + hookenv.relation_ids('master'))
     for relid in relids:
         for unit in hookenv.related_units(relid):
             relation = hookenv.relation_get(unit=unit, rid=relid)
