@@ -417,7 +417,8 @@ def create_postgresql_config(config_file):
         log('{} hot standbys in peer relation.'.format(num_slaves))
         log('Ensuring minimal replication settings')
         config_data['hot_standby'] = True
-        config_data['wal_level'] = 'hot_standby'
+        if config_data['wal_level'] != 'logical':
+            config_data['wal_level'] = 'hot_standby'
         config_data['wal_keep_segments'] = max(
             config_data['wal_keep_segments'],
             config_data['replicated_wal_keep_segments'])
@@ -431,12 +432,14 @@ def create_postgresql_config(config_file):
     # non-streaming replication, or for PITR.
     if config_data.get('swiftwal_log_shipping', None):
         config_data['archive_mode'] = True
-        config_data['wal_level'] = 'hot_standby'
+        if config_data['wal_level'] != 'logical':
+            config_data['wal_level'] = 'hot_standby'
         config_data['archive_command'] = swiftwal_archive_command()
 
     if config_data.get('wal_e_storage_uri', None):
         config_data['archive_mode'] = True
-        config_data['wal_level'] = 'hot_standby'
+        if config_data['wal_level'] != 'logical':
+            config_data['wal_level'] = 'hot_standby'
         config_data['archive_command'] = wal_e_archive_command()
 
     # Send config data to the template
@@ -564,8 +567,7 @@ def generate_postgresql_hba(
     # every other unit's postgres database and the magic replication
     # database. It also needs to be able to connect to its own postgres
     # database.
-    relids = (hookenv.relation_ids('replication')
-              + hookenv.relation_ids('master'))
+    relids = hookenv.relation_ids('replication')
     for relid in relids:
         for unit in hookenv.related_units(relid):
             relation = hookenv.relation_get(unit=unit, rid=relid)
@@ -579,6 +581,32 @@ def generate_postgresql_hba(
             relation_data.append(remote_replication)
             remote_pgdb = {'database': 'postgres',
                            'user': 'juju_replication',
+                           'private-address': remote_addr,
+                           'relation-id': relid,
+                           'unit': unit,
+                           }
+            relation_data.append(remote_pgdb)
+
+    # More replication connections, this time from external services.
+    # Somewhat different than before, as we do not share credentials
+    # and services using 9.4's logical replication feature will want
+    # to specify the database name.
+    relids = hookenv.relation_ids('master')
+    for relid in relids:
+        for unit in hookenv.related_units(relid):
+            remote_rel = hookenv.relation_get(unit=unit, rid=relid)
+            local_rel = hookenv.relation_get(unit=hookenv.local_unit(),
+                                             rid=relid)
+            remote_addr = munge_address(remote_rel['private-address'])
+            remote_replication = {'database': 'replication',
+                                  'user': local_rel['user'],
+                                  'private-address': remote_addr,
+                                  'relation-id': relid,
+                                  'unit': unit,
+                                  }
+            relation_data.append(remote_replication)
+            remote_pgdb = {'database': local_rel['database'],
+                           'user': local_rel['user'],
                            'private-address': remote_addr,
                            'relation-id': relid,
                            'unit': unit,
@@ -2378,7 +2406,7 @@ def slave_count():
     num_slaves = 0
     for relid in hookenv.relation_ids('replication'):
         num_slaves += len(hookenv.related_units(relid))
-    for relid in hookenv.relation_ids('replica'):
+    for relid in hookenv.relation_ids('master'):
         num_slaves += len(hookenv.related_units(relid))
     return num_slaves
 
@@ -2678,7 +2706,8 @@ def master_relation_joined_changed():
 
     # Relation settings both master and standbys can set now.
     allowed_units = local_relation.get('allowed-units', '').split()
-    allowed_units.append(hookenv.remote_unit())
+    if hookenv.remote_unit() not in allowed_units:
+        allowed_units.append(hookenv.remote_unit())
     hookenv.relation_set(
         relation_settings={'allowed-units': ' '.join(allowed_units),
                            'host': hookenv.unit_private_ip(),
@@ -2692,18 +2721,17 @@ def master_relation_joined_changed():
         publish_hot_standby_credentials()
         return
 
-    # For logical replication, the standby service may request an explicit
-    # database.
-    database = hookenv.relation_get('database')
-    if database:
-        user = hookenv.relation_get('user', unit=hookenv.local_unit())
-        ensure_database(user, user, database)
-        hookenv.relation_set(database=database) # Signal database is ready
- 
     user = local_relation.get('user') or user_name(hookenv.relation_id(),
                                                    hookenv.remote_unit())
     password = local_relation.get('password') or create_user(user,
                                                              replication=True)
+
+    # For logical replication, the standby service may request an explicit
+    # database.
+    database = hookenv.relation_get('database')
+    if database:
+        ensure_database(user, user, database)
+        hookenv.relation_set(database=database)  # Signal database is ready
 
     # Credentials only the master can set.
     hookenv.relation_set(user=user, password=password, database=database)
@@ -2712,9 +2740,12 @@ def master_relation_joined_changed():
 @hooks.hook()
 def master_relation_departed():
     config_changed()
-    allowed_units = hookenv.relation_get('allowed-units', hookenv.local_unit())
-    allowed_units.remove(hookenv.remote_unit())
-    hookenv.relation_set(relation_settings={'allowed-units': allowed_units})
+    allowed_units = hookenv.relation_get('allowed-units',
+                                         hookenv.local_unit()).split()
+    if hookenv.remote_unit() in allowed_units:
+        allowed_units.remove(hookenv.remote_unit())
+    hookenv.relation_set(relation_settings={
+        'allowed-units': ' '.join(allowed_units)})
 
 
 def _get_postgresql_config_dir(config_data=None):

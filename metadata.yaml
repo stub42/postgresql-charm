@@ -18,8 +18,10 @@ categories:
 provides:
   db:
     interface: pgsql
+    optional: true
   db-admin:
     interface: pgsql
+    optional: true
   nrpe-external-master:
     interface: nrpe-external-master
     scope: container

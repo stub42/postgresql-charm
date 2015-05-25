@@ -179,13 +179,13 @@ options:
         transactions on a streaming hot standby and allowing the master to
         defer cleanup and avoid query cancelations on the hot standby.
   wal_level:
-    default: minimal
+    default: logical
     type: string
     description: >
-        'minimal', 'archive' or 'hot_standby'. Defines how much information
-        is written to the WAL. Set to 'minimal' for stand alone databases
-        and 'hot_standby' for replicated setups. Overridden by juju when
-        replication is used.
+        'minimal', 'archive', 'hot_standby' or 'logical'. Defines how much
+        information is written to the WAL. Set to 'minimal' for stand alone
+        databases and 'hot_standby' for replicated setups. Overridden by
+        juju when replication is used.
   max_wal_senders:
     default: 0
     type: int
