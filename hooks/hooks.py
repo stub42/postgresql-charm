@@ -605,13 +605,14 @@ def generate_postgresql_hba(
                                   'unit': unit,
                                   }
             relation_data.append(remote_replication)
-            remote_pgdb = {'database': local_rel['database'],
-                           'user': local_rel['user'],
-                           'private-address': remote_addr,
-                           'relation-id': relid,
-                           'unit': unit,
-                           }
-            relation_data.append(remote_pgdb)
+            if 'database' in local_rel:
+                remote_pgdb = {'database': local_rel['database'],
+                            'user': local_rel['user'],
+                            'private-address': remote_addr,
+                            'relation-id': relid,
+                            'unit': unit,
+                            }
+                relation_data.append(remote_pgdb)
 
     # Local hooks also need permissions to setup replication.
     for relid in hookenv.relation_ids('replication'):
@@ -2485,7 +2486,7 @@ def write_metrics_cronjob(script_path, cron_path):
             or not metrics_sample_interval):
         log("Required config not found or invalid "
             "(metrics_target, metrics_sample_interval), "
-            "disabling metrics", WARNING)
+            "disabling statsd metrics", DEBUG)
         delete_metrics_cronjob(cron_path)
         return
 
@@ -2698,10 +2699,6 @@ def stop_postgres_on_data_relation_departed():
 
 @hooks.hook('master-relation-joined', 'master-relation-changed')
 def master_relation_joined_changed():
-    # We may need to bump the number of replication connections
-    # (restart), and we will probably need to regenerate pg_hba.conf (reload)
-    config_changed()
-
     local_relation = hookenv.relation_get(unit=hookenv.local_unit())
 
     # Relation settings both master and standbys can set now.
@@ -2712,6 +2709,7 @@ def master_relation_joined_changed():
         relation_settings={'allowed-units': ' '.join(allowed_units),
                            'host': hookenv.unit_private_ip(),
                            'port': get_service_port(),
+                           'state': local_state['state'],
                            'version': pg_version()})
 
     if local_state['state'] == 'hot standby':
@@ -2724,6 +2722,7 @@ def master_relation_joined_changed():
     user = local_relation.get('user') or user_name(hookenv.relation_id(),
                                                    hookenv.remote_unit())
     password = local_relation.get('password') or create_user(user,
+                                                             admin=True,
                                                              replication=True)
 
     # For logical replication, the standby service may request an explicit
@@ -2735,6 +2734,11 @@ def master_relation_joined_changed():
 
     # Credentials only the master can set.
     hookenv.relation_set(user=user, password=password, database=database)
+
+    # We may need to bump the number of replication connections and
+    # restart, and we will certainly need to regenerate pg_hba.conf
+    # and reload.
+    config_changed()
 
 
 @hooks.hook()
