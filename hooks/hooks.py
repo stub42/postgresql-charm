@@ -2702,9 +2702,7 @@ def master_relation_joined_changed():
     local_relation = hookenv.relation_get(unit=hookenv.local_unit())
 
     # Relation settings both master and standbys can set now.
-    allowed_units = local_relation.get('allowed-units', '').split()
-    if hookenv.remote_unit() not in allowed_units:
-        allowed_units.append(hookenv.remote_unit())
+    allowed_units = sorted(hookenv.related_units())  # Bug #1458754
     hookenv.relation_set(
         relation_settings={'allowed-units': ' '.join(allowed_units),
                            'host': hookenv.unit_private_ip(),
@@ -2717,6 +2715,7 @@ def master_relation_joined_changed():
         # master if they are available, or defer until a peer-relation-changed
         # hook when they are.
         publish_hot_standby_credentials()
+        config_changed()
         return
 
     user = local_relation.get('user') or user_name(hookenv.relation_id(),
@@ -2724,6 +2723,7 @@ def master_relation_joined_changed():
     password = local_relation.get('password') or create_user(user,
                                                              admin=True,
                                                              replication=True)
+    hookenv.relation_set(user=user, password=password)
 
     # For logical replication, the standby service may request an explicit
     # database.
@@ -2732,13 +2732,10 @@ def master_relation_joined_changed():
         ensure_database(user, user, database)
         hookenv.relation_set(database=database)  # Signal database is ready
 
-    # Credentials only the master can set.
-    hookenv.relation_set(user=user, password=password, database=database)
-
     # We may need to bump the number of replication connections and
     # restart, and we will certainly need to regenerate pg_hba.conf
     # and reload.
-    config_changed()
+    config_changed()  # Must be called after db & user are created.
 
 
 @hooks.hook()
