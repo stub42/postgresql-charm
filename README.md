@@ -165,8 +165,10 @@ and recreated after the PITR recovery.
   the relation (ie. `relation-get database` returns the value you set).
 - `roles`: Optional. A comma separated list of database roles to grant the
   database user. Typically these roles will have been granted permissions to
-access the tables and other database objects.  Do not grant permissions
-directly to juju generated database users, as the charm may revoke them.
+  access the tables and other database objects.  Do not grant permissions
+  directly to juju generated database users, as the charm may revoke them.
+- `extensions`: Optional. A comma separated list of required postgresql
+  extensions.
 
 ## During db-relation-changed
 
