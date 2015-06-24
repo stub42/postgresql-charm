@@ -23,56 +23,51 @@ from charmhelpers.core.host import mkdir
 
 import six
 if six.PY3:
-    raise ImportError('bzrlib does not support Python3')
+    raise ImportError('GitPython does not support Python 3')
 
 try:
-    from bzrlib.branch import Branch
-    from bzrlib import bzrdir, workingtree, errors
+    from git import Repo
 except ImportError:
     from charmhelpers.fetch import apt_install
-    apt_install("python-bzrlib")
-    from bzrlib.branch import Branch
-    from bzrlib import bzrdir, workingtree, errors
+    apt_install("python-git")
+    from git import Repo
+
+from git.exc import GitCommandError  # noqa E402
 
 
-class BzrUrlFetchHandler(BaseFetchHandler):
-    """Handler for bazaar branches via generic and lp URLs"""
+class GitUrlFetchHandler(BaseFetchHandler):
+    """Handler for git branches via generic and github URLs"""
     def can_handle(self, source):
         url_parts = self.parse_url(source)
-        if url_parts.scheme not in ('bzr+ssh', 'lp'):
+        # TODO (mattyw) no support for ssh git@ yet
+        if url_parts.scheme not in ('http', 'https', 'git'):
             return False
         else:
             return True
 
-    def branch(self, source, dest):
-        url_parts = self.parse_url(source)
-        # If we use lp:branchname scheme we need to load plugins
+    def clone(self, source, dest, branch, depth=None):
         if not self.can_handle(source):
             raise UnhandledSource("Cannot handle {}".format(source))
-        if url_parts.scheme == "lp":
-            from bzrlib.plugin import load_plugins
-            load_plugins()
-        try:
-            local_branch = bzrdir.BzrDir.create_branch_convenience(dest)
-        except errors.AlreadyControlDirError:
-            local_branch = Branch.open(dest)
-        try:
-            remote_branch = Branch.open(source)
-            remote_branch.push(local_branch)
-            tree = workingtree.WorkingTree.open(dest)
-            tree.update()
-        except Exception as e:
-            raise e
 
-    def install(self, source):
+        if depth:
+            Repo.clone_from(source, dest, branch=branch, depth=depth)
+        else:
+            Repo.clone_from(source, dest, branch=branch)
+
+    def install(self, source, branch="master", dest=None, depth=None):
         url_parts = self.parse_url(source)
         branch_name = url_parts.path.strip("/").split("/")[-1]
-        dest_dir = os.path.join(os.environ.get('CHARM_DIR'), "fetched",
-                                branch_name)
+        if dest:
+            dest_dir = os.path.join(dest, branch_name)
+        else:
+            dest_dir = os.path.join(os.environ.get('CHARM_DIR'), "fetched",
+                                    branch_name)
         if not os.path.exists(dest_dir):
             mkdir(dest_dir, perms=0o755)
         try:
-            self.branch(source, dest_dir)
+            self.clone(source, dest_dir, branch, depth)
+        except GitCommandError as e:
+            raise UnhandledSource(e.message)
         except OSError as e:
             raise UnhandledSource(e.strerror)
         return dest_dir
