@@ -7,7 +7,7 @@ import cPickle as pickle
 from distutils.version import StrictVersion
 import glob
 from grp import getgrnam
-import os.path
+import os
 from pwd import getpwnam
 import re
 import shutil
@@ -121,7 +121,11 @@ class State(dict):
         '''Store state to local disk.'''
         state = {}
         state.update(self)
-        pickle.dump(state, open(self._state_file, 'wb'))
+        old_mask = os.umask(0o077)  # This file contains database passwords!
+        try:
+            pickle.dump(state, open(self._state_file, 'wb'))
+        finally:
+            os.umask(old_mask)
 
     def publish(self):
         """Publish relevant unit state to relations"""
@@ -1529,6 +1533,26 @@ def ensure_database(user, schema_user, database):
                         AsIs(quote_identifier(user)))
 
 
+def ensure_extensions(extensions, database):
+    cur = db_cursor(db=database, autocommit=True)
+    cur.execute('SELECT extname FROM pg_extension')
+    installed_extensions = frozenset(x[0] for x in cur.fetchall())
+    log("ensure_extensions({}), have {}"
+          .format(extensions, installed_extensions),
+        DEBUG)
+    extensions_set = frozenset(extensions)
+    extensions_to_drop = installed_extensions.difference(extensions_set)
+    for ext in extensions_to_drop:
+        if ext != 'plpgsql':
+            log("dropping extension {}".format(ext), DEBUG)
+            cur.execute('DROP EXTENSION %s', (AsIs(quote_identifier(ext)),))
+    extensions_to_create = extensions_set.difference(installed_extensions)
+    for ext in extensions_to_create:
+        log("creating extension {}".format(ext), DEBUG)
+        cur.execute('CREATE EXTENSION %s', (AsIs(quote_identifier(ext)),))
+    cur.close()
+
+
 def snapshot_relations():
     '''Snapshot our relation information into local state.
 
@@ -1615,6 +1639,9 @@ def db_relation_joined_changed():
 
     roles = filter(None, (hookenv.relation_get('roles') or '').split(","))
 
+    extensions = filter(None,
+                        (hookenv.relation_get('extensions') or '').split(","))
+
     log('{} unit publishing credentials'.format(local_state['state']))
 
     password = create_user(user)
@@ -1622,6 +1649,7 @@ def db_relation_joined_changed():
     schema_user = "{}_schema".format(user)
     schema_password = create_user(schema_user)
     ensure_database(user, schema_user, database)
+    ensure_extensions(extensions, database)
     host = hookenv.unit_private_ip()
     port = get_service_port()
     state = local_state['state']  # master, hot standby, standalone
