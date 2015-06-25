@@ -1538,7 +1538,7 @@ def ensure_extensions(extensions, database):
     cur.execute('SELECT extname FROM pg_extension')
     installed_extensions = frozenset(x[0] for x in cur.fetchall())
     log("ensure_extensions({}), have {}"
-          .format(extensions, installed_extensions),
+        .format(extensions, installed_extensions),
         DEBUG)
     extensions_set = frozenset(extensions)
     extensions_to_drop = installed_extensions.difference(extensions_set)
