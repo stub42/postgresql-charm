@@ -1,5 +1,6 @@
 destination: hooks/charmhelpers
-branch: lp:charm-helpers
+branch: lp:~stub/charm-helpers/integration
 include:
+    - coordinator
     - core
     - fetch
