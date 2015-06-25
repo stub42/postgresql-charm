@@ -1,2 +1,4 @@
-replication:
-    description: An example.
+replication-pause:
+    description: Pause replication replay on a hot standby unit.
+replication-resume:
+    description: Resume replication replay on a hot standby unit.
