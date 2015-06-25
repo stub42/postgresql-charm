@@ -18,8 +18,10 @@ categories:
 provides:
   db:
     interface: pgsql
+    optional: true
   db-admin:
     interface: pgsql
+    optional: true
   nrpe-external-master:
     interface: nrpe-external-master
     scope: container
@@ -27,6 +29,14 @@ provides:
     interface: block-storage
     scope: container
     optional: true
+  master:
+    interface: pgreplication
+    optional: true
+  # We do not yet support slaving a PostgreSQL service to another
+  # PostgreSQL service.
+  # replica:
+  #   interface: pgreplication
+  #   optional: true
 requires:
   persistent-storage:
     interface: directory-path
@@ -34,4 +44,4 @@ requires:
     interface: syslog
 peers:
   replication:
-    interface: pgreplication
+    interface: pgpeer
