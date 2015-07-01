@@ -1014,8 +1014,7 @@ def validate_config():
         'locale', 'encoding', 'version', 'cluster_name', 'pgdg']
 
     for name in unchangeable_config:
-        if (name in local_state
-                and local_state[name] != config_data.get(name, None)):
+        if config_data._prev_dict is not None and config_data.changed(name):
             valid = False
             log("Cannot change {!r} setting after install.".format(name))
         local_state[name] = config_data.get(name, None)
