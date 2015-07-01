@@ -973,62 +973,6 @@ def run_select_as_postgres(sql, *parameters):
     return (cur.rowcount, results)
 
 
-def validate_config():
-    """
-    Sanity check charm configuration, aborting the script if
-    we have bogus config values or config changes the charm does not yet
-    (or cannot) support.
-    """
-    valid = True
-    config_data = hookenv.config()
-
-    version = config_data.get('version', None)
-    if version:
-        if version not in ('9.1', '9.2', '9.3', '9.4'):
-            valid = False
-            log("Invalid or unsupported version {!r} requested".format(
-                version), CRITICAL)
-
-    if config_data['cluster_name'] != 'main':
-        valid = False
-        log("Cluster names other than 'main' do not work per LP:1271835",
-            CRITICAL)
-
-    if config_data['listen_ip'] != '*':
-        valid = False
-        log("listen_ip values other than '*' do not work per LP:1271837",
-            CRITICAL)
-
-    valid_workloads = [
-        'dw', 'oltp', 'web', 'mixed', 'desktop', 'manual', 'auto']
-    requested_workload = config_data['performance_tuning'].lower()
-    if requested_workload not in valid_workloads:
-        valid = False
-        log('Invalid performance_tuning setting {}'.format(requested_workload),
-            CRITICAL)
-    if requested_workload == 'auto':
-        log("'auto' performance_tuning deprecated. Using 'mixed' tuning",
-            WARNING)
-
-    unchangeable_config = [
-        'locale', 'encoding', 'version', 'cluster_name', 'pgdg']
-
-    for name in unchangeable_config:
-        if config_data._prev_dict is not None and config_data.changed(name):
-            valid = False
-            log("Cannot change {!r} setting after install.".format(name))
-        local_state[name] = config_data.get(name, None)
-    local_state.save()
-
-    package_status = config_data['package_status']
-    if package_status not in ['install', 'hold']:
-        valid = False
-        log("package_status must be 'install' or 'hold' not '{}'"
-            "".format(package_status), CRITICAL)
-
-    if not valid:
-        sys.exit(99)
-
 
 def ensure_package_status(package, status):
     selections = ''.join(['{} {}\n'.format(package, status)])

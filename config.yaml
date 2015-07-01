@@ -25,29 +25,26 @@ options:
   extra-packages:
     default: ""
     type: string
-    description: Extra packages to install on the postgresql service units.
+    description: DEPRECATED. Use extra_packages.
+  extra_packages:
+    default: ""
+    type: string
+    description: >
+        Space separated list of extra packages to install.
   dumpfile_location:
     default: "None"
     type: string
     description: >
         Path to a dumpfile to load into DB when service is initiated.
   version:
-    default: null
+    default: ""
     type: string
     description: >
         Version of PostgreSQL that we want to install. Supported versions
-        are "9.1", "9.2", "9.3". The default version for the deployed Ubuntu
-        release is used when the version is not specified.
-  cluster_name:
-    default: "main"
-    type: string
-    description: Name of the cluster we want to install the DBs into
-  listen_ip:
-    default: "*"
-    type: string
-    description: IP to listen on
+        are "9.1", "9.2", "9.3" & "9.4". The default version for the
+        deployed Ubuntu release is used when the version is not specified.
   listen_port:
-    default: null
+    default: -1
     type: int
     description: Port to listen on. Default is automatically assigned.
   max_connections:
@@ -363,8 +360,8 @@ options:
         still advertise the unit as standalone, master or hot standby to
         relations based on whether the system is in recovery mode or not.
         Note that this option makes it possible to create a PostgreSQL
-        service with multiple master units, which is probably a very silly
-        thing to do.
+        service with multiple master units, which is a very silly thing
+        to do unless you are also using multi-master software like BDR.
   backup_dir:
     default: "/var/lib/postgresql/backups"
     type: string
@@ -416,11 +413,6 @@ options:
         charmhelpers standard. YAML format.
     type: string
     default: null
-  extra_archives:
-    default: ""
-    type: string
-    description: >
-        DEPRECATED & IGNORED. Use install_sources and install_keys. 
   advisory_lock_restart_key:
     default: 765
     type: int
@@ -428,40 +420,6 @@ options:
         An advisory lock key used internally by the charm. You do not need
         to change it unless it happens to conflict with an advisory lock key
         being used by your applications.
-  # Swift backups and PITR via SwiftWAL
-  swiftwal_container_prefix:
-    type: string
-    default: null
-    description: >
-      EXPERIMENTAL.
-      Swift container prefix for SwiftWAL to use. Must be set if any
-      SwiftWAL features are enabled. This will become a simple
-      swiftwal_container config item when proper leader election is
-      implemented in juju.
-  swiftwal_backup_schedule:
-    type: string
-    default: null
-    description: >
-      EXPERIMENTAL.
-      Cron-formatted schedule for SwiftWAL database backups.
-  swiftwal_backup_retention:
-    type: int
-    default: 2
-    description: >
-      EXPERIMENTAL.
-      Number of recent base backups to retain. You need enough space in
-      Swift for this many backups plus one more, as an old backup will only
-      be removed after a new one has been successfully made to replace it.
-  swiftwal_log_shipping:
-    type: boolean
-    default: false
-    description: >
-      EXPERIMENTAL.
-      Archive WAL files into Swift. If swiftwal_backup_schedule is set,
-      allows point-in-time recovery and WAL files are removed
-      automatically with old backups. If swiftwal_backup_schedule is not set
-      then WAL files are never removed. Enabling this option will override
-      the archive_mode and archive_command settings.
   wal_e_storage_uri:
     type: string
     default: null
