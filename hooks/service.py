@@ -13,13 +13,18 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import os.path
+import shutil
+import subprocess
 
 from charmhelpers.core import hookenv
-from charmhelpers.core.hookenv import DEBUG, CRITICAL
+from charmhelpers.core.hookenv import DEBUG
+from charmhelpers import fetch
 from charmhelpers.payload import execd
 
 from decorators import data_ready_action, requirement
 import helpers
+import postgresql
 
 
 @requirement
@@ -128,15 +133,44 @@ def install_packages():
     if config.changed('extra-packages') or config.changed('extra_packages'):
         packages.update(helpers.extra_packages())
 
+    if config.changed('wal_e_storage_uri'):
+        packages.add('wal-e')
+        packages.add('daemontools')
+
+    if (config['performance_tuning'].lower() != 'manual'
+            and shutil.which('pgtune') is None):
+        packages.add('pgtune')
+
     if packages:
+        # Add any new packages to the set of all packages this charm
+        # has installed. These are the packages that ensure_package_status
+        # will hold or release.
+        all_installed_packages = set(config.get('all_installed_packages', []))
+        all_installed_packages.update(packages)
+        config['all_installed_packages'] = sorted(all_installed_packages)
+
         filtered_packages = fetch.filter_installed_packages(packages)
         helpers.status_set(hookenv.status_get(),
                            'Installing packages {!r}'
                            .format(filtered_packages))
         try:
             fetch.apt_install(filtered_packages, fatal=True)
+
         except subprocess.CalledProcessError:
             helpers.status_set('blocked',
                                'Unable to install packages {!r}'
                                .format(filtered_packages))
             raise SystemExit(0)
+
+
+@data_ready_action
+def ensure_package_status():
+    config = hookenv.config()
+    packages = config.get('all_installed_packages', [])
+    status = config['package_status']
+    if status == 'hold':
+        hookenv.log('Holding {!r}'.format(packages), DEBUG)
+        fetch.apt_hold(packages, fatal=True)
+    else:
+        hookenv.log('Unholding {!r}'.format(packages), DEBUG)
+        fetch.apt_unhold(packages, fatal=True)

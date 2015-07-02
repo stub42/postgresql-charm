@@ -16,14 +16,13 @@
 from functools import wraps
 
 from charmhelpers.core import hookenv
-from charmhelpers.core.hookenv import CRITICAL
 
 import helpers
 
 
 def data_ready_action(func):
     '''Decorate func to be used as a data_ready item.
-    
+
     Log and call func, stripping the unused servicename argument.
     '''
     @wraps(func)
@@ -54,5 +53,7 @@ class requirement:
             hookenv.log('** Requirement {} passed'.format(name))
             return True
         else:
-            block('Requirement {} failed'.format(name))
+            if hookenv.status_get() != 'blocked':
+                helpers.status_set('blocked',
+                                   'Requirement {} failed'.format(name))
             return False

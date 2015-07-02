@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os.path
+import re
 
 import psycopg2
 
@@ -38,7 +39,7 @@ def version():
 
 
 def con():
-    return psycopg2.connect(user=get_username(hookenv.local_unit()),
+    return psycopg2.connect(user=username(hookenv.local_unit()),
                             database='postgres',
                             port=port())
 
@@ -75,7 +76,7 @@ def recovery_conf_path():
 
 def is_in_recovery():
     '''True if the local cluster is in recovery.
-   
+
     The unit may be a hot standby, or it may be a primary that is still
     starting up.
     '''

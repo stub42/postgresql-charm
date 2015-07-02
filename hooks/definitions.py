@@ -17,20 +17,21 @@
 from charmhelpers.core import hookenv
 from charmhelpers.core import services
 
+import relations
+import service
+
 
 def get_service_definitions():
     config = hookenv.config()
     return [
         dict(service='postgresql',
-             required_data=[service.valid_config,
-                            relations.StorageRelation(),
-                            relations.PeerRelation()],
-             provided_data=[relations.StorageRelation(),
-                            relations.DbRelation(),
+             required_data=[service.valid_config],
+             provided_data=[relations.DbRelation(),
                             relations.DbAdminRelation()],
              data_ready=[service.preinstall,
                          service.configure_sources,
-                         service.install_packages],
+                         service.install_packages,
+                         service.ensure_pacakge_status],
              ports=[config['listen_port']],
              start=[services.open_ports],
              stop=[service.stop_postgresql, services.close_ports])]
