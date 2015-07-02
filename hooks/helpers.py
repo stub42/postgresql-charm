@@ -17,6 +17,8 @@
 from charmhelpers.core import hookenv, host
 from charmhelpers.core.hookenv import INFO, CRITICAL
 
+from coordinator import coordinator
+
 
 def status_set(status, msg):
     '''Set the unit status message, and log the change too.'''
@@ -39,3 +41,9 @@ def extra_packages():
     config = hookenv.config()
     return set(config['extra-packages'].split()
                + config['extra_packages'].split())
+
+
+def peers():
+    '''Return the set of peers, not including the local unit.'''
+    if coordinator.relid is not None:
+        return set(hookenv.related_units(coordinator.relid))

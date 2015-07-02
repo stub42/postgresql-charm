@@ -44,9 +44,14 @@ def con():
                             port=port())
 
 
-def username(unit):
-    '''Return the username to use for connections from the given unit.'''
-    return 'juju_{}'.format(unit.split('/', 1)[0])
+def username(unit_or_service, superuser=False):
+    '''Return the username to use for connections from the unit or service.'''
+    servicename = unit_or_service.split('/', 1)[0]
+    if superuser:
+        username = 'juju_{}_admin'.format(servicename)
+    else:
+        username = 'juju_{}'.format(servicename)
+    return username
 
 
 def port():
@@ -89,11 +94,30 @@ def is_primary():
     '''True if the unit is a primary.
 
     It may be possible for there to be multiple primaries in the service,
-    or none at all.
+    or none at all. Primaries are writable replicas, and will include the
+    master.
     '''
     return not is_secondary()
 
 
 def is_secondary():
-    '''True if the unit is a hot standby.'''
+    '''True if the unit is a hot standby.
+
+    Hot standbys are read only replicas.
+    '''
     return is_in_recovery() and os.path.exists(recovery_conf_path())
+
+
+def is_master():
+    '''True if the unit is the master.
+
+    The master unit is responsible for creating objects in the database,
+    and must be a primary.
+    '''
+    return (hookenv.leader_get('master') == hookenv.local_unit()
+            and is_primary())
+
+
+def master():
+    '''Return the master unit.'''
+    return hookenv.leader_get('master')
