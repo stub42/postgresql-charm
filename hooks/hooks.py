@@ -611,10 +611,11 @@ def generate_postgresql_hba(
             relation_data.append(remote_replication)
             if 'database' in local_rel:
                 remote_pgdb = {'database': local_rel['database'],
-                               'user': local_rel['user'],
-                               'private-address': remote_addr,
-                               'relation-id': relid,
-                               'unit': unit}
+                            'user': local_rel['user'],
+                            'private-address': remote_addr,
+                            'relation-id': relid,
+                            'unit': unit,
+                            }
                 relation_data.append(remote_pgdb)
 
     # Local hooks also need permissions to setup replication.
@@ -970,6 +971,63 @@ def run_select_as_postgres(sql, *parameters):
     # NB. Need to suck in the results before the rowcount is valid.
     results = cur.fetchall()
     return (cur.rowcount, results)
+
+
+def validate_config():
+    """
+    Sanity check charm configuration, aborting the script if
+    we have bogus config values or config changes the charm does not yet
+    (or cannot) support.
+    """
+    valid = True
+    config_data = hookenv.config()
+
+    version = config_data.get('version', None)
+    if version:
+        if version not in ('9.1', '9.2', '9.3', '9.4'):
+            valid = False
+            log("Invalid or unsupported version {!r} requested".format(
+                version), CRITICAL)
+
+    if config_data['cluster_name'] != 'main':
+        valid = False
+        log("Cluster names other than 'main' do not work per LP:1271835",
+            CRITICAL)
+
+    if config_data['listen_ip'] != '*':
+        valid = False
+        log("listen_ip values other than '*' do not work per LP:1271837",
+            CRITICAL)
+
+    valid_workloads = [
+        'dw', 'oltp', 'web', 'mixed', 'desktop', 'manual', 'auto']
+    requested_workload = config_data['performance_tuning'].lower()
+    if requested_workload not in valid_workloads:
+        valid = False
+        log('Invalid performance_tuning setting {}'.format(requested_workload),
+            CRITICAL)
+    if requested_workload == 'auto':
+        log("'auto' performance_tuning deprecated. Using 'mixed' tuning",
+            WARNING)
+
+    unchangeable_config = [
+        'locale', 'encoding', 'version', 'cluster_name', 'pgdg']
+
+    for name in unchangeable_config:
+        if config_data._prev_dict is not None and config_data.changed(name):
+            valid = False
+            log("Cannot change {!r} setting after install.".format(name))
+        local_state[name] = config_data.get(name, None)
+    local_state.save()
+
+    package_status = config_data['package_status']
+    if package_status not in ['install', 'hold']:
+        valid = False
+        log("package_status must be 'install' or 'hold' not '{}'"
+            "".format(package_status), CRITICAL)
+
+    if not valid:
+        sys.exit(99)
 
 
 def ensure_package_status(package, status):
@@ -1509,22 +1567,23 @@ def ensure_database(user, schema_user, database):
 
 
 def ensure_extensions(extensions, database):
-    cur = db_cursor(db=database, autocommit=True)
-    cur.execute('SELECT extname FROM pg_extension')
-    installed_extensions = frozenset(x[0] for x in cur.fetchall())
-    log("ensure_extensions({}), have {}"
-        .format(extensions, installed_extensions), DEBUG)
-    extensions_set = frozenset(extensions)
-    extensions_to_drop = installed_extensions.difference(extensions_set)
-    for ext in extensions_to_drop:
-        if ext != 'plpgsql':
-            log("dropping extension {}".format(ext), DEBUG)
-            cur.execute('DROP EXTENSION %s', (AsIs(quote_identifier(ext)),))
-    extensions_to_create = extensions_set.difference(installed_extensions)
-    for ext in extensions_to_create:
-        log("creating extension {}".format(ext), DEBUG)
-        cur.execute('CREATE EXTENSION %s', (AsIs(quote_identifier(ext)),))
-    cur.close()
+    if extensions:
+        cur = db_cursor(db=database, autocommit=True)
+        try:
+            cur.execute('SELECT extname FROM pg_extension')
+            installed_extensions = frozenset(x[0] for x in cur.fetchall())
+            log("ensure_extensions({}), have {}"
+                .format(extensions, installed_extensions),
+                DEBUG)
+            extensions_set = frozenset(extensions)
+            extensions_to_create = \
+                extensions_set.difference(installed_extensions)
+            for ext in extensions_to_create:
+                log("creating extension {}".format(ext), DEBUG)
+                cur.execute('CREATE EXTENSION %s',
+                            (AsIs(quote_identifier(ext)),))
+        finally:
+            cur.close()
 
 
 def snapshot_relations():
@@ -1743,6 +1802,110 @@ def db_admin_relation_broken():
 
     # Cleanup our local state.
     snapshot_relations()
+
+
+def update_repos_and_packages():
+    need_upgrade = False
+
+    version = pg_version()
+
+    # Add the PGDG APT repository if it is enabled. Setting this boolean
+    # is simpler than requiring the magic URL and key be added to
+    # install_sources and install_keys. In addition, per Bug #1271148,
+    # install_keys is likely a security hole for this sort of remote
+    # archive. Instead, we keep a copy of the signing key in the charm
+    # and can add it securely.
+    pgdg_list = '/etc/apt/sources.list.d/pgdg_{}.list'.format(
+        sanitize(hookenv.local_unit()))
+    pgdg_key = 'ACCC4CF8'
+
+    if hookenv.config('pgdg'):
+        if not os.path.exists(pgdg_list):
+            # We need to upgrade, as if we have Ubuntu main packages
+            # installed they may be incompatible with the PGDG ones.
+            # This is unlikely to ever happen outside of the test suite,
+            # and never if you don't reuse machines.
+            need_upgrade = True
+            run("apt-key add lib/{}.asc".format(pgdg_key))
+            open(pgdg_list, 'w').write('deb {} {}-pgdg main'.format(
+                'http://apt.postgresql.org/pub/repos/apt/', distro_codename()))
+        if version == '9.4':
+            pgdg_94_list = '/etc/apt/sources.list.d/pgdg_94_{}.list'.format(
+                sanitize(hookenv.local_unit()))
+            if not os.path.exists(pgdg_94_list):
+                need_upgrade = True
+                open(pgdg_94_list, 'w').write(
+                    'deb {} {}-pgdg main 9.4'.format(
+                        'http://apt.postgresql.org/pub/repos/apt/',
+                        distro_codename()))
+
+    elif os.path.exists(pgdg_list):
+        log(
+            "PGDG apt source not requested, but already in place in this "
+            "container", WARNING)
+        # We can't just remove a source, as we may have packages
+        # installed that conflict with ones from the other configured
+        # sources. In particular, if we have postgresql-common installed
+        # from the PGDG Apt source, PostgreSQL packages from Ubuntu main
+        # will fail to install.
+        # os.unlink(pgdg_list)
+
+    # Try to optimize our calls to fetch.configure_sources(), as it
+    # cannot do this itself due to lack of state.
+    if (need_upgrade
+        or local_state.get('install_sources', None)
+            != hookenv.config('install_sources')
+        or local_state.get('install_keys', None)
+            != hookenv.config('install_keys')):
+        # Support the standard mechanism implemented by charm-helpers. Pulls
+        # from the default 'install_sources' and 'install_keys' config
+        # options. This also does 'apt-get update', pulling in the PGDG data
+        # if we just configured it.
+        fetch.configure_sources(True)
+        local_state['install_sources'] = hookenv.config('install_sources')
+        local_state['install_keys'] = hookenv.config('install_keys')
+        local_state.save()
+
+    # Ensure that the desired database locale is possible.
+    if hookenv.config('locale') != 'C':
+        run(["locale-gen", "{}.{}".format(
+            hookenv.config('locale'), hookenv.config('encoding'))])
+
+    if need_upgrade:
+        run("apt-get -y upgrade")
+
+    # It might have been better for debversion and plpython to only get
+    # installed if they were listed in the extra-packages config item,
+    # but they predate this feature.
+    packages = ["python-psutil",  # to obtain system RAM from python
+                "libc-bin",       # for getconf
+                "postgresql-{}".format(version),
+                "postgresql-contrib-{}".format(version),
+                "postgresql-plpython-{}".format(version),
+                "python-jinja2", "python-psycopg2"]
+
+    # PGDG currently doesn't have debversion for 9.3 & 9.4. Put this back
+    # when it does.
+    if not (hookenv.config('pgdg') and version in ('9.3', '9.4')):
+        packages.append("postgresql-{}-debversion".format(version))
+
+    if hookenv.config('performance_tuning').lower() != 'manual':
+        packages.append('pgtune')
+
+    if hookenv.config('swiftwal_container_prefix'):
+        packages.append('swiftwal')
+
+    if hookenv.config('wal_e_storage_uri'):
+        packages.extend(['wal-e', 'daemontools'])
+
+    packages.extend((hookenv.config('extra-packages') or '').split())
+    packages = fetch.filter_installed_packages(packages)
+    # Set package state for main postgresql package if installed
+    if 'postgresql-{}'.format(version) not in packages:
+        ensure_package_status('postgresql-{}'.format(version),
+                              hookenv.config('package_status'))
+    fetch.apt_update(fatal=True)
+    fetch.apt_install(packages, fatal=True)
 
 
 @contextmanager
