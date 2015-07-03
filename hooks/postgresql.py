@@ -18,8 +18,10 @@ import os.path
 import re
 
 import psycopg2
+from psycopg2.extensions import AsIs
 
 from charmhelpers.core import hookenv
+from charmhelpers.core.hookenv import DEBUG
 
 import helpers
 
@@ -38,10 +40,9 @@ def version():
     return version_map[helpers.distro_codename()]
 
 
-def con():
+def connect(database='postgres'):
     return psycopg2.connect(user=username(hookenv.local_unit()),
-                            database='postgres',
-                            port=port())
+                            database=database, port=port())
 
 
 def username(unit_or_service, superuser=False):
@@ -85,7 +86,7 @@ def is_in_recovery():
     The unit may be a hot standby, or it may be a primary that is still
     starting up.
     '''
-    cur = con().cursor()
+    cur = connect().cursor()
     cur.execute('SELECT pg_is_in_recovery()')
     return cur.fetchone()[0]
 
@@ -112,12 +113,180 @@ def is_master():
     '''True if the unit is the master.
 
     The master unit is responsible for creating objects in the database,
-    and must be a primary.
+    and must be a primary. The service has at most one master, and may
+    have no master during transitional states like failover.
     '''
     return (hookenv.leader_get('master') == hookenv.local_unit()
             and is_primary())
 
 
 def master():
-    '''Return the master unit.'''
+    '''Return the master unit.
+
+    May return None if there we are in a transitional state and there
+    is currently no master.
+    '''
     return hookenv.leader_get('master')
+
+
+def quote_identifier(identifier):
+    r'''Quote an identifier, such as a table or role name.
+
+    In SQL, identifiers are quoted using " rather than ' (which is reserved
+    for strings).
+
+    >>> print(quote_identifier('hello'))
+    "hello"
+
+    Quotes and Unicode are handled if you make use of them in your
+    identifiers.
+
+    >>> print(quote_identifier("'"))
+    "'"
+    >>> print(quote_identifier('"'))
+    """"
+    >>> print(quote_identifier("\\"))
+    "\"
+    >>> print(quote_identifier('\\"'))
+    "\"""
+    >>> print(quote_identifier('\\ aargh \u0441\u043b\u043e\u043d'))
+    U&"\\ aargh \0441\043b\043e\043d"
+    '''
+    try:
+        return '"%s"' % identifier.encode('US-ASCII').replace('"', '""')
+    except UnicodeEncodeError:
+        escaped = []
+        for c in identifier:
+            if c == '\\':
+                escaped.append('\\\\')
+            elif c == '"':
+                escaped.append('""')
+            else:
+                c = c.encode('US-ASCII', 'backslashreplace')
+                # Note Python only supports 32 bit unicode, so we use
+                # the 4 hexdigit PostgreSQL syntax (\1234) rather than
+                # the 6 hexdigit format (\+123456).
+                if c.startswith('\\u'):
+                    c = '\\' + c[2:]
+                escaped.append(c)
+        return 'U&"%s"' % ''.join(escaped)
+
+
+def pgidentifier(token):
+    '''Wrap a string for interpolation by psycopg2 as an SQL identifier'''
+    return AsIs(quote_identifier(token))
+
+
+def ensure_database(database):
+    '''Create the database if it doesn't already exist.
+
+    This is done outside of a transaction.
+    '''
+    con = connect()
+    con.autocommit = True
+    cur = con.cursor()
+    cur.execute("SELECT datname FROM pg_database WHERE datname=%s",
+                (database,))
+    if cur.fetchone() is None:
+        cur.execute('CREATE DATABASE %s', (pgidentifier(database),))
+
+
+def ensure_user(con, username, password, superuser=False):
+    if role_exists(con, username):
+        cmd = ["ALTER ROLE"]
+    else:
+        cmd = ["CREATE ROLE"]
+    cmd.append("%s WITH LOGIN")
+    cmd.append("SUPERUSER" if superuser else "NOSUPERUSER")
+    cmd.append("PASSWORD %s")
+    cur = con.cursor()
+    cur.execute(' '.join(cmd), (pgidentifier(username), password))
+
+
+def role_exists(con, role):
+    '''True if the database role exists.'''
+    cur = con.cursor()
+    cur.execute("SELECT TRUE FROM pg_roles WHERE rolname=%s", (role,))
+    return cur.fetchone() is not None
+
+
+def grant_database_privileges(con, role, database, privs):
+    cur = con.cursor()
+    for priv in privs:
+        cur.execure("GRANT %s ON DATABASE %s TO %s",
+                    (pgidentifier(priv), pgidentifier(database),
+                     pgidentifier(role)))
+
+
+def reset_user_roles(con, username, roles):
+    wanted_roles = set(roles)
+
+    cur = con.cursor()
+    cur.execute("""
+        SELECT role.rolname
+        FROM
+            pg_roles AS role,
+            pg_roles AS member,
+            pg_auth_members
+        WHERE
+            member.oid = pg_auth_members.member
+            AND role.oid = pg_auth_members.roleid
+            AND member.rolname = %s
+        """, (username,))
+    existing_roles = set(r[0] for r in cur.fetchall())
+
+    roles_to_grant = wanted_roles.difference(existing_roles)
+
+    if roles_to_grant:
+        hookenv.log("Granting {} to {}".format(",".join(roles_to_grant),
+                                               username))
+        for role in roles_to_grant:
+            ensure_role(con, role)
+            cur.execute("GRANT %s TO %s",
+                        (pgidentifier(role), pgidentifier(username)))
+
+    roles_to_revoke = existing_roles.difference(wanted_roles)
+
+    if roles_to_revoke:
+        hookenv.log("Revoking {} from {}".format(",".join(roles_to_grant),
+                                                 username))
+        for role in roles_to_revoke:
+            cur.execute("REVOKE %s FROM %s",
+                        (pgidentifier(role), pgidentifier(role)))
+
+
+def ensure_role(con, role):
+    # Older PG versions don't have 'CREATE ROLE IF NOT EXISTS'
+    cur = con.cursor()
+    cur.execute("SELECT TRUE FROM pg_roles WHERE rolname=%s",
+                (role,))
+    if cur.fetchone() is None:
+        cur.execute("CREATE ROLE %s INHERIT NOLOGIN",
+                    (pgidentifier(role),))
+
+
+def ensure_extensions(con, extensions):
+    cur = con.cursor()
+    cur.execute('SELECT extname FROM pg_extension')
+    installed_extensions = frozenset(x[0] for x in cur.fetchall())
+    hookenv.log("ensure_extensions({}), have {}"
+                .format(extensions, installed_extensions), DEBUG)
+    extensions_set = frozenset(extensions)
+    extensions_to_create = extensions_set.difference(installed_extensions)
+    for ext in extensions_to_create:
+        hookenv.log("creating extension {}".format(ext), DEBUG)
+        cur.execute('CREATE EXTENSION %s',
+                    (pgidentifier(ext),))
+
+
+def addr_to_range(addr):
+    '''Convert an address to a format suitable for pg_hba.conf.
+
+    IPv4 and IPv6 ranges are passed through unchanged, as are hostnames.
+    IPv4 and IPv6 addresses have a hostmask appended.
+    '''
+    if re.search(r'^(?:\d{1,3}\.){3}\d{1,3}$', addr, re.A) is not None:
+        addr += '/32'
+    elif ':' in addr and '/' not in addr:  # IPv6
+        addr += '/128'
+    return addr

@@ -43,7 +43,12 @@ def extra_packages():
                + config['extra_packages'].split())
 
 
+def peer_relid():
+    '''Return the peer relation id.'''
+    return coordinator.relid
+
+
 def peers():
     '''Return the set of peers, not including the local unit.'''
-    if coordinator.relid is not None:
-        return set(hookenv.related_units(coordinator.relid))
+    relid = peer_relid()
+    return set(hookenv.related_units(relid)) if relid else set()

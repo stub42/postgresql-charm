@@ -174,3 +174,53 @@ def ensure_package_status():
     else:
         hookenv.log('Unholding {!r}'.format(packages), DEBUG)
         fetch.apt_unhold(packages, fatal=True)
+
+
+@data_ready_action
+def generate_hba_conf():
+    '''Generate pg_hba.conf (host based authentication).'''
+    rules = []  # The ordered list, as tuples.
+
+    # local      database  user  auth-method  [auth-options]
+    # host       database  user  address  auth-method  [auth-options]
+    # hostssl    database  user  address  auth-method  [auth-options]
+    # hostnossl  database  user  address  auth-method  [auth-options]
+    # host       database  user  IP-address  IP-mask  auth-method  [auth-opts]
+    # hostssl    database  user  IP-address  IP-mask  auth-method  [auth-opts]
+    # hostnossl  database  user  IP-address  IP-mask  auth-method  [auth-opts]
+    def add(*record):
+        rules.append(tuple(record))
+
+    # The local unit needs access to its own database. Let every local
+    # user connect to their matching PostgreSQL user, if it exists.
+    add('local', 'all', 'all', 'peer')
+
+    # # Peers need replication access
+    # for peer in helpers.peers():
+    #     relinfo = hookenv.relation_get(unit=peer, rid=helpers.peer_relid())
+    #     addr = helpers.addr_to_range(relinfo.get('private-address'))
+    #     add('host', 'replication', 'postgres', addr, replication_password)
+
+    # Clients need access to the relation database as the relation users.
+    for relname in ('db', 'db-admin'):
+        for relid in hookenv.relation_ids(relname):
+            local_relinfo = hookenv.relation_get(unit=hookenv.local_unit(),
+                                                 rid=relid)
+            for unit in hookenv.related_units(relid):
+                remote_relinfo = hookenv.relation_get(unit=unit, rid=relid)
+                addr = helpers.addr_to_range(remote_relinfo['private-address'])
+                add('host', local_relinfo['database'], local_relinfo['user'],
+                    addr, 'md5')
+
+    # External administrative addresses, if specified by the operator.
+    config = hookenv.config()
+    for addr in config['admin_address'].split(','):
+        add('host', 'all', 'all', helpers.addr_to_range(addr), 'md5')
+
+    # And anything-goes rules, if specified by the operator.
+    for line in config['extra_pg_auth'].splitlines():
+        add(line)
+
+    # Deny everything else
+    add('local', 'all', 'all', 'reject')
+    add('host', 'all', 'all', 'reject')

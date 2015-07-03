@@ -3,12 +3,12 @@ options:
     default: ""
     type: string
     description: >
-      A comma-separated list of IP Addresses (or single IP) admin tools like 
-      pgAdmin3 will connect from, this is most useful for developers running 
-      juju in local mode who need to connect tools like pgAdmin to a postgres. 
-      The IP addresses added here will be included in the pg_hba.conf file 
-      allowing ip connections to all databases on the server from the given 
-      using md5 password encryption.
+      A comma-separated list of IP Addresses (or single IP) admin tools
+      like pgAdmin3 will connect from. The IP addresses added here will
+      be included in the pg_hba.conf file allowing ip connections to all
+      databases on the server from the given IP addresses using md5
+      password encryption. IP address ranges are also supported, using
+      the standard format described in the PostgreSQL reference guide.
   locale:
     default: "C"
     type: string
@@ -22,7 +22,18 @@ options:
     description: >
       Default encoding used to store text in this service. Can only be
       set when deploying the first unit of a service.
-  extra-packages:
+  relation_database_privileges:
+    default: "ALL"
+    type: string
+    description: >
+      A comma-separated list of database privileges to grant to relation
+      users on their databases. The defaults allow to connect to the
+      database (CONNECT), create objects such as tables (CREATE), and
+      create temporary tables (TEMPORARY). Client charms that create
+      objects in the database are responsible to granting suitable
+      access on those objects to other roles and users (or PUBLIC) using
+      standard GRANT statements.
+   extra-packages:
     default: ""
     type: string
     description: DEPRECATED. Use extra_packages.

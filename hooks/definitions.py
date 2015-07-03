@@ -26,15 +26,20 @@ def get_service_definitions():
     return [
         dict(service='postgresql',
              required_data=[service.valid_config],
-             provided_data=[relations.DbRelation(),
-                            relations.DbAdminRelation()],
              data_ready=[service.preinstall,
                          service.configure_sources,
                          service.install_packages,
-                         service.ensure_pacakge_status],
+                         service.ensure_package_status],
+             provided_data=[relations.DbRelation(),
+                            relations.DbAdminRelation()],
+             start=[], stop=[]),
+
+        dict(service='postgresql-post-relation',
+             required_data=[service.valid_config],
+             data_ready=[service.generate_hba_conf],
              ports=[config['listen_port']],
              start=[services.open_ports],
-             stop=[service.stop_postgresql, services.close_ports])]
+             stop=[service.stop_postgresql, services.close_port])]
 
 
 def get_service_manager():

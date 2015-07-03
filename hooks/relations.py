@@ -44,13 +44,6 @@ class DbRelation:
     def global_data(self):
         return dict(version=postgresql.version())
 
-    def service_data(self, remote_service):
-        # The master is responsible for creating accounts and generating
-        # credentials.
-        if postgresql.is_master():
-            self._update_service_data(remote_service)
-        return self._master_service_data(remote_service)
-
     def unit_data(self, remote_service):
         relid = self.relid(remote_service)
         allowed_units = ' '.join(sorted(hookenv.related_units(relid)))
@@ -65,6 +58,13 @@ class DbRelation:
                 'host': hookenv.unit_private_ip(),
                 'port': postgresql.port(),
                 'state': state}
+
+    def service_data(self, remote_service):
+        # The master is responsible for creating accounts and generating
+        # credentials.
+        if postgresql.is_master():
+            self._update_service_data(remote_service)
+        return self._master_service_data(remote_service)
 
     def _master_service_data(self, remote_service):
         service_keys = frozenset(['user', 'password', 'roles', 'database',
@@ -91,34 +91,52 @@ class DbRelation:
             master_data['database'] = remote_service
         postgresql.ensure_database(master_data['database'])
 
+        con = postgresql.connect(master_data['database'])
+        hookenv.atexit(con.commit)
+
+        # Ensure requested extensions have been created in the database.
+        if 'extensions' in remote_data:
+            master_data['extensions'] = remote_data['extensions']
+            extensions = filter(None, master_data['extensions'].split(','))
+            postgresql.ensure_extensions(con, extensions)
+
         # Generate credentials if they don't already exist.
         if 'user' not in master_data:
             master_data['user'] = postgresql.username(remote_service,
-                                                      self.superuser)
+                                                      superuser=self.superuser)
             master_data['password'] = host.pwgen()
+
+            # schema_user has never been documented and is deprecated.
             master_data['schema_user'] = master_data['user'] + '_schema'
             master_data['schema_password'] = host.pwgen()
 
-            postgresql.ensure_user(master_data['user'],
+            postgresql.ensure_user(con,
+                                   master_data['user'],
                                    master_data['password'],
                                    superuser=self.superuser)
-            postgresql.ensure_user(master_data['schema_user'],
+            postgresql.ensure_user(con,
+                                   master_data['schema_user'],
                                    master_data['schema_password'])
 
         # Reset the roles granted to the user as requested.
-        postgresql.reset_user_roles(master_data['user'],
-                                    remote_data.get('roles', []))
+        if 'roles' in remote_data:
+            master_data['roles'] = remote_data['roles']
+            roles = filter(None, master_data['roles'].split(','))
+            postgresql.reset_user_roles(con, master_data['user'], roles)
 
-        # Ensure the user can connect to the db.
-        postgresql.grant_database_privilege('CONNECT',
+        # Grant specified privileges on the database to the user.
+        # This is in the service configuration, as allowing the
+        # relation to specify how much access it gets is insecure.
+        config = hookenv.config()
+        privs = set(config['relation_database_privileges'].split(','))
+        postgresql.grant_database_privilege(con,
+                                            master_data['user'],
                                             master_data['database'],
-                                            master_data['user'])
-
-        # Grant the schema_user all privileges, which is dangerous
-        # so we should deprecate this interface.
-        postgresql.grant_database_privilege('ALL PRIVILEGES',
+                                            privs)
+        postgresql.grant_database_privilege(con,
+                                            master_data['schema_user'],
                                             master_data['database'],
-                                            master_data['schema_user'])
+                                            privs)
         return master_data
 
 
