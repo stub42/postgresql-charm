@@ -1540,11 +1540,11 @@ def ensure_extensions(extensions, database):
             cur.execute('SELECT extname FROM pg_extension')
             installed_extensions = frozenset(x[0] for x in cur.fetchall())
             log("ensure_extensions({}), have {}"
-                  .format(extensions, installed_extensions),
+                .format(extensions, installed_extensions),
                 DEBUG)
             extensions_set = frozenset(extensions)
             extensions_to_create = \
-              extensions_set.difference(installed_extensions)
+                extensions_set.difference(installed_extensions)
             for ext in extensions_to_create:
                 log("creating extension {}".format(ext), DEBUG)
                 cur.execute('CREATE EXTENSION %s',
