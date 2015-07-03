@@ -1534,23 +1534,23 @@ def ensure_database(user, schema_user, database):
 
 
 def ensure_extensions(extensions, database):
-    cur = db_cursor(db=database, autocommit=True)
-    cur.execute('SELECT extname FROM pg_extension')
-    installed_extensions = frozenset(x[0] for x in cur.fetchall())
-    log("ensure_extensions({}), have {}"
-        .format(extensions, installed_extensions),
-        DEBUG)
-    extensions_set = frozenset(extensions)
-    extensions_to_drop = installed_extensions.difference(extensions_set)
-    for ext in extensions_to_drop:
-        if ext != 'plpgsql':
-            log("dropping extension {}".format(ext), DEBUG)
-            cur.execute('DROP EXTENSION %s', (AsIs(quote_identifier(ext)),))
-    extensions_to_create = extensions_set.difference(installed_extensions)
-    for ext in extensions_to_create:
-        log("creating extension {}".format(ext), DEBUG)
-        cur.execute('CREATE EXTENSION %s', (AsIs(quote_identifier(ext)),))
-    cur.close()
+    if extensions:
+        cur = db_cursor(db=database, autocommit=True)
+        try:
+            cur.execute('SELECT extname FROM pg_extension')
+            installed_extensions = frozenset(x[0] for x in cur.fetchall())
+            log("ensure_extensions({}), have {}"
+                  .format(extensions, installed_extensions),
+                DEBUG)
+            extensions_set = frozenset(extensions)
+            extensions_to_create = \
+              extensions_set.difference(installed_extensions)
+            for ext in extensions_to_create:
+                log("creating extension {}".format(ext), DEBUG)
+                cur.execute('CREATE EXTENSION %s',
+                            (AsIs(quote_identifier(ext)),))
+        finally:
+            cur.close()
 
 
 def snapshot_relations():
