@@ -283,7 +283,7 @@ def addr_to_range(addr):
     '''Convert an address to a format suitable for pg_hba.conf.
 
     IPv4 and IPv6 ranges are passed through unchanged, as are hostnames.
-    IPv4 and IPv6 addresses have a hostmask appended.
+    Individual IPv4 and IPv6 addresses have a hostmask appended.
     '''
     if re.search(r'^(?:\d{1,3}\.){3}\d{1,3}$', addr, re.A) is not None:
         addr += '/32'
