@@ -39,7 +39,7 @@ def get_service_definitions():
              data_ready=[service.generate_hba_conf],
              ports=[config['listen_port']],
              start=[services.open_ports],
-             stop=[service.stop_postgresql, services.close_port])]
+             stop=[service.stop_postgresql, services.close_ports])]
 
 
 def get_service_manager():

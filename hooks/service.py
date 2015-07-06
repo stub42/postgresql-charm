@@ -42,6 +42,7 @@ def valid_config():
                                          'desktop', 'manual']),
                  package_status=set(['install', 'hold']))
     for key, vals in enums.items():
+        config[key] = config[key].lower()
         if config[key] not in vals:
             valid = False
             helpers.status_set('blocked',
@@ -68,7 +69,7 @@ def preinstall():
     if hookenv.hook_name() == 'install':
         helpers.status_set('maintenance', 'Running preinstallation hooks')
         try:
-            execd.execd_preinstall(die_on_error=True)
+            execd.execd_run('charm-pre-install', die_on_error=True)
         except SystemExit:
             helpers.block('execd_preinstall failed')
             raise SystemExit(0)
@@ -97,11 +98,13 @@ def configure_sources():
                                                 helpers.distro_codename())
         pgdg_key_path = os.path.join(hookenv.charm_dir(), 'lib', 'pgdg.key')
         with open(pgdg_key_path, 'r') as f:
+            hookenv.log('Adding PGDG archive')
             fetch.add_source(pgdg_src, f.read())
 
     # WAL-E is currently only available from a PPA. This charm and this
     # PPA are maintained by the same person.
     if config['wal_e_storage_uri']:
+        hookenv.log('Adding ppa:stub/pgcharm for wal-e packages')
         fetch.add_source('ppa:stub/pgcharm')
 
     # Standard charm-helpers, using install_sources and install_keys
@@ -150,9 +153,7 @@ def install_packages():
         config['all_installed_packages'] = sorted(all_installed_packages)
 
         filtered_packages = fetch.filter_installed_packages(packages)
-        helpers.status_set(hookenv.status_get(),
-                           'Installing packages {!r}'
-                           .format(filtered_packages))
+        helpers.status_set(hookenv.status_get(), 'Installing packages')
         try:
             fetch.apt_install(filtered_packages, fatal=True)
 
@@ -224,3 +225,9 @@ def generate_hba_conf():
     # Deny everything else
     add('local', 'all', 'all', 'reject')
     add('host', 'all', 'all', 'reject')
+
+
+@data_ready_action
+def stop_postgresql():
+    if postgresql.is_running():
+        postgresql.stop()

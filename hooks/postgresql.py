@@ -16,12 +16,13 @@
 
 import os.path
 import re
+import subprocess
 
 import psycopg2
 from psycopg2.extensions import AsIs
 
 from charmhelpers.core import hookenv
-from charmhelpers.core.hookenv import DEBUG
+from charmhelpers.core.hookenv import DEBUG, WARNING
 
 import helpers
 
@@ -76,8 +77,12 @@ def postgresql_conf_path():
     return '/etc/postgresql/{}/main/postgresql.conf'.format(version())
 
 
+def datadir_path():
+    return '/var/lib/postgresql/{}/main'.format(version())
+
+
 def recovery_conf_path():
-    return '/var/lib/postgresql/{}/recovery.conf'.format(version())
+    return os.path.join(datadir_path(), 'recovery.conf'.format(version()))
 
 
 def is_in_recovery():
@@ -290,3 +295,65 @@ def addr_to_range(addr):
     elif ':' in addr and '/' not in addr:  # IPv6
         addr += '/128'
     return addr
+
+
+def is_running():
+    try:
+        subprocess.check_call(['pg_ctl', 'status', '-s', '-D', datadir_path()],
+                              universal_newlines=True)
+        return True
+    except subprocess.CalledProcessError as x:
+        if x.code == 3:
+            return False
+        raise
+
+
+# Slow or busy systems can take much longer than the default 60 seconds
+# to startup or shutdown. If a database needs to go through recovery,
+# it could take days.
+STARTUP_TIMEOUT = 24 * 60 * 60
+
+# If we can't perform a fast shutdown in 5 minutes, the system is in
+# a bit of a mess so proceed to immediate shutdown (and causing the
+# subsequent startup to be slow).
+SHUTDOWN_TIMEOUT = 5 * 60
+
+
+def start():
+    try:
+        subprocess.check_call(['pg_ctlcluster',
+                               version(), 'main', 'start',
+                               '--', '-t', str(STARTUP_TIMEOUT)],
+                              universal_newlines=True)
+    except subprocess.CalledProcessError as x:
+        if x.code == 2:
+            return  # The server is already running.
+        raise
+
+
+def stop():
+    # First try a 'fast' shutdown.
+    try:
+        subprocess.check_call(['pg_ctlcluster', '--mode', 'fast',
+                               version(), 'main', 'stop',
+                               '--', '-t', str(SHUTDOWN_TIMEOUT)],
+                              universal_newlines=True)
+        return
+    except subprocess.CalledProcessError as x:
+        if x.code == 2:
+            return  # The server was not running.
+
+    # If the 'fast' shutdown failed, try an 'immediate' shutdown.
+    try:
+        hookenv.log('Fast shutdown failed. Attempting immediate shutdown.',
+                    WARNING)
+        subprocess.check_call(['pg_ctlcluster', '--mode', 'immediate',
+                               version(), 'main', 'stop',
+                               '--', '-t', str(SHUTDOWN_TIMEOUT)],
+                              universal_newlines=True)
+        return
+    except subprocess.CalledProcessError as x:
+        if x.code == 2:
+            return  # The server was not running.
+        helpers.status_set('blocked', 'Unable to shutdown PostgreSQL')
+        raise SystemExit(0)

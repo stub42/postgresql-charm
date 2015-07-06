@@ -611,11 +611,10 @@ def generate_postgresql_hba(
             relation_data.append(remote_replication)
             if 'database' in local_rel:
                 remote_pgdb = {'database': local_rel['database'],
-                            'user': local_rel['user'],
-                            'private-address': remote_addr,
-                            'relation-id': relid,
-                            'unit': unit,
-                            }
+                               'user': local_rel['user'],
+                               'private-address': remote_addr,
+                               'relation-id': relid,
+                               'unit': unit}
                 relation_data.append(remote_pgdb)
 
     # Local hooks also need permissions to setup replication.
