@@ -13,7 +13,7 @@ description: |
   .Net, Perl, Python, Ruby, Tcl, ODBC, among others, and exceptional
   documentation (http://www.postgresql.org/docs/manuals/).
 maintainer: Stuart Bishop <stuart.bishop@canonical.com>
-categories:
+tags:
     - databases
 provides:
   db:
@@ -22,26 +22,26 @@ provides:
   db-admin:
     interface: pgsql
     optional: true
-  nrpe-external-master:
-    interface: nrpe-external-master
-    scope: container
+  syslog:
+    interface: syslog
+    optional: true
+  master:
+    interface: pgreplication
+    optional: true
+requires:
   data:
     interface: block-storage
     scope: container
     optional: true
-  master:
-    interface: pgreplication
+  nrpe-external-master:
+    interface: nrpe-external-master
+    scope: container
     optional: true
   # We do not yet support slaving a PostgreSQL service to another
   # PostgreSQL service.
   # replica:
   #   interface: pgreplication
   #   optional: true
-requires:
-  persistent-storage:
-    interface: directory-path
-  syslog:
-    interface: syslog
 peers:
   replication:
     interface: pgpeer

@@ -33,7 +33,7 @@ options:
       objects in the database are responsible to granting suitable
       access on those objects to other roles and users (or PUBLIC) using
       standard GRANT statements.
-   extra-packages:
+  extra-packages:
     default: ""
     type: string
     description: DEPRECATED. Use extra_packages.
@@ -417,13 +417,13 @@ options:
         List of extra package sources, per charm-helpers standard.
         YAML format.
     type: string
-    default: null
+    default: ""
   install_keys:
     description: >
         List of signing keys for install_sources package sources, per
         charmhelpers standard. YAML format.
     type: string
-    default: null
+    default: ""
   advisory_lock_restart_key:
     default: 765
     type: int
@@ -433,7 +433,7 @@ options:
         being used by your applications.
   wal_e_storage_uri:
     type: string
-    default: null
+    default: ""
     description: |
       EXPERIMENTAL.
       Specify storage to be used by WAL-E. Every PostgreSQL service must use
@@ -474,35 +474,35 @@ options:
       Turning this off without configuring log shipping is an error.
   os_username:
     type: string
-    default: null
+    default: ""
     description: EXPERIMENTAL. OpenStack Swift username.
   os_password:
     type: string
-    default: null
+    default: ""
     description: EXPERIMENTAL. OpenStack Swift password.
   os_auth_url:
     type: string
-    default: null
+    default: ""
     description: EXPERIMENTAL. OpenStack Swift authentication URL.
   os_tenant_name:
     type: string
-    default: null
+    default: ""
     description: EXPERIMENTAL. OpenStack Swift tenant name.
   aws_access_key_id:
     type: string
-    default: null
+    default: ""
     description: EXPERIMENTAL. Amazon AWS access key id.
   aws_secret_access_key:
     type: string
-    default: null
+    default: ""
     description: EXPERIMENTAL. Amazon AWS secret access key.
   wabs_account_name:
     type: string
-    default: null
+    default: ""
     description: EXPERIMENTAL. Windows Azure account name.
   wabs_access_key:
     type: string
-    default: null
+    default: ""
     description: EXPERIMENTAL. Windows Azure access key.
   package_status:
     default: "install"

@@ -52,12 +52,16 @@ integration_test_94:
 	@echo "PostgreSQL 9.4 integration tests, ${SERIES}"
 	trial test.PG94Tests
 
-lint:
+lint: proof
 	@echo "Lint check (flake8)"
 	@flake8 -v \
 	    --exclude hooks/charmhelpers,hooks/_trial_temp \
             --ignore=E402 \
 	    hooks actions testing tests test.py
+
+proof:
+	@echo "Charm Proof"
+	@charm proof
 
 sync:
 	@bzr cat \
