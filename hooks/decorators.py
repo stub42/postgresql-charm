@@ -15,18 +15,36 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from functools import wraps
 
-from charmhelpers.core import hookenv
+from charmhelpers.core import hookenv, services
 
 import helpers
+
+
+class ManagerCallback(services.ManagerCallback):
+    def __init__(self, callback=None):
+        self._cb = callback
+
+    def __call__(self, manager, service_name, event_name):
+        if self._cb is None:
+            raise NotImplementedError()
+
+        return self._cb(manager, service_name, event_name)
 
 
 def data_ready_action(func):
     '''Decorate func to be used as a data_ready item.
 
-    Log and call func, stripping the unused servicename argument.
+    Func must accept the 3 extended arguments per
+    charmhelpers.core.services.base.ManagerCallback
+        manager - the ServiceManager instance in play
+        service_name - the 'service' key of the service definition in play.
+        event_name - data_ready, data_lost, start, stop
+
+    Func is wrapped, adding logging, and with ManagerCallback so the
+    Services Framework invokes it with the desired paramter list.
     '''
     @wraps(func)
-    def wrapper(servicename, *args, **kw):
+    def wrapper(manager, service_name, event_name):
         if hookenv.remote_unit():
             hookenv.log("** Action {}/{} ({})".format(hookenv.hook_name(),
                                                       func.__name__,
@@ -34,8 +52,9 @@ def data_ready_action(func):
         else:
             hookenv.log("** Action {}/{}".format(hookenv.hook_name(),
                                                  func.__name__))
-        return func(*args, **kw)
-    return wrapper
+        return func(manager, service_name, event_name)
+
+    return ManagerCallback(wrapper)
 
 
 class requirement:

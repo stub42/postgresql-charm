@@ -24,29 +24,59 @@ class DbRelation:
     name = 'db'
     superuser = False
 
+    def __init__(self):
+        self.local = {}
+        self.remote = {}
+        self.master = {}
+        master_unit = postgresql.master()
+        if master_unit is not None:
+            for relid in hookenv.related_ids(self.name):
+                remote_unit = hookenv.related_units(relid)[0]
+                remote_service = remote_unit.split('/', 1)[0]
+                local_rel = hookenv.relation_get(rid=relid,
+                                                 unit=hookenv.local_unit())
+                remote_rel = hookenv.relation_get(rid=relid,
+                                                  unit=remote_unit)
+                master_rel = hookenv.relation_get(rid=relid,
+                                                  unit=master_unit)
+                self.local[remote_service] = local_rel
+                self.remote[remote_service] = remote_rel
+                self.master[remote_service] = master_rel
+
     def provide_data(self, remote_service, service_ready):
         if not service_ready:
-            return dict()
+            return {}
 
-        data = dict()
+        hookenv.log('** Providing {})'.format(remote_service))
+
+        data = self.local[remote_service]
         data.update(self.global_data())
         data.update(self.service_data(remote_service))
         data.update(self.unit_data(remote_service))
         return data
 
-    def relid(self, remote_service):
-        for relid in hookenv.relation_ids(self.name):
-            units = hookenv.related_units(relid)
-            if units and units[0].split('/', 1)[0] == remote_service:
-                return relid
-        return None
-
     def global_data(self):
         return dict(version=postgresql.version())
 
+    def service_data(self, remote_service):
+        # Copy the relevant keys from the master (possibly ourself)
+        service_keys = frozenset(['user', 'password', 'roles',
+                                  'schema_user', 'schema_password',
+                                  'database', 'extensions'])
+        return dict((k, v) for k, v in self.master[remote_service]
+                    if k in service_keys)
+
     def unit_data(self, remote_service):
         relid = self.relid(remote_service)
+
+        # We allowed access to all related units when we regenerated
+        # pg_hba.conf
         allowed_units = ' '.join(sorted(hookenv.related_units(relid)))
+
+        # Calulate the state of this unit. standalone will disappear
+        # in a future version of this interface, as this state was
+        # only needed to deal with race conditions now solved by
+        # Juju leadership.
         if postgresql.is_primary():
             if hookenv.is_leader() and len(helpers.peers()) == 0:
                 state = 'standalone'
@@ -59,44 +89,34 @@ class DbRelation:
                 'port': postgresql.port(),
                 'state': state}
 
-    def service_data(self, remote_service):
-        # The master is responsible for creating accounts and generating
-        # credentials.
-        if postgresql.is_master():
-            self._update_service_data(remote_service)
-        return self._master_service_data(remote_service)
+    def ensure_db_resources(self, remote_service):
+        # A data_ready handler will invoke this on the master,
+        # ensuring that the necessary credentials and requested
+        # database environment get setup.
+        assert postgresql.is_master(), 'Not the master'
 
-    def _master_service_data(self, remote_service):
-        service_keys = frozenset(['user', 'password', 'roles', 'database',
-                                  'schema_user', 'schema_password'])
-        relid = self.relid(remote_service)
-        master = postgresql.master()
-        full_master_data = hookenv.relation_get(unit=master, rid=relid)
-        return dict((k, v) for k, v in full_master_data.items()
-                    if k in service_keys)
+        remote_data = self.remote[remote_service]
 
-    def _update_service_data(self, remote_service):
-        master_data = self._master_service_data(remote_service)
-        relid = self.relid(remote_service)
-        remote_unit = sorted(hookenv.related_units(relid))[0]
-        remote_data = hookenv.relation_get(unit=remote_unit, rid=relid)
+        # We update the master data in this instance, and it will later
+        # be returned by provide_data() for publishing to the relation.
+        master_data = self.master[remote_service]
 
-        # Ensure the requested database exists, or provide one
-        # named after the remote service.
+        # The requested database name, the existing database name,
+        # or use the remote service name as the database name.
         if 'database' in remote_data:
             master_data['database'] = remote_data['database']
         elif 'database' not in master_data:
-            # Older versions of the charm have different database names,
-            # so don't override the existing setting if it exists.
             master_data['database'] = remote_service
         postgresql.ensure_database(master_data['database'])
 
+        # The rest of resource creation can be done in a transaction,
+        # and rolled back if the hook fails.
         con = postgresql.connect(master_data['database'])
         hookenv.atexit(con.commit)
 
         # Ensure requested extensions have been created in the database.
-        if 'extensions' in remote_data:
-            master_data['extensions'] = remote_data['extensions']
+        master_data['extensions'] = remote_data['extensions']  # Reflect back.
+        if 'extensions' in master_data['extensions']:
             extensions = filter(None, master_data['extensions'].split(','))
             postgresql.ensure_extensions(con, extensions)
 
@@ -105,28 +125,28 @@ class DbRelation:
             master_data['user'] = postgresql.username(remote_service,
                                                       superuser=self.superuser)
             master_data['password'] = host.pwgen()
-
-            # schema_user has never been documented and is deprecated.
-            master_data['schema_user'] = master_data['user'] + '_schema'
-            master_data['schema_password'] = host.pwgen()
-
             postgresql.ensure_user(con,
                                    master_data['user'],
                                    master_data['password'],
                                    superuser=self.superuser)
+
+            # schema_user has never been documented and is deprecated.
+            master_data['schema_user'] = master_data['user'] + '_schema'
+            master_data['schema_password'] = host.pwgen()
             postgresql.ensure_user(con,
                                    master_data['schema_user'],
                                    master_data['schema_password'])
 
         # Reset the roles granted to the user as requested.
-        if 'roles' in remote_data:
-            master_data['roles'] = remote_data['roles']
+        master_data['roles'] = remote_data['roles']  # Reflect back.
+        if 'roles' in master_data:
             roles = filter(None, master_data['roles'].split(','))
             postgresql.reset_user_roles(con, master_data['user'], roles)
 
         # Grant specified privileges on the database to the user.
-        # This is in the service configuration, as allowing the
-        # relation to specify how much access it gets is insecure.
+        # This comes from the PostgreSQL service configuration, as
+        # allowing the relation to specify how much access it gets
+        # is insecure.
         config = hookenv.config()
         privs = set(config['relation_database_privileges'].split(','))
         postgresql.grant_database_privilege(con,

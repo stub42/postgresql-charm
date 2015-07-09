@@ -14,7 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from charmhelpers.core import hookenv
 from charmhelpers.core import services
 
 import relations
@@ -22,24 +21,21 @@ import service
 
 
 def get_service_definitions():
-    config = hookenv.config()
     return [
         dict(service='postgresql',
-             required_data=[service.valid_config],
+             required_data=[service.valid_config,
+                            service.has_master],
+             provided_data=[relations.DbRelation(),
+                            relations.DbAdminRelation()],
              data_ready=[service.preinstall,
                          service.configure_sources,
                          service.install_packages,
-                         service.ensure_package_status],
-             provided_data=[relations.DbRelation(),
-                            relations.DbAdminRelation()],
-             start=[], stop=[]),
-
-        dict(service='postgresql-post-relation',
-             required_data=[service.valid_config],
-             data_ready=[service.generate_hba_conf],
-             ports=[config['listen_port']],
-             start=[services.open_ports],
-             stop=[service.stop_postgresql, services.close_ports])]
+                         service.ensure_package_status,
+                         service.appoint_master,
+                         service.ensure_client_resources,
+                         service.generate_hba_conf],
+             start=[service.open_ports],
+             stop=[service.stop_postgresql, service.close_ports])]
 
 
 def get_service_manager():

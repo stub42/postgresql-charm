@@ -60,15 +60,16 @@ def port():
     '''The port PostgreSQL is listening on.'''
     path = postgresql_conf_path()
     with open(path, 'r') as f:
-        m = re.search(r'^port\s*=\*(\d+)', f.read(), re.I | re.M)
-        assert m is not None, 'No port configured in {!r}'.format(path)
+        m = re.search(r'^port\s*=\s*(\d+)', f.read(), re.I | re.M)
+        if m is None:
+            return 5432  # Default port.
         return int(m.group(1))
 
 
 def packages():
     ver = version()
     return set(['postgresql-{}'.format(ver),
-                'postgresql-common',
+                'postgresql-common', 'postgresql-client-common',
                 'postgresql-contrib-{}'.format(ver),
                 'postgresql-client-{}'.format(ver)])
 
@@ -77,12 +78,20 @@ def postgresql_conf_path():
     return '/etc/postgresql/{}/main/postgresql.conf'.format(version())
 
 
+def pg_hba_conf_path():
+    return '/etc/postgresql/{}/main/pg_hba.conf'.format(version())
+
+
 def datadir_path():
     return '/var/lib/postgresql/{}/main'.format(version())
 
 
 def recovery_conf_path():
     return os.path.join(datadir_path(), 'recovery.conf'.format(version()))
+
+
+def pg_ctl_path():
+    return '/usr/lib/postgresql/{}/bin/pg_ctl'.format(version())
 
 
 def is_in_recovery():
@@ -299,7 +308,8 @@ def addr_to_range(addr):
 
 def is_running():
     try:
-        subprocess.check_call(['pg_ctl', 'status', '-s', '-D', datadir_path()],
+        subprocess.check_call([pg_ctl_path(), 'status', '-s',
+                               '-D', datadir_path()],
                               universal_newlines=True)
         return True
     except subprocess.CalledProcessError as x:

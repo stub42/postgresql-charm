@@ -20,10 +20,14 @@ from charmhelpers.core.hookenv import INFO, CRITICAL
 from coordinator import coordinator
 
 
-def status_set(status, msg):
+def status_set(status_or_msg, msg=None):
     '''Set the unit status message, and log the change too.'''
-    if status is None:
+    if msg is None:
+        msg = status_or_msg
         status = hookenv.status_get()
+    else:
+        status = status_or_msg
+
     if status == 'blocked':
         lvl = CRITICAL
     else:
@@ -39,8 +43,19 @@ def distro_codename():
 
 def extra_packages():
     config = hookenv.config()
-    return set(config['extra-packages'].split()
-               + config['extra_packages'].split())
+    packages = set()
+
+    packages.update(set(config['extra_packages'].split()))
+    packages.update(set(config['extra-packages'].split()))  # Deprecated.
+
+    if config['wal_e_storage_uri']:
+        packages.add('daemontools')
+        packages.add('wal-e')
+
+    if config['performance_tuning'] != 'manual':
+        packages.add('pgtune')
+
+    return packages
 
 
 def peer_relid():
