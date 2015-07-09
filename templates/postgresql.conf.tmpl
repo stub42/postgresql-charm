@@ -184,7 +184,6 @@ search_path = '{{search_path}}'
 standard_conforming_strings = {{standard_conforming_strings}}
 {% endif -%}
 
-{% if version >= "9.0" -%}
 #------------------------------------------------------------------------------
 # Replication
 #------------------------------------------------------------------------------
@@ -199,6 +198,9 @@ wal_level = {{wal_level}}
 {% endif -%}
 {% if max_wal_senders  != "" -%}
 max_wal_senders = {{max_wal_senders}}
+{% if version >= "9.4" -%}
+max_replication_slots = {{max_wal_senders}}
+{% endif -%}
 {% endif -%}
 {% if wal_keep_segments  != "" -%}
 wal_keep_segments = {{wal_keep_segments}}
@@ -208,6 +210,4 @@ archive_mode = {{archive_mode}}
 {% endif -%}
 {% if archive_command != "" -%}
 archive_command = '{{archive_command}}'
-{% endif -%}
-
 {% endif -%}
