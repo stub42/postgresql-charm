@@ -179,7 +179,7 @@ options:
         transactions on a streaming hot standby and allowing the master to
         defer cleanup and avoid query cancelations on the hot standby.
   wal_level:
-    default: logical
+    default: minimal
     type: string
     description: >
         'minimal', 'archive', 'hot_standby' or 'logical'. Defines how much
