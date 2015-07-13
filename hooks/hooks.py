@@ -414,6 +414,12 @@ def create_postgresql_config(config_file):
     host.write_file(postgresql_sysctl, ''.join(lines), perms=0600)
     _run_sysctl(postgresql_sysctl)
 
+    # Our config file specifies a default wal_level that only works
+    # with PostgreSQL 9.4. Downgrade this for earlier versions of
+    # PostgreSQL. We have this default so more things Just Work.
+    if pg_version() < '9.4' and config_data['wal_level'] == 'logical':
+        config_data['wal_level'] = 'hot_standby'
+
     # If we are replicating, some settings may need to be overridden to
     # certain minimum levels.
     num_slaves = slave_count()
