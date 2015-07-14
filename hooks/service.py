@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import os.path
+import re
 import subprocess
 
 from charmhelpers.core import hookenv, host
@@ -177,7 +178,22 @@ def appoint_master(manager, service_name, event_name):
 
 
 @data_ready_action
-def generate_hba_conf(manager, service_name, event_name):
+def update_pg_ident_conf(manager, service_name, event_name):
+    '''Add the charm's required entry to pg_ident.conf'''
+    entries = set([('root', 'postgres'),
+                   ('postgres', 'postgres')])
+    path = postgresql.pg_ident_conf_path()
+    with open(path, 'r') as f:
+        current_pg_ident = f.read()
+    for sysuser, pguser in entries:
+        if re.search(r'^\s*juju_charm\s+{}\s+{}\s*$'.format(sysuser, pguser),
+                     current_pg_ident, re.M) is None:
+            with open(path, 'a') as f:
+                f.write('\njuju_charm {} {}'.format(sysuser, pguser))
+
+
+@data_ready_action
+def generate_pg_hba_conf(manager, service_name, event_name):
     '''Generate pg_hba.conf (host based authentication).'''
     rules = []  # The ordered list, as tuples.
 
@@ -190,6 +206,10 @@ def generate_hba_conf(manager, service_name, event_name):
     # hostnossl  database  user  IP-address  IP-mask  auth-method  [auth-opts]
     def add(*record):
         rules.append(tuple(record))
+
+    # The charm is running as the root user, and needs to be able to
+    # connect as the postgres user to all databases.
+    add('local', 'all', 'postgres', 'peer', 'map=juju_charm')
 
     # The local unit needs access to its own database. Let every local
     # user connect to their matching PostgreSQL user, if it exists.
@@ -219,21 +239,62 @@ def generate_hba_conf(manager, service_name, event_name):
     # External administrative addresses, if specified by the operator.
     config = hookenv.config()
     for addr in config['admin_addresses'].split(','):
-        add('host', 'all', 'all', postgresql.addr_to_range(addr), 'md5')
+        if addr:
+            add('host', 'all', 'all', postgresql.addr_to_range(addr),
+                'md5', '# admin_addresses config')
 
     # And anything-goes rules, if specified by the operator.
     for line in config['extra_pg_auth'].splitlines():
-        add(line)
+        add((line, '# extra_pg_auth config'))
 
     # Deny everything else
-    add('local', 'all', 'all', 'reject')
-    add('host', 'all', 'all', 'reject')
+    add('local', 'all', 'all', 'reject', '# Reject everything else')
+    add('host', 'all', 'all', 'all', 'reject', '# Reject everything else')
 
     # Spit out the file
     rules.insert(0, ('# Managed by Juju',))
     pg_hba_conf = '\n'.join(' '.join(rule) for rule in rules)
     host.write_file(postgresql.pg_hba_conf_path(), pg_hba_conf.encode('UTF-8'),
                     owner='postgres', group='postgres', perms=0o600)
+
+
+@data_ready_action
+def update_postgresql_conf(manager, service_name, event_name):
+    charm_opts = dict(listen_addresses='*')
+
+    path = postgresql.postgresql_conf_path()
+
+    helpers.maybe_backup(path)
+
+    with open(path, 'r') as f:
+        pg_conf = f.read()
+
+    start_mark = '### BEGIN JUJU SETTINGS ###'
+    end_mark = '### END JUJU SETTINGS ###'
+
+    # Strip the existing settings section, including the markers.
+    pg_conf = re.sub(r'^\s*{}.*^\s*{}\s*$'.format(re.escape(start_mark),
+                                                  re.escape(end_mark)),
+                     '', pg_conf, flags=re.I | re.M | re.DOTALL)
+
+    for k in charm_opts:
+        # Comment out conflicting options. We could just allow later
+        # options to override earlier ones, but this is less surprising.
+        pg_conf = re.sub(r'^\s*({}[\s=].*)$'.format(re.escape(k)),
+                         r'# juju # \1', pg_conf, flags=re.M | re.I)
+
+    # Generate the charm config section, adding it to the end of the
+    # config file.
+    override_section = [start_mark]
+    for k, v in charm_opts.items():
+        if isinstance(v, str):
+            assert '\n' not in v, "Invalid config value {!r}".format(v)
+            v = "'{}'".format(v.replace("'", "''"))
+        override_section.append('{} = {}'.format(k, v))
+    override_section.append(end_mark)
+    pg_conf += '\n' + '\n'.join(override_section)
+
+    helpers.rewrite(path, pg_conf)
 
 
 @data_ready_action
@@ -276,3 +337,19 @@ def ensure_client_resources(manager, service_name, event_name):
         if isinstance(provider, relations.DbRelation):
             for remote_service in provider.remote:
                 provider.ensure_db_resources(remote_service)
+
+
+@data_ready_action
+def maybe_reload_or_restart(manager, service_name, event_name):
+    # TODO: Restart only if necessary and with permission from leader.
+    subprocess.check_call(['pg_ctlcluster', '--mode=fast',
+                           postgresql.version(), 'main', 'restart'])
+
+
+@data_ready_action
+def set_active(manager, service_name, event_name):
+    if postgresql.is_primary():
+        msg = 'Live primary'
+    else:
+        msg = 'Live secondary'
+    helpers.status_set('active', msg)

@@ -33,7 +33,11 @@ def get_service_definitions():
                          service.ensure_package_status,
                          service.appoint_master,
                          service.ensure_client_resources,
-                         service.generate_hba_conf],
+                         service.update_pg_ident_conf,
+                         service.generate_pg_hba_conf,
+                         service.update_postgresql_conf,
+                         service.maybe_reload_or_restart,
+                         service.set_active],
              start=[service.open_ports],
              stop=[service.stop_postgresql, service.close_ports])]
 

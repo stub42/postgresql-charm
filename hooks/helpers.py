@@ -14,6 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
+import shutil
+import tempfile
+
 from charmhelpers.core import hookenv, host
 from charmhelpers.core.hookenv import INFO, CRITICAL
 
@@ -67,3 +71,23 @@ def peers():
     '''Return the set of peers, not including the local unit.'''
     relid = peer_relid()
     return set(hookenv.related_units(relid)) if relid else set()
+
+
+def maybe_backup(path):
+    '''Make a backup of path, if the backup doesn't already exist.'''
+    bak = path + '.bak'
+    if not os.path.exists(bak):
+        shutil.copy2(path, bak)
+
+
+def rewrite(path, content, mode='w'):
+    '''Rewrite a file atomically, preserving ownership and permissions.'''
+    with tempfile.NamedTemporaryFile(mode=mode, delete=False) as f:
+        try:
+            shutil.copystat(path, f.name)
+            f.write(content)
+            f.flush()
+            os.replace(f.name, path)
+        finally:
+            if os.path.exists(f.name):
+                os.unlink(f.name)

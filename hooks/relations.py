@@ -28,9 +28,10 @@ class DbRelation:
         self.local = {}
         self.remote = {}
         self.master = {}
+        self.relid = {}
         master_unit = postgresql.master()
         if master_unit is not None:
-            for relid in hookenv.related_ids(self.name):
+            for relid in hookenv.relation_ids(self.name):
                 remote_unit = hookenv.related_units(relid)[0]
                 remote_service = remote_unit.split('/', 1)[0]
                 local_rel = hookenv.relation_get(rid=relid,
@@ -42,13 +43,14 @@ class DbRelation:
                 self.local[remote_service] = local_rel
                 self.remote[remote_service] = remote_rel
                 self.master[remote_service] = master_rel
+                self.relid[remote_service] = relid
 
     def provide_data(self, remote_service, service_ready):
         if not service_ready:
             return {}
 
-        hookenv.log('** Providing {})'.format(remote_service))
-
+        hookenv.log('** Providing {} ({})'.format(remote_service,
+                                                  self.relid[remote_service]))
         data = self.local[remote_service]
         data.update(self.global_data())
         data.update(self.service_data(remote_service))
@@ -63,11 +65,11 @@ class DbRelation:
         service_keys = frozenset(['user', 'password', 'roles',
                                   'schema_user', 'schema_password',
                                   'database', 'extensions'])
-        return dict((k, v) for k, v in self.master[remote_service]
+        return dict((k, v) for k, v in self.master[remote_service].items()
                     if k in service_keys)
 
     def unit_data(self, remote_service):
-        relid = self.relid(remote_service)
+        relid = self.relid[remote_service]
 
         # We allowed access to all related units when we regenerated
         # pg_hba.conf
@@ -109,14 +111,12 @@ class DbRelation:
             master_data['database'] = remote_service
         postgresql.ensure_database(master_data['database'])
 
-        # The rest of resource creation can be done in a transaction,
-        # and rolled back if the hook fails.
-        con = postgresql.connect(master_data['database'])
-        hookenv.atexit(con.commit)
+        # The rest of resource creation can be done in a transaction.
+        con = postgresql.connect(database=master_data['database'])
 
         # Ensure requested extensions have been created in the database.
-        master_data['extensions'] = remote_data['extensions']  # Reflect back.
-        if 'extensions' in master_data['extensions']:
+        master_data['extensions'] = remote_data.get('extensions')  # Reflect
+        if master_data['extensions']:
             extensions = filter(None, master_data['extensions'].split(','))
             postgresql.ensure_extensions(con, extensions)
 
@@ -138,8 +138,8 @@ class DbRelation:
                                    master_data['schema_password'])
 
         # Reset the roles granted to the user as requested.
-        master_data['roles'] = remote_data['roles']  # Reflect back.
-        if 'roles' in master_data:
+        master_data['roles'] = remote_data.get('roles')  # Reflect back.
+        if master_data['roles'] is not None:
             roles = filter(None, master_data['roles'].split(','))
             postgresql.reset_user_roles(con, master_data['user'], roles)
 
@@ -149,14 +149,15 @@ class DbRelation:
         # is insecure.
         config = hookenv.config()
         privs = set(config['relation_database_privileges'].split(','))
-        postgresql.grant_database_privilege(con,
-                                            master_data['user'],
-                                            master_data['database'],
-                                            privs)
-        postgresql.grant_database_privilege(con,
-                                            master_data['schema_user'],
-                                            master_data['database'],
-                                            privs)
+        postgresql.grant_database_privileges(con,
+                                             master_data['user'],
+                                             master_data['database'],
+                                             privs)
+        postgresql.grant_database_privileges(con,
+                                             master_data['schema_user'],
+                                             master_data['database'],
+                                             privs)
+        con.commit()
         return master_data
 
 

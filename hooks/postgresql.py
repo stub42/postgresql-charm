@@ -41,9 +41,8 @@ def version():
     return version_map[helpers.distro_codename()]
 
 
-def connect(database='postgres'):
-    return psycopg2.connect(user=username(hookenv.local_unit()),
-                            database=database, port=port())
+def connect(user='postgres', database='postgres'):
+    return psycopg2.connect(user=user, database=database, port=port())
 
 
 def username(unit_or_service, superuser=False):
@@ -74,20 +73,28 @@ def packages():
                 'postgresql-client-{}'.format(ver)])
 
 
-def postgresql_conf_path():
-    return '/etc/postgresql/{}/main/postgresql.conf'.format(version())
+def config_dir():
+    return '/etc/postgresql/{}/main'.format(version())
 
 
-def pg_hba_conf_path():
-    return '/etc/postgresql/{}/main/pg_hba.conf'.format(version())
-
-
-def datadir_path():
+def data_dir():
     return '/var/lib/postgresql/{}/main'.format(version())
 
 
+def postgresql_conf_path():
+    return os.path.join(config_dir(), 'postgresql.conf')
+
+
+def pg_hba_conf_path():
+    return os.path.join(config_dir(), 'pg_hba.conf')
+
+
+def pg_ident_conf_path():
+    return os.path.join(config_dir(), 'pg_ident.conf')
+
+
 def recovery_conf_path():
-    return os.path.join(datadir_path(), 'recovery.conf'.format(version()))
+    return os.path.join(data_dir(), 'recovery.conf')
 
 
 def pg_ctl_path():
@@ -126,12 +133,12 @@ def is_secondary():
 def is_master():
     '''True if the unit is the master.
 
-    The master unit is responsible for creating objects in the database,
-    and must be a primary. The service has at most one master, and may
-    have no master during transitional states like failover.
+    The master unit is responsible for creating objects in the database.
+    The service has at most one master, and may have no master during
+    transitional states like failover. If recently promoted, the master
+    may not yet be a primary.
     '''
-    return (hookenv.leader_get('master') == hookenv.local_unit()
-            and is_primary())
+    return hookenv.leader_get('master') == hookenv.local_unit()
 
 
 def master():
@@ -167,7 +174,8 @@ def quote_identifier(identifier):
     U&"\\ aargh \0441\043b\043e\043d"
     '''
     try:
-        return '"%s"' % identifier.encode('US-ASCII').replace('"', '""')
+        identifier.encode('US-ASCII')
+        return '"{}"'.format(identifier.replace('"', '""'))
     except UnicodeEncodeError:
         escaped = []
         for c in identifier:
@@ -176,7 +184,7 @@ def quote_identifier(identifier):
             elif c == '"':
                 escaped.append('""')
             else:
-                c = c.encode('US-ASCII', 'backslashreplace')
+                c = c.encode('US-ASCII', 'backslashreplace').decode('US-ASCII')
                 # Note Python only supports 32 bit unicode, so we use
                 # the 4 hexdigit PostgreSQL syntax (\1234) rather than
                 # the 6 hexdigit format (\+123456).
@@ -227,9 +235,8 @@ def role_exists(con, role):
 def grant_database_privileges(con, role, database, privs):
     cur = con.cursor()
     for priv in privs:
-        cur.execure("GRANT %s ON DATABASE %s TO %s",
-                    (pgidentifier(priv), pgidentifier(database),
-                     pgidentifier(role)))
+        cur.execute("GRANT %s ON DATABASE %s TO %s",
+                    (AsIs(priv), pgidentifier(database), pgidentifier(role)))
 
 
 def reset_user_roles(con, username, roles):
@@ -309,7 +316,7 @@ def addr_to_range(addr):
 def is_running():
     try:
         subprocess.check_call([pg_ctl_path(), 'status', '-s',
-                               '-D', datadir_path()],
+                               '-D', data_dir()],
                               universal_newlines=True)
         return True
     except subprocess.CalledProcessError as x:
