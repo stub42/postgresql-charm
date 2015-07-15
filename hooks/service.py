@@ -17,7 +17,7 @@ import os.path
 import re
 import subprocess
 
-from charmhelpers.core import hookenv, host
+from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG
 from charmhelpers import fetch
 from charmhelpers.payload import execd
@@ -193,8 +193,8 @@ def update_pg_ident_conf(manager, service_name, event_name):
 
 
 @data_ready_action
-def generate_pg_hba_conf(manager, service_name, event_name):
-    '''Generate pg_hba.conf (host based authentication).'''
+def update_pg_hba_conf(manager, service_name, event_name):
+    '''Update the pg_hba.conf file (host based authentication).'''
     rules = []  # The ordered list, as tuples.
 
     # local      database  user  auth-method  [auth-options]
@@ -251,11 +251,26 @@ def generate_pg_hba_conf(manager, service_name, event_name):
     add('local', 'all', 'all', 'reject', '# Reject everything else')
     add('host', 'all', 'all', 'all', 'reject', '# Reject everything else')
 
-    # Spit out the file
-    rules.insert(0, ('# Managed by Juju',))
-    pg_hba_conf = '\n'.join(' '.join(rule) for rule in rules)
-    host.write_file(postgresql.pg_hba_conf_path(), pg_hba_conf.encode('UTF-8'),
-                    owner='postgres', group='postgres', perms=0o600)
+    # Load the existing file
+    path = postgresql.pg_hba_conf_path()
+    with open(path, 'r') as f:
+        pg_hba = f.read()
+
+    # Strip out the existing juju managed section
+    start_mark = '### BEGIN JUJU SETTINGS ###'
+    end_mark = '### END JUJU SETTINGS ###'
+    pg_hba = re.sub(r'^\s*{}.*^\s*{}\s*$'.format(re.escape(start_mark),
+                                                 re.escape(end_mark)),
+                    '', pg_hba, flags=re.I | re.M | re.DOTALL)
+
+    # Comment out any uncommented lines
+    pg_hba = re.sub(r'^(\s*[^#\s].*)$', r'# juju # \1', pg_hba, re.M)
+
+    # Spit out the updated file
+    rules.insert(0, start_mark)
+    rules.append(end_mark)
+    pg_hba += '\n' + '\n'.join(' '.join(rule) for rule in rules)
+    helpers.rewrite(path, pg_hba)
 
 
 @data_ready_action
