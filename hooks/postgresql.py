@@ -315,12 +315,14 @@ def addr_to_range(addr):
 
 def is_running():
     try:
-        subprocess.check_call([pg_ctl_path(), 'status', '-s',
+        subprocess.check_call(['sudo', '-u', 'postgres',
+                               pg_ctl_path(), 'status',
                                '-D', data_dir()],
-                              universal_newlines=True)
+                              universal_newlines=True,
+                              stdout=subprocess.DEVNULL)
         return True
     except subprocess.CalledProcessError as x:
-        if x.code == 3:
+        if x.returncode == 3:
             return False
         raise
 
@@ -343,7 +345,7 @@ def start():
                                '--', '-t', str(STARTUP_TIMEOUT)],
                               universal_newlines=True)
     except subprocess.CalledProcessError as x:
-        if x.code == 2:
+        if x.returncode == 2:
             return  # The server is already running.
         raise
 
@@ -357,7 +359,7 @@ def stop():
                               universal_newlines=True)
         return
     except subprocess.CalledProcessError as x:
-        if x.code == 2:
+        if x.returncode == 2:
             return  # The server was not running.
 
     # If the 'fast' shutdown failed, try an 'immediate' shutdown.
@@ -370,7 +372,7 @@ def stop():
                               universal_newlines=True)
         return
     except subprocess.CalledProcessError as x:
-        if x.code == 2:
+        if x.returncode == 2:
             return  # The server was not running.
         helpers.status_set('blocked', 'Unable to shutdown PostgreSQL')
         raise SystemExit(0)

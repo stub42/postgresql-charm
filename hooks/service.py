@@ -22,6 +22,7 @@ from charmhelpers.core.hookenv import DEBUG
 from charmhelpers import fetch
 from charmhelpers.payload import execd
 
+from coordinator import coordinator
 from decorators import data_ready_action, requirement
 import helpers
 import postgresql
@@ -172,7 +173,7 @@ def ensure_package_status(manager, service_name, event_name):
 
 @data_ready_action
 def appoint_master(manager, service_name, event_name):
-    # Underconstruction. First leader is master for ever.
+    # Underconstruction. First leader is master forever.
     if hookenv.is_leader() and not postgresql.master():
         hookenv.leader_set(master=hookenv.local_unit())
 
@@ -264,17 +265,19 @@ def update_pg_hba_conf(manager, service_name, event_name):
                     '', pg_hba, flags=re.I | re.M | re.DOTALL)
 
     # Comment out any uncommented lines
-    pg_hba = re.sub(r'^(\s*[^#\s].*)$', r'# juju # \1', pg_hba, re.M)
+    pg_hba = re.sub(r'^\s*([^#\s].*)$', r'# juju # \1', pg_hba, flags=re.M)
 
     # Spit out the updated file
-    rules.insert(0, start_mark)
-    rules.append(end_mark)
+    rules.insert(0, (start_mark,))
+    rules.append((end_mark,))
     pg_hba += '\n' + '\n'.join(' '.join(rule) for rule in rules)
     helpers.rewrite(path, pg_hba)
 
 
 @data_ready_action
 def update_postgresql_conf(manager, service_name, event_name):
+    config = hookenv.config()
+
     charm_opts = dict(listen_addresses='*')
 
     path = postgresql.postgresql_conf_path()
@@ -298,6 +301,11 @@ def update_postgresql_conf(manager, service_name, event_name):
         pg_conf = re.sub(r'^\s*({}[\s=].*)$'.format(re.escape(k)),
                          r'# juju # \1', pg_conf, flags=re.M | re.I)
 
+    # Store the updated charm options, so later handlers can detect
+    # if important settings have changed and if PostgreSQL needs to
+    # be restarted.
+    config['postgresql_conf'] = charm_opts
+
     # Generate the charm config section, adding it to the end of the
     # config file.
     override_section = [start_mark]
@@ -310,6 +318,57 @@ def update_postgresql_conf(manager, service_name, event_name):
     pg_conf += '\n' + '\n'.join(override_section)
 
     helpers.rewrite(path, pg_conf)
+
+
+@data_ready_action
+def maybe_request_restart(manager, service_name, event_name):
+    if coordinator.requested('restart'):
+        hookenv.log('Restart already requested')
+        return
+
+    # There is no reason to wait for permission from the leader before
+    # restarting a stopped server.
+    if not postgresql.is_running():
+        hookenv.log('PostgreSQL is not running. No need to request restart.')
+
+    # Detect if PostgreSQL settings have changed that require a restart.
+    config = hookenv.config()
+    if config.changed('postgresql_conf'):
+        old_config = config.previous('postgresql_conf') or {}
+        new_config = config.get('postgresql_conf', {})
+        con = postgresql.connect()
+        cur = con.cursor()
+        cur.execute("SELECT name FROM pg_settings WHERE context='postmaster'")
+        for row in cur.fetchall():
+            key = row[0]
+            old = old_config.get(key)
+            new = new_config.get(key)
+            if old != new:
+                hookenv.log('{} changed from {!r} to {!r}. '
+                            'Restart required.'.format(old, new))
+                # Request permission from the leader to restart. We cannot
+                # restart immediately or we risk interrupting operations
+                # like backups and replica rebuilds.
+                coordinator.acquire('restart')
+
+    # Similarly, if recovery.conf has changed we need to restart.
+    # eg. a secondary has been reparented, or the parent IP address
+    # has changed.
+    if config.changed('recovery_conf'):
+        coordinator.acquire('restart')
+
+
+@data_ready_action
+def maybe_reload_or_restart(manager, service_name, event_name):
+    '''Restart if necessary and leader has given permission, or else reload.'''
+    if coordinator.granted('restart') or not postgresql.is_running():
+        subprocess.check_call(['pg_ctlcluster', '--mode=fast',
+                              postgresql.version(), 'main', 'restart'],
+                              universal_newlines=True)
+    else:
+        subprocess.check_call(['pg_ctlcluster', postgresql.version(),
+                               'main', 'reload'],
+                              universal_newlines=True)
 
 
 @data_ready_action
@@ -355,16 +414,15 @@ def ensure_client_resources(manager, service_name, event_name):
 
 
 @data_ready_action
-def maybe_reload_or_restart(manager, service_name, event_name):
-    # TODO: Restart only if necessary and with permission from leader.
-    subprocess.check_call(['pg_ctlcluster', '--mode=fast',
-                           postgresql.version(), 'main', 'restart'])
-
-
-@data_ready_action
 def set_active(manager, service_name, event_name):
-    if postgresql.is_primary():
-        msg = 'Live primary'
-    else:
-        msg = 'Live secondary'
-    helpers.status_set('active', msg)
+    if postgresql.is_running():
+        if postgresql.is_master():
+            msg = 'Live Master'
+        elif postgresql.is_primary():
+            msg = 'Live Primary'
+        else:
+            msg = 'Live Secondary'
+        helpers.status_set('active', msg)
+    elif hookenv.status_get() == 'active':
+        helpers.status_set('blocked', 'PostgreSQL unexpectedly shut down')
+        raise SystemExit(0)

@@ -39,7 +39,7 @@ def default_hook():
     # packages may not have been installed.
     import definitions
 
-    hookenv.log('*** {} Hook Start'.format(hookenv.hook_name()))
+    hookenv.log('*** Start {!r} hook'.format(hookenv.hook_name()))
     sm = definitions.get_service_manager()
     sm.manage()
-    hookenv.log('*** {} Hook Done'.format(hookenv.hook_name()))
+    hookenv.log('*** End {!r} hook'.format(hookenv.hook_name()))

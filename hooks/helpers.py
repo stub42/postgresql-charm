@@ -16,6 +16,7 @@
 
 import os
 import shutil
+import stat
 import tempfile
 
 from charmhelpers.core import hookenv, host
@@ -82,11 +83,14 @@ def maybe_backup(path):
 
 def rewrite(path, content, mode='w'):
     '''Rewrite a file atomically, preserving ownership and permissions.'''
+    attr = os.lstat(path)
+    assert stat.S_ISREG(attr.st_mode), '{} not a regular file'.format(path)
     with tempfile.NamedTemporaryFile(mode=mode, delete=False) as f:
         try:
-            shutil.copystat(path, f.name)
             f.write(content)
             f.flush()
+            os.chown(f.name, attr[stat.ST_UID], attr[stat.ST_GID])
+            os.chmod(f.name, stat.S_IMODE(attr.st_mode))
             os.replace(f.name, path)
         finally:
             if os.path.exists(f.name):

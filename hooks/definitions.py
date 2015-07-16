@@ -34,7 +34,7 @@ def get_service_definitions():
                          service.appoint_master,
                          service.ensure_client_resources,
                          service.update_pg_ident_conf,
-                         service.generate_pg_hba_conf,
+                         service.update_pg_hba_conf,
                          service.update_postgresql_conf,
                          service.maybe_reload_or_restart,
                          service.set_active],
