@@ -226,12 +226,15 @@ def pgidentifier(token):
 
 def create_cluster():
     config = hookenv.config()
-    subprocess.check_call(['pg_createcluster',
-                           '-e', config['encoding'],
-                           '--locale', config['locale'],
-                           version(), 'main',
-                           '--', '--data-checksums'],
-                          universal_newlines=True)
+    cmd = ['pg_createcluster', '-e', config['encoding'],
+           '--locale', config['locale'], version(), 'main']
+    # With 9.3+, we make an opinionated decision to always enable
+    # data checksums. This seems to be best practice. We could
+    # turn this into a configuration item if there is need. There
+    # is no way to enable this option on existing clusters.
+    if has_version('9.3'):
+        cmd.extend(['--', '--data-checksums'])
+    subprocess.check_call(cmd, universal_newlines=True)
 
 
 def ensure_database(database):
