@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from contextlib import contextmanager
+from distutils.version import StrictVersion
 import os.path
 import re
 import subprocess
@@ -40,6 +41,10 @@ def version():
     # the distro release.
     version_map = dict(precise='9.1', trusty='9.3')
     return version_map[helpers.distro_codename()]
+
+
+def has_version(ver):
+    return StrictVersion(ver) >= StrictVersion(version())
 
 
 def connect(user='postgres', database='postgres'):

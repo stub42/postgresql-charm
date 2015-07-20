@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
+import shutil
 import stat
 import tempfile
 
@@ -73,17 +74,37 @@ def peers():
     return set(hookenv.related_units(relid)) if relid else set()
 
 
-def rewrite(path, content, mode='w'):
+def rewrite(path, content):
     '''Rewrite a file atomically, preserving ownership and permissions.'''
     attr = os.lstat(path)
+    write(path, content,
+          mode=stat.S_IMODE(attr.st_mode),
+          user=attr[stat.ST_UID],
+          group=attr[stat.ST_GID])
+
+
+def write(path, content, mode=0o640, user='root', group='root'):
+    '''Write a file atomically.'''
+    attr = os.lstat(path)
     assert stat.S_ISREG(attr.st_mode), '{} not a regular file'.format(path)
-    with tempfile.NamedTemporaryFile(mode=mode, delete=False) as f:
+
+    open_mode = 'wb' if isinstance(content, bytes) else 'w'
+    with tempfile.NamedTemporaryFile(mode=open_mode, delete=False) as f:
         try:
             f.write(content)
             f.flush()
-            os.chown(f.name, attr[stat.ST_UID], attr[stat.ST_GID])
-            os.chmod(f.name, stat.S_IMODE(attr.st_mode))
+            shutil.chown(f.name, user, group)
+            os.chmod(f.name, mode)
             os.replace(f.name, path)
         finally:
             if os.path.exists(f.name):
                 os.unlink(f.name)
+
+
+def makedirs(path, mode=0o750, user='root', group='root'):
+    if os.path.exists(path):
+        assert os.path.is_dir(path), '{} is not a directory'
+    else:
+        os.makedirs(path, mode=mode)
+    shutil.chown(path, user, group)
+    os.chmod(path, mode)

@@ -27,6 +27,7 @@ from decorators import data_ready_action, requirement
 import helpers
 import postgresql
 import relations
+import wal_e
 
 
 @requirement
@@ -186,6 +187,11 @@ def appoint_master(manager, service_name, event_name):
 
 
 @data_ready_action
+def update_kernel_settings(manager, service_name, event_name):
+    raise NotImplementedError
+
+
+@data_ready_action
 def update_pg_ident_conf(manager, service_name, event_name):
     '''Add the charm's required entry to pg_ident.conf'''
     entries = set([('root', 'postgres'),
@@ -284,11 +290,53 @@ def update_pg_hba_conf(manager, service_name, event_name):
     helpers.rewrite(path, pg_hba)
 
 
+def force_viable_settings(opts):
+    def force(**kw):
+        for k, v in kw:
+            if opts.get(k) != v:
+                hookenv.log('Setting {} to {}'.format(k, v), DEBUG)
+                opts[k] = v
+
+    config = hookenv.config()
+
+    num_standbys = len(helpers.peers())
+    for relid in hookenv.relation_ids('master'):
+        num_standbys += len(hookenv.related_units(relid))
+
+    if num_standbys:
+        if postgresql.has_version('9.4'):
+            force(hot_standy='logical')
+        else:
+            force(hot_standby='hot_standby')
+
+    # Even without replication, replication slots get used by
+    # pg_basebackup(1). Bump up max_wal_senders so things work. It is
+    # cheap, so perhaps we should just pump it to several thousand.
+    min_wal_senders = num_standbys * 5 + 5
+    if min_wal_senders > opts.get('max_wal_senders', 0):
+        force(max_wal_senders=min_wal_senders)
+
+    # Having two config options for the one setting is confusing. Perhaps
+    # we should deprecate this.
+    if num_standbys and (config['replicated_wal_keep_segments']
+                         > opts.get('wal_keep_segments', 0)):
+        force(wal_keep_segments=config['replicated_wal_keep_segments'])
+
+    # Log shipping with WAL-E.
+    if config['wal_e_storage_uri']:
+        force(archive_mode=True)
+        if opts['wal_level'] == 'minimal':
+            force(wal_level='hot_standby')
+        force(archive_command=wal_e.wal_e_archive_command())
+
+
 @data_ready_action
 def update_postgresql_conf(manager, service_name, event_name):
     config = hookenv.config()
 
     charm_opts = dict(listen_addresses='*')
+
+    force_viable_settings(charm_opts)
 
     path = postgresql.postgresql_conf_path()
 
