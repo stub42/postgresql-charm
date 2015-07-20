@@ -19,5 +19,5 @@
 import bootstrap
 
 if __name__ == '__main__':
-    # bootstrap.bootstrap()
+    bootstrap.bootstrap()
     bootstrap.default_hook()

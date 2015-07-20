@@ -19,5 +19,6 @@
 import bootstrap
 
 if __name__ == '__main__':
-    # bootstrap.bootstrap()
+    bootstrap.bootstrap()
+    bootstrap.upgrade_charm()
     bootstrap.default_hook()

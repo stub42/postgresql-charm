@@ -76,11 +76,11 @@ def preinstall(manager, service_name, event_name):
     # Only run the preinstall hooks once, in the first hook. This is
     # either the leader-elected hook or the install hook.
     config = hookenv.config()
-    config['preinstall_done'] = True
-    if config.changed('preinstall_done'):
+    if config.get('preinstall_done'):
         helpers.status_set('maintenance', 'Running preinstallation hooks')
         try:
             execd.execd_run('charm-pre-install', die_on_error=True)
+            config['preinstall_done'] = True
         except SystemExit:
             helpers.block('execd_preinstall failed')
             raise SystemExit(0)

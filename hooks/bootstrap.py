@@ -29,6 +29,11 @@ def bootstrap():
         import psycopg2  # NOQA: flake8
 
 
+def upgrade_charm():
+    import upgrade
+    upgrade.upgrade_charm()
+
+
 def default_hook():
     if not hookenv.has_juju_version('1.24'):
         hookenv.status_set('blocked', 'Requires Juju 1.24 or higher')
