@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from functools import partial
+
 from charmhelpers.core import hookenv, host
 
 import helpers
@@ -29,24 +31,30 @@ class DbRelation:
         self.remote = {}
         self.master = {}
         self.relid = {}
+
         master_unit = postgresql.master()
-        if master_unit is not None:
-            for relid in hookenv.relation_ids(self.name):
-                remote_unit = hookenv.related_units(relid)[0]
-                remote_service = remote_unit.split('/', 1)[0]
-                local_rel = hookenv.relation_get(rid=relid,
-                                                 unit=hookenv.local_unit())
-                remote_rel = hookenv.relation_get(rid=relid,
-                                                  unit=remote_unit)
-                master_rel = hookenv.relation_get(rid=relid,
-                                                  unit=master_unit)
-                self.local[remote_service] = local_rel
-                self.remote[remote_service] = remote_rel
-                self.master[remote_service] = master_rel
-                self.relid[remote_service] = relid
+        if not master_unit:
+            return
+
+        for relid in hookenv.relation_ids(self.name):
+            remote_units = hookenv.related_units(relid)
+            if not remote_units:
+                continue
+            remote_service = remote_units[0].split('/', 1)[0]
+            relget = partial(hookenv.relation_get, rid=relid)
+            self.relid[remote_service] = relid
+            self.local[remote_service] = relget(unit=hookenv.local_unit())
+            self.master[remote_service] = relget(unit=master_unit)
+            self.remote[remote_service] = dict((unit, relget(unit=unit))
+                                               for unit in remote_units)
 
     def provide_data(self, remote_service, service_ready):
         if not service_ready:
+            return {}
+
+        if not self.master.get(remote_service):
+            hookenv.log('Waiting for master to provide {}'
+                        ''.format(remote_service))
             return {}
 
         hookenv.log('** Providing {} ({})'.format(remote_service,
@@ -69,11 +77,9 @@ class DbRelation:
                     if k in service_keys)
 
     def unit_data(self, remote_service):
-        relid = self.relid[remote_service]
-
         # We allowed access to all related units when we regenerated
         # pg_hba.conf
-        allowed_units = ' '.join(sorted(hookenv.related_units(relid)))
+        allowed_units = ' '.join(sorted(self.remote[remote_service].keys()))
 
         # Calulate the state of this unit. standalone will disappear
         # in a future version of this interface, as this state was
@@ -97,7 +103,9 @@ class DbRelation:
         # database environment get setup.
         assert postgresql.is_master(), 'Not the master'
 
-        remote_data = self.remote[remote_service]
+        # Pick one remote unit consistantly as representative. They
+        # should all converge eventually.
+        remote_data = self.remote[sorted(self.remote.keys())[0]]
 
         # We update the master data in this instance, and it will later
         # be returned by provide_data() for publishing to the relation.
@@ -111,7 +119,7 @@ class DbRelation:
             master_data['database'] = remote_service
         postgresql.ensure_database(master_data['database'])
 
-        # The rest of resource creation can be done in a transaction.
+        # The rest of resource creation is done in a transaction.
         con = postgresql.connect(database=master_data['database'])
 
         # Ensure requested extensions have been created in the database.

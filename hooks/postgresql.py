@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from contextlib import contextmanager
 import os.path
 import re
 import subprocess
@@ -71,6 +72,25 @@ def packages():
                 'postgresql-common', 'postgresql-client-common',
                 'postgresql-contrib-{}'.format(ver),
                 'postgresql-client-{}'.format(ver)])
+
+
+@contextmanager
+def inhibit_default_cluster_creation():
+    '''Stop the PostgreSQL packages from creating the default cluster.
+
+    We can't use the default cluster as it is likely created with an
+    incorrect locale and without options such as data checksumming.
+    '''
+    if os.path.exists(postgresql_conf_path()):
+        yield
+    else:
+        os.makedirs(config_dir(), mode=0o755, exist_ok=True)
+        with open(postgresql_conf_path(), 'w'):
+            pass
+        try:
+            yield
+        finally:
+            os.unlink(postgresql_conf_path())
 
 
 def config_dir():
@@ -197,6 +217,16 @@ def quote_identifier(identifier):
 def pgidentifier(token):
     '''Wrap a string for interpolation by psycopg2 as an SQL identifier'''
     return AsIs(quote_identifier(token))
+
+
+def create_cluster():
+    config = hookenv.config()
+    subprocess.check_call(['pg_createcluster',
+                           '-e', config['encoding'],
+                           '--locale', config['locale'],
+                           version(), 'main',
+                           '--', '--data-checksums'],
+                          universal_newlines=True)
 
 
 def ensure_database(database):

@@ -146,7 +146,8 @@ def install_packages(manager, service_name, event_name):
         filtered_packages = fetch.filter_installed_packages(packages)
         helpers.status_set(hookenv.status_get(), 'Installing packages')
         try:
-            fetch.apt_install(filtered_packages, fatal=True)
+            with postgresql.inhibit_default_cluster_creation():
+                fetch.apt_install(filtered_packages, fatal=True)
         except subprocess.CalledProcessError:
             helpers.status_set('blocked',
                                'Unable to install packages {!r}'
@@ -169,6 +170,12 @@ def ensure_package_status(manager, service_name, event_name):
             helpers.status_set('Removing hold on charm packages')
             mark = 'unhold'
         fetch.apt_mark(packages, mark, fatal=True)
+
+
+@data_ready_action
+def ensure_cluster(manager, service_name, event_name):
+    if not os.path.exists(postgresql.postgresql_conf_path()):
+        postgresql.create_cluster()
 
 
 @data_ready_action
@@ -223,19 +230,22 @@ def update_pg_hba_conf(manager, service_name, event_name):
     #     add('host', 'replication', 'postgres', addr, replication_password)
 
     # Clients need access to the relation database as the relation users.
-    for relname in ('db', 'db-admin'):
-        for relid in hookenv.relation_ids(relname):
-            local_relinfo = hookenv.relation_get(unit=hookenv.local_unit(),
-                                                 rid=relid)
-            for unit in hookenv.related_units(relid):
-                remote_relinfo = hookenv.relation_get(unit=unit, rid=relid)
-                addr = postgresql.addr_to_range(
-                    remote_relinfo['private-address'])
+    service = manager.get_service(service_name)
+    clients = [provider for provider in service['provided_data']
+               if isinstance(provider, relations.DbRelation)]
+    for client in clients:
+        for service_name, master_relinfo in sorted(client.master.items()):
+            remotes = client.remote[service_name]
+            for remote_unit, remote_relinfo in sorted(remotes.items()):
+                addr = remote_relinfo['private-address']
+                addr = postgresql.addr_to_range(addr)
+                # Quote everything, including the address, to # disenchant
+                # magic tokens like 'all'.
                 add('host',
-                    postgresql.quote_identifier(local_relinfo['database']),
-                    postgresql.quote_identifier(local_relinfo['user']),
+                    postgresql.quote_identifier(master_relinfo['database']),
+                    postgresql.quote_identifier(master_relinfo['user']),
                     postgresql.quote_identifier(addr),
-                    'md5', '# {}'.format(unit))
+                    'md5', '# {}'.format(remote_unit))
 
     # External administrative addresses, if specified by the operator.
     config = hookenv.config()
@@ -249,8 +259,8 @@ def update_pg_hba_conf(manager, service_name, event_name):
         add((line, '# extra_pg_auth config'))
 
     # Deny everything else
-    add('local', 'all', 'all', 'reject', '# Reject everything else')
-    add('host', 'all', 'all', 'all', 'reject', '# Reject everything else')
+    add('local', 'all', 'all', 'reject', '# Refuse by default')
+    add('host', 'all', 'all', 'all', 'reject', '# Refuse by default')
 
     # Load the existing file
     path = postgresql.pg_hba_conf_path()
@@ -281,8 +291,6 @@ def update_postgresql_conf(manager, service_name, event_name):
     charm_opts = dict(listen_addresses='*')
 
     path = postgresql.postgresql_conf_path()
-
-    helpers.maybe_backup(path)
 
     with open(path, 'r') as f:
         pg_conf = f.read()
@@ -321,7 +329,7 @@ def update_postgresql_conf(manager, service_name, event_name):
 
 
 @data_ready_action
-def maybe_request_restart(manager, service_name, event_name):
+def request_restart(manager, service_name, event_name):
     if coordinator.requested('restart'):
         hookenv.log('Restart already requested')
         return
@@ -333,9 +341,15 @@ def maybe_request_restart(manager, service_name, event_name):
 
     # Detect if PostgreSQL settings have changed that require a restart.
     config = hookenv.config()
-    if config.changed('postgresql_conf'):
-        old_config = config.previous('postgresql_conf') or {}
-        new_config = config.get('postgresql_conf', {})
+    if config.previous('postgresql_conf') is None:
+        # We special case the first reconfig, as at this point we have
+        # never even done a reload and the charm does not yet have access
+        # to connect to the database.
+        hookenv.log('First reconfig of postgresql.conf. Restart required.')
+        coordinator.acquire('restart')
+    elif config.changed('postgresql_conf'):
+        old_config = config.previous('postgresql_conf')
+        new_config = config['postgresql_conf']
         con = postgresql.connect()
         cur = con.cursor()
         cur.execute("SELECT name FROM pg_settings WHERE context='postmaster'")
@@ -359,7 +373,7 @@ def maybe_request_restart(manager, service_name, event_name):
 
 
 @data_ready_action
-def maybe_reload_or_restart(manager, service_name, event_name):
+def reload_or_restart(manager, service_name, event_name):
     '''Restart if necessary and leader has given permission, or else reload.'''
     if coordinator.granted('restart') or not postgresql.is_running():
         subprocess.check_call(['pg_ctlcluster', '--mode=fast',
