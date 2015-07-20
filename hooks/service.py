@@ -17,7 +17,7 @@ import os.path
 import re
 import subprocess
 
-from charmhelpers.core import hookenv
+from charmhelpers.core import hookenv, sysctl
 from charmhelpers.core.hookenv import DEBUG
 from charmhelpers import fetch
 from charmhelpers.payload import execd
@@ -188,7 +188,11 @@ def appoint_master(manager, service_name, event_name):
 
 @data_ready_action
 def update_kernel_settings(manager, service_name, event_name):
-    raise NotImplementedError
+    lots_and_lots = pow(1024, 4)  # 1 TB
+    sysctl_settings = {'kernel.shmmax': lots_and_lots,
+                       'kernel.shmall': lots_and_lots}
+    sysctl.create(yaml.dump(sysctl_settings),
+                  '/etc/sysctl.d/50-postgresql.conf')
 
 
 @data_ready_action

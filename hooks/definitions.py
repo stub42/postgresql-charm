@@ -31,6 +31,7 @@ def get_service_definitions():
                          service.configure_sources,
                          service.install_packages,
                          service.ensure_package_status,
+                         service.update_kernel_settings,
                          service.ensure_cluster,
                          service.appoint_master,
                          service.ensure_client_resources,
