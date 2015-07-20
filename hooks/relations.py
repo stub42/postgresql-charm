@@ -45,8 +45,8 @@ class DbRelation:
             self.relid[remote_service] = relid
             self.local[remote_service] = relget(unit=hookenv.local_unit())
             self.master[remote_service] = relget(unit=master_unit)
-            self.remote[remote_service] = dict((unit, relget(unit=unit))
-                                               for unit in remote_units)
+            self.remote[remote_service] = {unit: relget(unit=unit)
+                                           for unit in remote_units}
 
     def provide_data(self, remote_service, service_ready):
         if not service_ready:
