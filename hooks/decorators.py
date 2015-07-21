@@ -18,6 +18,7 @@ from functools import wraps
 from charmhelpers.core import hookenv, services
 
 import helpers
+import postgresql
 
 
 class ManagerCallback(services.ManagerCallback):
@@ -76,3 +77,20 @@ class requirement:
                 helpers.status_set('blocked',
                                    'Requirement {} failed'.format(name))
             return False
+
+
+def master_only(func):
+    '''Only run on the appointed master.'''
+    @wraps(func)
+    def wrapper(*args, **kw):
+        if postgresql.is_master():
+            return func(*args, **kw)
+    return wrapper
+
+
+def secondary_only(func):
+    @wraps(func)
+    def wrapper(*args, **kw):
+        if postgresql.is_secondary():
+            return func(*args, **kw)
+    return wrapper

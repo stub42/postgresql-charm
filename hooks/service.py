@@ -17,6 +17,8 @@ import os.path
 import re
 import subprocess
 
+import yaml
+
 from charmhelpers.core import hookenv, sysctl
 from charmhelpers.core.hookenv import DEBUG
 from charmhelpers import fetch
@@ -240,22 +242,18 @@ def update_pg_hba_conf(manager, service_name, event_name):
     #     add('host', 'replication', 'postgres', addr, replication_password)
 
     # Clients need access to the relation database as the relation users.
-    service = manager.get_service(service_name)
-    clients = [provider for provider in service['provided_data']
-               if isinstance(provider, relations.DbRelation)]
-    for client in clients:
-        for service_name, master_relinfo in sorted(client.master.items()):
-            remotes = client.remote[service_name]
-            for remote_unit, remote_relinfo in sorted(remotes.items()):
-                addr = remote_relinfo['private-address']
-                addr = postgresql.addr_to_range(addr)
+    rels = relations.relations()
+    for rel in list(rels['db'].values()) + list(rels['db-admin'].values()):
+        if 'database' in rel.local:
+            for relinfo in rel.values():
+                addr = postgresql.addr_to_range(relinfo['private-address'])
                 # Quote everything, including the address, to # disenchant
                 # magic tokens like 'all'.
                 add('host',
-                    postgresql.quote_identifier(master_relinfo['database']),
-                    postgresql.quote_identifier(master_relinfo['user']),
+                    postgresql.quote_identifier(rel.local['database']),
+                    postgresql.quote_identifier(rel.local['user']),
                     postgresql.quote_identifier(addr),
-                    'md5', '# {}'.format(remote_unit))
+                    'md5', '# {}'.format(relinfo.unit))
 
     # External administrative addresses, if specified by the operator.
     config = hookenv.config()
@@ -296,7 +294,7 @@ def update_pg_hba_conf(manager, service_name, event_name):
 
 def force_viable_settings(opts):
     def force(**kw):
-        for k, v in kw:
+        for k, v in kw.items():
             if opts.get(k) != v:
                 hookenv.log('Setting {} to {}'.format(k, v), DEBUG)
                 opts[k] = v
@@ -307,18 +305,22 @@ def force_viable_settings(opts):
     for relid in hookenv.relation_ids('master'):
         num_standbys += len(hookenv.related_units(relid))
 
-    if num_standbys:
-        if postgresql.has_version('9.4'):
-            force(hot_standy='logical')
-        else:
-            force(hot_standby='hot_standby')
-
     # Even without replication, replication slots get used by
     # pg_basebackup(1). Bump up max_wal_senders so things work. It is
     # cheap, so perhaps we should just pump it to several thousand.
     min_wal_senders = num_standbys * 5 + 5
     if min_wal_senders > opts.get('max_wal_senders', 0):
         force(max_wal_senders=min_wal_senders)
+
+    # We want 'hot_standby' at a minimum, as it lets us run
+    # pg_basebackup() and it is recommended over the more
+    # minimal 'archive'. Is it worth only enabling the higher-still
+    # 'logical' level only when necessary? How do we detect that?
+    force(hot_standby=True)
+    if postgresql.has_version('9.4'):
+        force(wal_level='logical')
+    else:
+        force(wal_level='hot_standby')
 
     # Having two config options for the one setting is confusing. Perhaps
     # we should deprecate this.
@@ -329,8 +331,6 @@ def force_viable_settings(opts):
     # Log shipping with WAL-E.
     if config['wal_e_storage_uri']:
         force(archive_mode=True)
-        if opts['wal_level'] == 'minimal':
-            force(wal_level='hot_standby')
         force(archive_command=wal_e.wal_e_archive_command())
 
 
@@ -463,20 +463,6 @@ def open_ports(manager, service_name, event_name):
 def close_ports(manager, service_name, event_name):
     config = hookenv.config()
     hookenv.close_port(config['open_port'])
-
-
-@data_ready_action
-def ensure_client_resources(manager, service_name, event_name):
-    if not postgresql.is_master():
-        # Only the master manages credentials and creates the database.
-        hookenv.log('Not the master, nothing to do.', DEBUG)
-        return
-
-    service = manager.get_service(service_name)
-    for provider in service['provided_data']:
-        if isinstance(provider, relations.DbRelation):
-            for remote_service in provider.remote:
-                provider.ensure_db_resources(remote_service)
 
 
 @data_ready_action

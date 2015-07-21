@@ -44,7 +44,7 @@ def version():
 
 
 def has_version(ver):
-    return StrictVersion(ver) >= StrictVersion(version())
+    return StrictVersion(version()) >= StrictVersion(ver)
 
 
 def connect(user='postgres', database='postgres'):

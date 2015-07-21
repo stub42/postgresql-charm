@@ -20,30 +20,28 @@ import relations
 import service
 
 
-def get_service_definitions():
-    return [
-        dict(service='postgresql',
-             required_data=[service.valid_config,
-                            service.has_master],
-             provided_data=[relations.DbRelation(),
-                            relations.DbAdminRelation()],
-             data_ready=[service.preinstall,
-                         service.configure_sources,
-                         service.install_packages,
-                         service.ensure_package_status,
-                         service.update_kernel_settings,
-                         service.ensure_cluster,
-                         service.appoint_master,
-                         service.ensure_client_resources,
-                         service.update_pg_ident_conf,
-                         service.update_pg_hba_conf,
-                         service.update_postgresql_conf,
-                         service.request_restart,
-                         service.reload_or_restart,
-                         service.set_active],
-             start=[service.open_ports],
-             stop=[service.stop_postgresql, service.close_ports])]
+SERVICE_DEFINITION = [
+    dict(service='postgresql',
+         required_data=[service.valid_config,
+                        service.has_master],
+         data_ready=[service.preinstall,
+                     service.configure_sources,
+                     service.install_packages,
+                     service.ensure_package_status,
+                     service.update_kernel_settings,
+                     service.ensure_cluster,
+                     service.appoint_master,
+                     relations.publish_db_relations,
+                     relations.ensure_db_relation_resources,
+                     service.update_pg_ident_conf,
+                     service.update_pg_hba_conf,
+                     service.update_postgresql_conf,
+                     service.request_restart,
+                     service.reload_or_restart,
+                     service.set_active],
+         start=[service.open_ports],
+         stop=[service.stop_postgresql, service.close_ports])]
 
 
 def get_service_manager():
-    return services.ServiceManager(get_service_definitions())
+    return services.ServiceManager(SERVICE_DEFINITION)
