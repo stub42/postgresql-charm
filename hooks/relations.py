@@ -233,7 +233,6 @@ def db_relation_master(rel, superuser):
         master['schema_user'] = user + '_schema'
         master['schema_password'] = host.pwgen()
 
-    log_params = ['database', 'user']
     hookenv.log('** Master providing {} ({}/{})'.format(rel,
                                                         master['database'],
                                                         master['user']))

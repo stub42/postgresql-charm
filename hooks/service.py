@@ -292,7 +292,38 @@ def update_pg_hba_conf(manager, service_name, event_name):
     helpers.rewrite(path, pg_hba)
 
 
-def force_viable_settings(opts):
+def assemble_postgresql_conf():
+    '''Assemble postgresql.conf settings and return them as a dictionary.'''
+    conf = {}
+
+    # Start with charm defaults.
+    conf.update(postgresql_conf_defaults())
+
+    # User overrides from service config.
+    conf.update(postgresql_conf_overrides())
+
+    # Ensure minimal settings so the charm can actually work.
+    ensure_viable_postgresql_conf(conf)
+
+    return conf
+
+
+def postgresql_conf_defaults():
+    '''Return the postgresql.conf defaults, which we parse from config.yaml'''
+    config_yaml_path = os.path.join(hookenv.charm_dir(), 'config.yaml')
+    with open(config_yaml_path, 'r') as f:
+        config_yaml = yaml.load(f)
+    raw_defaults = config_yaml['options']['extra_pg_conf']['default']
+    return postgresql.parse_config(raw_defaults)
+
+
+def postgresql_conf_overrides():
+    '''User postgresql.conf overrides, from service configuration.'''
+    config = hookenv.config()
+    return postgresql.parse_config(config['extra_pg_conf'])
+
+
+def ensure_viable_postgresql_conf(opts):
     def force(**kw):
         for k, v in kw.items():
             if opts.get(k) != v:
@@ -336,12 +367,7 @@ def force_viable_settings(opts):
 
 @data_ready_action
 def update_postgresql_conf(manager, service_name, event_name):
-    config = hookenv.config()
-
-    charm_opts = dict(listen_addresses='*')
-
-    force_viable_settings(charm_opts)
-
+    settings = assemble_postgresql_conf()
     path = postgresql.postgresql_conf_path()
 
     with open(path, 'r') as f:
@@ -355,7 +381,7 @@ def update_postgresql_conf(manager, service_name, event_name):
                                                   re.escape(end_mark)),
                      '', pg_conf, flags=re.I | re.M | re.DOTALL)
 
-    for k in charm_opts:
+    for k in settings:
         # Comment out conflicting options. We could just allow later
         # options to override earlier ones, but this is less surprising.
         pg_conf = re.sub(r'^\s*({}[\s=].*)$'.format(re.escape(k)),
@@ -364,12 +390,13 @@ def update_postgresql_conf(manager, service_name, event_name):
     # Store the updated charm options, so later handlers can detect
     # if important settings have changed and if PostgreSQL needs to
     # be restarted.
-    config['postgresql_conf'] = charm_opts
+    config = hookenv.config()
+    config['postgresql_conf'] = settings
 
     # Generate the charm config section, adding it to the end of the
     # config file.
     override_section = [start_mark]
-    for k, v in charm_opts.items():
+    for k, v in settings.items():
         if isinstance(v, str):
             assert '\n' not in v, "Invalid config value {!r}".format(v)
             v = "'{}'".format(v.replace("'", "''"))

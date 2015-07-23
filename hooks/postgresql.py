@@ -14,8 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from collections import OrderedDict
 from contextlib import contextmanager
 from distutils.version import StrictVersion
+import itertools
 import os.path
 import re
 import subprocess
@@ -414,3 +416,43 @@ def stop():
             return  # The server was not running.
         helpers.status_set('blocked', 'Unable to shutdown PostgreSQL')
         raise SystemExit(0)
+
+
+def parse_config(unparsed_config, fatal=True):
+    '''Parse a postgresql.conf style string, returning a dictionary.
+
+    This is a simple key=value format, per section 18.1.2 at
+    http://www.postgresql.org/docs/9.4/static/config-setting.html
+    '''
+    scanner = re.compile(r"""^\s*
+                         (\w+)            # key (1)
+                         \s*(?:=|\s+)\s*  # separator
+                         (?:
+                           (\w+) |        # simple value (2) or
+                           '((?:[^']|''|\\')+)(?<!\\)'(?!')  # quoted value (3)
+                         )? \s*
+                         ([^\#\s]+)?      # badly quoted value (4)
+                         (?:\#.*)?$       # comment
+                         """, re.X)
+    parsed = OrderedDict()
+    for lineno, line in zip(itertools.count(1), unparsed_config.splitlines()):
+        try:
+            m = scanner.search(line)
+            if m is None:
+                raise SyntaxError('Invalid key')
+            key, value, q_value, bad_value = m.groups()
+            if bad_value:
+                raise SyntaxError('Badly quoted value')
+            key = key.lower()
+            if q_value:
+                value = re.sub(r"''|\\'", "'", q_value)
+            if value:
+                parsed[key.lower()] = value
+        except SyntaxError as x:
+            if fatal:
+                x.lineno = lineno
+                x.text = line
+                raise x
+            hookenv.log('{} line {}: {!r}'.format(x, lineno, line),
+                        WARNING)
+    return parsed
