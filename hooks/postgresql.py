@@ -425,34 +425,47 @@ def parse_config(unparsed_config, fatal=True):
     http://www.postgresql.org/docs/9.4/static/config-setting.html
     '''
     scanner = re.compile(r"""^\s*
-                         (\w+)            # key (1)
-                         \s*(?:=|\s+)\s*  # separator
-                         (?:
-                           (\w+) |        # simple value (2) or
-                           '((?:[^']|''|\\')+)(?<!\\)'(?!')  # quoted value (3)
-                         )? \s*
-                         ([^\#\s]+)?      # badly quoted value (4)
-                         (?:\#.*)?$       # comment
+                         (                       # key=value (1)
+                           (?:
+                              (\w+)              # key (2)
+                              (?:\s*=\s*|\s+)    # separator
+                           )?
+                           (?:
+                              ([-.\w]+) |        # simple value (3) or
+                              '(                 # quoted value (4)
+                                (?:[^']|''|\\')*
+                               )(?<!\\)'(?!')
+                           )?
+                           \s* ([^\#\s].*?)?     # badly quoted value (5)
+                         )?
+                         (?:\s*\#.*)?$           # comment
                          """, re.X)
     parsed = OrderedDict()
     for lineno, line in zip(itertools.count(1), unparsed_config.splitlines()):
         try:
             m = scanner.search(line)
             if m is None:
-                raise SyntaxError('Invalid key')
-            key, value, q_value, bad_value = m.groups()
-            if bad_value:
-                raise SyntaxError('Badly quoted value')
-            key = key.lower()
-            if q_value:
+                raise SyntaxError('Invalid line')
+            keqv, key, value, q_value, bad_value = m.groups()
+            if not keqv:
+                continue
+            if key is None:
+                raise SyntaxError('Missing key'.format(keqv))
+            if bad_value is not None:
+                raise SyntaxError('Badly quoted value'.format(bad_value))
+            assert value is None or q_value is None
+            if q_value is not None:
                 value = re.sub(r"''|\\'", "'", q_value)
-            if value:
+            if value is not None:
                 parsed[key.lower()] = value
+            else:
+                raise SyntaxError('Missing value')
         except SyntaxError as x:
             if fatal:
                 x.lineno = lineno
                 x.text = line
                 raise x
-            hookenv.log('{} line {}: {!r}'.format(x, lineno, line),
-                        WARNING)
+            helpers.status_set('blocked', '{} line {}: {}'.format(x, lineno,
+                                                                  line))
+            raise SystemExit(0)
     return parsed

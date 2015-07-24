@@ -16,6 +16,7 @@
 from functools import wraps
 
 from charmhelpers.core import hookenv, services
+from charmhelpers.core.hookenv import DEBUG
 
 import helpers
 import postgresql
@@ -79,12 +80,24 @@ class requirement:
             return False
 
 
+def leader_only(func):
+    '''Only run on the service leader.'''
+    @wraps(func)
+    def wrapper(*args, **kw):
+        if hookenv.is_leader():
+            return func(*args, **kw)
+        else:
+            hookenv.log('Not the leader', DEBUG)
+
+
 def master_only(func):
     '''Only run on the appointed master.'''
     @wraps(func)
     def wrapper(*args, **kw):
         if postgresql.is_master():
             return func(*args, **kw)
+        else:
+            hookenv.log('Not the master', DEBUG)
     return wrapper
 
 
@@ -93,4 +106,6 @@ def secondary_only(func):
     def wrapper(*args, **kw):
         if postgresql.is_secondary():
             return func(*args, **kw)
+        else:
+            hookenv.log('Not a secondary', DEBUG)
     return wrapper

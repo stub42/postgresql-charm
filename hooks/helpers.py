@@ -19,6 +19,8 @@ import shutil
 import stat
 import tempfile
 
+import yaml
+
 from charmhelpers.core import hookenv, host
 from charmhelpers.core.hookenv import INFO, CRITICAL
 
@@ -108,3 +110,18 @@ def makedirs(path, mode=0o750, user='root', group='root'):
         os.makedirs(path, mode=mode)
     shutil.chown(path, user, group)
     os.chmod(path, mode)
+
+
+def config_yaml():
+    config_yaml_path = os.path.join(hookenv.charm_dir(), 'config.yaml')
+    with open(config_yaml_path, 'r') as f:
+        return yaml.load(f)
+
+
+def deprecated_config_in_use():
+    options = config_yaml()['options']
+    config = hookenv.config()
+    deprecated = [key for key in options
+                  if ('DEPRECATED' in options[key]['description']
+                      and config[key] != options[key]['default'])]
+    return set(deprecated)

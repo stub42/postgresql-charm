@@ -38,7 +38,10 @@ SERVICE_DEFINITION = [
                      service.update_postgresql_conf,
                      service.request_restart,
                      service.reload_or_restart,
-                     service.set_active],
+                     service.set_active,
+                     # At the end, as people check the end of logs
+                     # most frequently.
+                     service.emit_deprecated_option_warnings],
          start=[service.open_ports],
          stop=[service.stop_postgresql, service.close_ports])]
 

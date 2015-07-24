@@ -184,6 +184,7 @@ def relation_handler(*relnames):
     The decorated function should accept the Relation() instance
     as its single parameter.
     '''
+    assert relnames, 'relation names required'
     def decorator(func):
         @wraps(func)
         def wrapper(servicename):
@@ -296,11 +297,14 @@ def db_relation_common(rel):
 
 
 @master_only
-@relation_handler
+@relation_handler('db', 'db-admin')
 def ensure_db_relation_resources(rel):
     '''Create the database resources needed for the relation.'''
     superuser = (rel.relname == 'db-admin')
     master = rel.local
+
+    hookenv.log('Ensuring database {!r} and user {!r} exist for {}'
+                ''.format(master['database'], master['user'], rel))
 
     # First create the database, if it isn't already.
     postgresql.ensure_database(master['database'])
@@ -341,23 +345,23 @@ def ensure_db_relation_resources(rel):
 # class SyslogRelation(RelationContext):
 #     name = 'syslog'
 #     interface = 'syslog'
-# 
+#
 #     def get_data(self):
 #         self.programname = hookenv.local_unit().replace('/', '_')
 #         return super(SyslogRelation, self).get_data()
-# 
+#
 #     def provide_data(self, remote_service, service_ready):
 #         config = hookenv.config()
 #         pg_conf = config['postgresql_conf']
 #         return dict(log_line_prefix=pg_conf['log_line_prefix'],
 #                     programname=self.programname)
-# 
-# 
+#
+#
 # @hooks.hook()
 # def syslog_relation_changed():
 #     configure_log_destination(_get_postgresql_config_dir())
 #     postgresql_reload()
-# 
+#
 #     # We extend the syslog interface by exposing the log_line_prefix.
 #     # This is required so consumers of the PostgreSQL logs can decode
 #     # them. Consumers not smart enough to cope with arbitrary prefixes
@@ -367,7 +371,7 @@ def ensure_db_relation_resources(rel):
 #     hookenv.relation_set(
 #         log_line_prefix=hookenv.config('log_line_prefix'),
 #         programname=sanitize(hookenv.local_unit()))
-# 
+#
 #     template_path = "{0}/templates/rsyslog_forward.conf".format(
 #         hookenv.charm_dir())
 #     rsyslog_conf = Template(open(template_path).read()).render(
@@ -377,16 +381,16 @@ def ensure_db_relation_resources(rel):
 #         remote_addr=hookenv.relation_get('private-address'))
 #     host.write_file(rsyslog_conf_path(hookenv.remote_unit()), rsyslog_conf)
 #     run(['service', 'rsyslog', 'restart'])
-# 
-# 
+#
+#
 # @hooks.hook()
 # def syslog_relation_departed():
 #     configure_log_destination(_get_postgresql_config_dir())
 #     postgresql_reload()
 #     os.unlink(rsyslog_conf_path(hookenv.remote_unit()))
 #     run(['service', 'rsyslog', 'restart'])
-# 
-# 
+#
+#
 # def configure_log_destination(config_dir):
 #     """Set the log_destination PostgreSQL config flag appropriately"""
 #     # We currently support either 'standard' logs (the files in
@@ -409,10 +413,9 @@ def ensure_db_relation_resources(rel):
 #                 """).format(sanitize(hookenv.local_unit())))
 #     else:
 #         open(logdest_conf_path, 'w').write("log_destination='stderr'")
-# 
-# 
+#
+#
 # def rsyslog_conf_path(remote_unit):
 #     return '/etc/rsyslog.d/juju-{0}-{1}.conf'.format(
 #         sanitize(hookenv.local_unit()), sanitize(remote_unit))
-# 
-
+#

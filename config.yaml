@@ -58,7 +58,7 @@ options:
       # get out of sync with reality.
       default: |
         # Additional service specific postgresql.conf settings.
-        listen_address='*'
+        listen_addresses='*'
         max_connections=100
         ssl=true
         log_timezone=UTC

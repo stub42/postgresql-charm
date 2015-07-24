@@ -20,7 +20,7 @@ import subprocess
 import yaml
 
 from charmhelpers.core import hookenv, sysctl
-from charmhelpers.core.hookenv import DEBUG
+from charmhelpers.core.hookenv import DEBUG, WARNING
 from charmhelpers import fetch
 from charmhelpers.payload import execd
 
@@ -176,6 +176,14 @@ def ensure_package_status(manager, service_name, event_name):
 
 
 @data_ready_action
+def emit_deprecated_option_warnings(manager, service_name, event_name):
+    deprecated = sorted(helpers.deprecated_config_in_use())
+    if deprecated:
+        hookenv.log('Deprecated configuration settings in use: {}'
+                    ', '.join(deprecated), WARNING)
+
+
+@data_ready_action
 def ensure_cluster(manager, service_name, event_name):
     if not os.path.exists(postgresql.postgresql_conf_path()):
         postgresql.create_cluster()
@@ -184,8 +192,14 @@ def ensure_cluster(manager, service_name, event_name):
 @data_ready_action
 def appoint_master(manager, service_name, event_name):
     # Underconstruction. First leader is master forever.
-    if hookenv.is_leader() and not postgresql.master():
+    master = postgresql.master()
+    if master is not None:
+        hookenv.log('{} is master'.format(master))
+    elif hookenv.is_leader():
+        hookenv.log('Appointing myself master')
         hookenv.leader_set(master=hookenv.local_unit())
+    else:
+        hookenv.log('Waiting for leader to appoint master')
 
 
 @data_ready_action
@@ -299,6 +313,9 @@ def assemble_postgresql_conf():
     # Start with charm defaults.
     conf.update(postgresql_conf_defaults())
 
+    # User overrides from deprecated service config.
+    conf.update(postgresql_conf_deprecated_overrides())
+
     # User overrides from service config.
     conf.update(postgresql_conf_overrides())
 
@@ -310,17 +327,71 @@ def assemble_postgresql_conf():
 
 def postgresql_conf_defaults():
     '''Return the postgresql.conf defaults, which we parse from config.yaml'''
-    config_yaml_path = os.path.join(hookenv.charm_dir(), 'config.yaml')
-    with open(config_yaml_path, 'r') as f:
-        config_yaml = yaml.load(f)
-    raw_defaults = config_yaml['options']['extra_pg_conf']['default']
-    return postgresql.parse_config(raw_defaults)
+    # We load defaults from the extra_pg_conf default in config.yaml,
+    # which ensures that they never get out of sync.
+    raw = helpers.config_yaml()['options']['extra_pg_conf']['default']
+    return postgresql.parse_config(raw)
 
 
 def postgresql_conf_overrides():
     '''User postgresql.conf overrides, from service configuration.'''
     config = hookenv.config()
     return postgresql.parse_config(config['extra_pg_conf'])
+
+
+def postgresql_conf_deprecated_overrides():
+    '''Overrides from deprecated service configuration options.
+
+    There are far too many knobs in postgresql.conf for the charm
+    to duplicate each one in config.yaml, and they can change between
+    versions. The old options that did this have all been deprecated,
+    and users can specify them in the extra_pg_conf option.
+
+    One day this method and the deprecated options will go away.
+    '''
+    config = hookenv.config()
+
+    # These deprecated options mapped directly to postgresql.conf settings.
+    # As you can see, it was unmaintainably long.
+    simple_options = frozenset(['max_connections', 'max_prepared_transactions',
+                                'ssl', 'log_min_duration_statement',
+                                'log_checkpoints', 'log_connections',
+                                'log_disconnections', 'log_temp_files',
+                                'log_line_prefix', 'log_lock_waits',
+                                'log_timezone', 'log_autovacuum_min_duration',
+                                'autovacuum', 'autovacuum_analyze_threshold',
+                                'autovacuum_vacuum_scale_factor',
+                                'autovacuum_analyze_scale_factor',
+                                'autovacuum_vacuum_cost_delay', 'search_path',
+                                'standard_conforming_strings', 'hot_standby',
+                                'hot_standby_feedback', 'wal_level',
+                                'max_wal_senders', 'wal_keep_segments',
+                                'archive_mode', 'archive_command',
+                                'work_mem', 'maintenance_work_mem',
+                                'shared_buffers', 'effective_cache_size',
+                                'default_statistics_target', 'temp_buffers',
+                                'wal_buffers', 'checkpoint_segments',
+                                'checkpoint_completion_target',
+                                'checkpoint_timeout', 'fsync',
+                                'synchronous_commit', 'full_page_writes',
+                                'random_page_cost'])
+
+    in_use = helpers.deprecated_config_in_use()
+
+    # The simple deprecated options map directly to postgresql.conf settings.
+    settings = {k: config[k] for k in in_use if k in simple_options}
+
+    # The listen_port and collapse_limit options were special.
+    config_yaml_options = helpers.config_yaml()['options']
+    defaults = {k: config_yaml_options[k]['default']
+                for k in config_yaml_options}
+    if config['listen_port'] not in (-1, defaults['listen_port']):
+        settings['port'] = config['listen_port']
+    if config['collapse_limit'] != defaults['collapse_limit']:
+        settings['from_collapse_limit'] = config['collapse_limit']
+        settings['join_collapse_limit'] = config['collapse_limit']
+
+    return settings
 
 
 def ensure_viable_postgresql_conf(opts):
@@ -395,10 +466,12 @@ def update_postgresql_conf(manager, service_name, event_name):
 
     # Generate the charm config section, adding it to the end of the
     # config file.
+    simple_re = re.compile(r'^[-.\w]+$')
     override_section = [start_mark]
     for k, v in settings.items():
-        if isinstance(v, str):
-            assert '\n' not in v, "Invalid config value {!r}".format(v)
+        v = str(v)
+        assert '\n' not in v, "Invalid config value {!r}".format(v)
+        if simple_re.search(v) is None:
             v = "'{}'".format(v.replace("'", "''"))
         override_section.append('{} = {}'.format(k, v))
     override_section.append(end_mark)
