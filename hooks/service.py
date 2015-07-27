@@ -274,7 +274,25 @@ def update_pg_hba_conf(manager, service_name, event_name):
                     postgresql.quote_identifier(rel.local['database']),
                     postgresql.quote_identifier(rel.local['schema_user']),
                     postgresql.quote_identifier(addr),
-                    'md5', '# {}'.format(relinfo.unit))
+                    'md5', '# {}'.format(relinfo))
+
+    # External replication connections. Somwwhat different than before
+    # as the relation gets its own user to avoid sharing credentials,
+    # and logical replication connections will want to specify the
+    # database name.
+    for rel in rels['master']:
+        for relinfo in rel.values():
+            addr = postgresql.addr_to_range(relinfo['private-address'])
+            add('host', 'replication',
+                postgresql.quote_identifier(rel.local['user']),
+                postgresql.quote_identifier(addr),
+                'md5', '# {}'.format(relinfo))
+            if 'database' is rel.local:
+                add('host',
+                    postgresql.quote_identifier(rel.local['database']),
+                    postgresql.quote_identifier(rel.local['user']),
+                    postgresql.quote_identifier(addr),
+                    'md5', '# {}'.format(relinfo))
 
     # External administrative addresses, if specified by the operator.
     config = hookenv.config()
