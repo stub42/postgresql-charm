@@ -19,6 +19,7 @@ import subprocess
 
 import yaml
 
+from charmhelpers import context
 from charmhelpers.core import hookenv, sysctl
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charmhelpers import fetch
@@ -435,6 +436,15 @@ def ensure_viable_postgresql_conf(opts):
         force(archive_mode=True)
         force(archive_command=wal_e.wal_e_archive_command())
 
+    # Log messages for syslog. This charm only supports 'standard' Debian
+    # logs, or Debian + syslog. This will grow more complex in the future,
+    # as the local logs are redundant if you are using syslog for log
+    # aggregation, and we will want to add csvlog because it is so much
+    # easier to parse.
+    if context.Relations()['syslog']:
+        force(log_destination='stderr,syslog',
+              syslog_ident=hookenv.local_unit().replace('/', '_'))
+
 
 @data_ready_action
 def update_postgresql_conf(manager, service_name, event_name):
@@ -569,11 +579,11 @@ def close_ports(manager, service_name, event_name):
 def set_active(manager, service_name, event_name):
     if postgresql.is_running():
         if postgresql.is_master():
-            msg = 'Live Master'
+            msg = 'Live master'
         elif postgresql.is_primary():
-            msg = 'Live Primary'
+            msg = 'Live primary'
         else:
-            msg = 'Live Secondary'
+            msg = 'Live secondary'
         helpers.status_set('active', msg)
     elif hookenv.status_get() == 'active':
         helpers.status_set('blocked', 'PostgreSQL unexpectedly shut down')

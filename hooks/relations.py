@@ -14,186 +14,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from collections import OrderedDict, UserDict
-from functools import wraps
+import glob
+import os.path
 
-from charmhelpers.core import hookenv, host
+from charmhelpers import context
+from charmhelpers.core import hookenv, host, templating
 
-from decorators import master_only
+from decorators import data_ready_action, relation_handler, master_only
 import helpers
 import postgresql
-
-
-def peer_relid():
-    md = hookenv.metadata()
-    section = md.get('peers')
-    if section:
-        for key in section:
-            relids = hookenv.relation_ids(key)
-            if relids:
-                return relids[0]
-            break
-    return None
-
-
-class Relations(UserDict):
-    '''Mapping relation name -> relid -> Relation(relid).
-
-    >>> rels = Relations()
-    >>> rels['sprog']['sprog:12']['client/6']['widget']
-    'remote widget'
-    >>> rels['sprog']['sprog:12'].local['widget'] = 'local widget'
-    >>> rels['sprog']['sprog:12'].local['widget']
-    'local widget'
-    '''
-    def __init__(self):
-        super(Relations, self).__init__(
-            {relname: {relid: Relation(relid)
-                       for relid in hookenv.relation_ids(relname)}
-             for relname in hookenv.relation_types()})
-
-
-class Relation(OrderedDict):
-    '''Mapping of unit -> RelationInfo for a relation.
-
-    This is an OrderedDict mapping, ordered numerically by
-    by unit number.
-
-    >>> r = Relation('sprog:12')
-    >>> r.keys()
-    ['client/9', 'client/10']     # Ordered numerically
-    >>> r['client/10']['widget']  # A remote RelationInfo
-    'remote widget'
-    >>> r.local['widget']         # The local RelationInfo
-    'local widget'
-    '''
-    relid = None  # The relation id.
-    relname = None  # The relation name (also known as relation type).
-    service = None  # The remote service name, if known.
-
-    local = None  # The local end's RelationInfo.
-
-    # Mapping of peer -> RelationInfo. Peers must have joined a peer
-    # relation before they appear here. None if there is no peer relation
-    # defined.
-    peers = None
-
-    def __init__(self, relid):
-        remote_units = hookenv.related_units(relid)
-        if remote_units:
-            remote_units.sort(key=lambda u: int(u.split('/', 1)[-1]))
-            data = [(unit, RelationInfo(relid, unit))
-                    for unit in remote_units]
-        else:
-            data = []
-
-        super(Relation, self).__init__(data)
-
-        self.service = data[0][1].service if data else None
-        self.relname = relid.split(':', 1)[0]
-        self.relid = relid
-        self.local = RelationInfo(relid, hookenv.local_unit())
-
-        # If we have peers, and they have joined both the provided peer
-        # relation and this relation, we can peek at their data too.
-        # This is useful for creating consensus without leadership.
-        p_relid = peer_relid()
-        if p_relid:
-            peers = hookenv.related_units(p_relid)
-            if peers:
-                peers.sort(key=lambda u: int(u.split('/', 1)[-1]))
-                self.peers = OrderedDict((peer, RelationInfo(relid, peer))
-                                         for peer in peers)
-            else:
-                self.peers = OrderedDict()
-        else:
-            self.peers = None
-
-    def __str__(self):
-        return '{} ({})'.format(self.relid, self.service)
-
-
-class RelationInfo(UserDict):
-    '''The bag of data at an end of a relation.
-
-    Every unit participating in a relation has a single bag of
-    data associated with that relation. This is that bag.
-
-    The bag of data for the local unit may be updated. Remote data
-    is immutable and will remain static for the duration of the hook.
-
-    Changes made to the local units relation data only become visible
-    to other units after the hook completes successfully. If the hook
-    does not complete successfully, the changes are rolled back.
-
-    Unlike standard Python mappings, setting an item to None is the
-    same as deleting it.
-
-    >>> relinfo = RelationInfo('db:12')  # Default is the local unit.
-    >>> relinfo['user'] = 'fred'
-    >>> relinfo['user']
-    'fred'
-    >>> relinfo['user'] = None
-    >>> 'fred' in relinfo
-    False
-    '''
-    relid = None    # The relation id.
-    relname = None  # The relation name (also know as the relation type).
-    unit = None     # The unit id.
-    number = None   # The unit number (integer).
-    service = None  # The service name.
-
-    def __init__(self, relid, unit):
-        self.relname = relid.split(':', 1)[0]
-        self.relid = relid
-        self.unit = unit
-        self.service, num = self.unit.split('/', 1)
-        self.number = int(num)
-
-    def __str__(self):
-        return '{} ({})'.format(self.relid, self.unit)
-
-    @property
-    def data(self):
-        return hookenv.relation_get(rid=self.relid, unit=self.unit)
-
-    def __setitem__(self, key, value):
-        if self.unit != hookenv.local_unit():
-            raise TypeError('Attempting to set {} on remote unit {}'
-                            ''.format(key, self.unit))
-        if value is not None and not isinstance(value, str):
-            # We don't do implicit casting. A mechanism to allow
-            # automatic serialization to JSON may be useful for
-            # non-strings, but should it be the default or always on?
-            raise ValueError('Only string values supported')
-        hookenv.relation_set(self.relid, {key: value})
-
-    def __delitem__(self, key):
-        # Deleting a key and setting it to null is the same thing in
-        # Juju relations.
-        self[key] = None
-
-
-def relations():
-    return Relations()
-
-
-def relation_handler(*relnames):
-    '''Invoke the decorated function once per matching relation.
-
-    The decorated function should accept the Relation() instance
-    as its single parameter.
-    '''
-    assert relnames, 'relation names required'
-    def decorator(func):
-        @wraps(func)
-        def wrapper(servicename):
-            rels = relations()
-            for relname in relnames:
-                for rel in rels[relname].values():
-                    func(rel)
-        return wrapper
-    return decorator
 
 
 @relation_handler('db', 'db-admin')
@@ -342,80 +171,49 @@ def ensure_db_relation_resources(rel):
     con.commit()  # Don't throw away our changes.
 
 
-# class SyslogRelation(RelationContext):
-#     name = 'syslog'
-#     interface = 'syslog'
-#
-#     def get_data(self):
-#         self.programname = hookenv.local_unit().replace('/', '_')
-#         return super(SyslogRelation, self).get_data()
-#
-#     def provide_data(self, remote_service, service_ready):
-#         config = hookenv.config()
-#         pg_conf = config['postgresql_conf']
-#         return dict(log_line_prefix=pg_conf['log_line_prefix'],
-#                     programname=self.programname)
-#
-#
-# @hooks.hook()
-# def syslog_relation_changed():
-#     configure_log_destination(_get_postgresql_config_dir())
-#     postgresql_reload()
-#
-#     # We extend the syslog interface by exposing the log_line_prefix.
-#     # This is required so consumers of the PostgreSQL logs can decode
-#     # them. Consumers not smart enough to cope with arbitrary prefixes
-#     # can at a minimum abort if they detect it is set to something they
-#     # cannot support. Similarly, inform the consumer of the programname
-#     # we are using so they can tell one units log messages from another.
-#     hookenv.relation_set(
-#         log_line_prefix=hookenv.config('log_line_prefix'),
-#         programname=sanitize(hookenv.local_unit()))
-#
-#     template_path = "{0}/templates/rsyslog_forward.conf".format(
-#         hookenv.charm_dir())
-#     rsyslog_conf = Template(open(template_path).read()).render(
-#         local_unit=sanitize(hookenv.local_unit()),
-#         raw_local_unit=hookenv.local_unit(),
-#         raw_remote_unit=hookenv.remote_unit(),
-#         remote_addr=hookenv.relation_get('private-address'))
-#     host.write_file(rsyslog_conf_path(hookenv.remote_unit()), rsyslog_conf)
-#     run(['service', 'rsyslog', 'restart'])
-#
-#
-# @hooks.hook()
-# def syslog_relation_departed():
-#     configure_log_destination(_get_postgresql_config_dir())
-#     postgresql_reload()
-#     os.unlink(rsyslog_conf_path(hookenv.remote_unit()))
-#     run(['service', 'rsyslog', 'restart'])
-#
-#
-# def configure_log_destination(config_dir):
-#     """Set the log_destination PostgreSQL config flag appropriately"""
-#     # We currently support either 'standard' logs (the files in
-#     # /var/log/postgresql), or syslog + 'standard' logs. This should
-#     # grow more complex in the future, as the local logs will be
-#     # redundant if you are using syslog for log aggregation, and we
-#     # probably want to add csvlog in the future. Note that csvlog
-#     # requires switching from 'Debian' log redirection and rotation to
-#     # the PostgreSQL builtin facilities.
-#     logdest_conf_path = os.path.join(config_dir, 'juju_logdest.conf')
-#     logdest_conf = open(logdest_conf_path, 'w')
-#     if hookenv.relation_ids('syslog'):
-#         # For syslog, we change the ident from the default of 'postgres'
-#         # to the unit name to allow remote services to easily identify
-#         # and filter which unit messages are from. We don't use IP
-#         # address for this as it is not necessarily unique.
-#         logdest_conf.write(dedent("""\
-#                 log_destination='stderr,syslog'
-#                 syslog_ident={0}
-#                 """).format(sanitize(hookenv.local_unit())))
-#     else:
-#         open(logdest_conf_path, 'w').write("log_destination='stderr'")
-#
-#
-# def rsyslog_conf_path(remote_unit):
-#     return '/etc/rsyslog.d/juju-{0}-{1}.conf'.format(
-#         sanitize(hookenv.local_unit()), sanitize(remote_unit))
-#
+@data_ready_action
+def handle_syslog_relations(manager, service_name, event_name):
+    enable_syslog_relations()
+    cleanup_syslog_relations()
+    host.service_restart('rsyslog')
+
+
+@relation_handler('syslog')
+def enable_syslog_relations(rel):
+    config = hookenv.config()
+    postgresql_conf = config['postgresql_conf']
+    # programname and log_file_prefix are extensions to the syslog
+    # interface, required to successfully decode the messages.
+    rel.local['log_line_prefix'] = postgresql_conf['log_line_prefix']
+    rel.local['programname'] = hookenv.local_unit().replace('/', '_')
+    for relinfo in rel.values():
+        templating.render('rsyslog_forward.conf',
+                          rsyslog_conf_path(hookenv.remote_unit()),
+                          dict(rel=rel, relinfo=relinfo))
+
+
+def cleanup_syslog_relations():
+    # If we used a single rsyslog config file, we wouldn't need cleanup.
+    wanted_files = set([])
+    conf_pattern = ('/etc/rsyslog.d/juju-{}-*.conf'
+                    ''.format(hookenv.local_unit().replace('/', '_')))
+    existing_files = set(glob.glob(conf_pattern))
+    wanted_files = set(rsyslog_conf_path(u)
+                       for rel in context.Relations()['syslog']
+                       for u in rel.keys())
+    for unwanted in (existing_files - wanted_files):
+        if os.path.isfile(unwanted):
+            os.unlink(unwanted)
+
+
+def rsyslog_conf_dir():
+    return '/etc/rsyslog.d'
+
+
+def rsyslog_conf_path(remote_unit):
+    # Use both the local unit and remote unit in the config file
+    # path to avoid conflicts with subordinates.
+    local = hookenv.local_unit().replace('/', '_')
+    remote = remote_unit.replace('/', '_')
+    return os.path.join(rsyslog_conf_dir(),
+                        'juju-{}-{}.conf'.format(local, remote))

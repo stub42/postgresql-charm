@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from functools import wraps
 
+from charmhelpers import context
 from charmhelpers.core import hookenv, services
 from charmhelpers.core.hookenv import DEBUG
 
@@ -78,6 +79,25 @@ class requirement:
                 helpers.status_set('blocked',
                                    'Requirement {} failed'.format(name))
             return False
+
+
+def relation_handler(*relnames):
+    '''Invoke the decorated function once per matching relation.
+
+    The decorated function should accept the Relation() instance
+    as its single parameter.
+    '''
+    assert relnames, 'relation names required'
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(servicename):
+            rels = context.Relations()
+            for relname in relnames:
+                for rel in rels[relname].values():
+                    func(rel)
+        return wrapper
+    return decorator
 
 
 def leader_only(func):
