@@ -30,7 +30,6 @@ from coordinator import coordinator
 from decorators import data_ready_action, requirement
 import helpers
 import postgresql
-import relations
 import wal_e
 
 
@@ -251,23 +250,29 @@ def update_pg_hba_conf(manager, service_name, event_name):
     # user connect to their matching PostgreSQL user, if it exists.
     add('local', 'all', 'all', 'peer')
 
-    # # Peers need replication access
-    # for peer in helpers.peers():
-    #     relinfo = hookenv.relation_get(unit=peer, rid=helpers.peer_relid())
-    #     addr = helpers.addr_to_range(relinfo.get('private-address'))
-    #     add('host', 'replication', 'postgres', addr, replication_password)
+    rels = context.Relations()
+
+    # Peers need replication access as the charm replication user.
+    for peer, relinfo in rels.peer.items():
+        addr = postgresql.addr_to_range(relinfo['private-address'])
+        add('host', 'replication', '_juju_repl',
+            postgresql.quote_identifier(addr), 'md5', '# {}'.format(relinfo))
 
     # Clients need access to the relation database as the relation users.
-    rels = relations.relations()
     for rel in list(rels['db'].values()) + list(rels['db-admin'].values()):
         if 'database' in rel.local:
             for relinfo in rel.values():
                 addr = postgresql.addr_to_range(relinfo['private-address'])
-                # Quote everything, including the address, to # disenchant
+                # Quote everything, including the address, to disenchant
                 # magic tokens like 'all'.
                 add('host',
                     postgresql.quote_identifier(rel.local['database']),
                     postgresql.quote_identifier(rel.local['user']),
+                    postgresql.quote_identifier(addr),
+                    'md5', '# {}'.format(relinfo))
+                add('host',
+                    postgresql.quote_identifier(rel.local['database']),
+                    postgresql.quote_identifier(rel.local['schema_user']),
                     postgresql.quote_identifier(addr),
                     'md5', '# {}'.format(relinfo.unit))
 

@@ -134,99 +134,14 @@ def lsclusters(s=slice(0, -1)):
             yield line.split()[s]
 
 
-def _get_system_ram():
-    """ Return the system ram in Megabytes """
-    import psutil
-    return psutil.phymem_usage()[0] / (1024 ** 2)
-
-
-def _get_page_size():
-    """ Return the operating system's configured PAGE_SIZE """
-    return int(run("getconf PAGE_SIZE"))   # frequently 4096
-
-
-
 def create_postgresql_config(config_file):
     '''Create the postgresql.conf file'''
-    config_data = hookenv.config()
-    if not config_data.get('listen_port', None):
-        config_data['listen_port'] = get_service_port()
     if config_data["performance_tuning"].lower() != "manual":
         total_ram = _get_system_ram()
         config_data["kernel_shmmax"] = (int(total_ram) * 1024 * 1024) + 1024
         config_data["kernel_shmall"] = config_data["kernel_shmmax"]
 
-    # XXX: This is very messy - should probably be a subordinate charm
-    lines = ["kernel.sem = 250 32000 100 1024\n"]
-    if config_data["kernel_shmall"] > 0:
-        # Convert config kernel_shmall (bytes) to pages
-        page_size = _get_page_size()
-        num_pages = config_data["kernel_shmall"] / page_size
-        if (config_data["kernel_shmall"] % page_size) > 0:
-            num_pages += 1
-        lines.append("kernel.shmall = %s\n" % num_pages)
-    if config_data["kernel_shmmax"] > 0:
-        lines.append("kernel.shmmax = %s\n" % config_data["kernel_shmmax"])
-    host.write_file(postgresql_sysctl, ''.join(lines), perms=0600)
-    _run_sysctl(postgresql_sysctl)
-
-    # Our config file specifies a default wal_level that only works
-    # with PostgreSQL 9.4. Downgrade this for earlier versions of
-    # PostgreSQL. We have this default so more things Just Work.
-    if pg_version() < '9.4' and config_data['wal_level'] == 'logical':
-        config_data['wal_level'] = 'hot_standby'
-
-    # If we are replicating, some settings may need to be overridden to
-    # certain minimum levels.
-    num_slaves = slave_count()
-    if num_slaves > 0:
-        log('{} hot standbys in peer relation.'.format(num_slaves))
-        log('Ensuring minimal replication settings')
-        config_data['hot_standby'] = True
-        if config_data['wal_level'] != 'logical':
-            config_data['wal_level'] = 'hot_standby'
-        config_data['wal_keep_segments'] = max(
-            config_data['wal_keep_segments'],
-            config_data['replicated_wal_keep_segments'])
-        # We need this set even if config_data['streaming_replication']
-        # is False, because the replication connection is still needed
-        # by pg_basebackup to build a hot standby.
-        config_data['max_wal_senders'] = max(
-            num_slaves, config_data['max_wal_senders'])
-
-    # Log shipping to Swift using SwiftWAL. This could be for
-    # non-streaming replication, or for PITR.
-    if config_data.get('swiftwal_log_shipping', None):
-        config_data['archive_mode'] = True
-        if config_data['wal_level'] != 'logical':
-            config_data['wal_level'] = 'hot_standby'
-        config_data['archive_command'] = swiftwal_archive_command()
-
-    if config_data.get('wal_e_storage_uri', None):
-        config_data['archive_mode'] = True
-        if config_data['wal_level'] != 'logical':
-            config_data['wal_level'] = 'hot_standby'
-        config_data['archive_command'] = wal_e_archive_command()
-
-    # Send config data to the template
-    # Return it as pg_config
-    charm_dir = hookenv.charm_dir()
-    template_file = "{}/templates/postgresql.conf.tmpl".format(charm_dir)
-    if not config_data.get('version', None):
-        config_data['version'] = pg_version()
-    pg_config = Template(
-        open(template_file).read()).render(config_data)
-    host.write_file(
-        config_file, pg_config,
-        owner="postgres", group="postgres", perms=0600)
-
-    # Create or update files included from postgresql.conf.
-    configure_log_destination(os.path.dirname(config_file))
-
     tune_postgresql_config(config_file)
-
-    local_state['saved_config'] = dict(config_data)
-    local_state.save()
 
 
 def tune_postgresql_config(config_file):
@@ -246,88 +161,7 @@ def tune_postgresql_config(config_file):
             owner='postgres', group='postgres', perms=0o600)
 
 
-def create_postgresql_ident(output_file):
-    '''Create the pg_ident.conf file.'''
-    ident_data = {}
-    charm_dir = hookenv.charm_dir()
-    template_file = "{}/templates/pg_ident.conf.tmpl".format(charm_dir)
-    pg_ident_template = Template(open(template_file).read())
-    host.write_file(
-        output_file, pg_ident_template.render(ident_data),
-        owner="postgres", group="postgres", perms=0600)
-
-
-def generate_postgresql_hba(
-        output_file, user=None, schema_user=None, database=None):
-    '''Create the pg_hba.conf file.'''
-
-    # Per Bug #1117542, when generating the postgresql_hba file we
-    # need to cope with private-address being either an IP address
-    # or a hostname.
-    def munge_address(addr):
-        # http://stackoverflow.com/q/319279/196832
-        try:
-            socket.inet_aton(addr)
-            return "%s/32" % addr
-        except socket.error:
-            # It's not an IP address.
-            # XXX workaround for MAAS bug
-            # https://bugs.launchpad.net/maas/+bug/1250435
-            # If it's a CNAME, use the A record it points to.
-            # If it fails for some reason, return the original address
-            try:
-                output = run("dig +short -t CNAME %s" % addr, True).strip()
-            except:
-                return addr
-            if len(output) != 0:
-                return output.rstrip(".")  # trailing dot
-            return addr
-
-    config_data = hookenv.config()
-    allowed_units = set()
-    relation_data = []
-    relids = hookenv.relation_ids('db') + hookenv.relation_ids('db-admin')
-    for relid in relids:
-        local_relation = hookenv.relation_get(
-            unit=hookenv.local_unit(), rid=relid)
-
-        # We might see relations that have not yet been setup enough.
-        # At a minimum, the relation-joined hook needs to have been run
-        # on the server so we have information about the usernames and
-        # databases to allow in.
-        if 'user' not in local_relation:
-            continue
-
-        for unit in hookenv.related_units(relid):
-            relation = hookenv.relation_get(unit=unit, rid=relid)
-
-            relation['relation-id'] = relid
             relation['unit'] = unit
-
-            if relid.startswith('db-admin:'):
-                relation['user'] = 'all'
-                relation['database'] = 'all'
-            elif relid.startswith('db:'):
-                relation['user'] = local_relation.get('user', user)
-                relation['schema_user'] = local_relation.get('schema_user',
-                                                             schema_user)
-                relation['database'] = local_relation.get('database', database)
-
-                if ((relation['user'] is None
-                     or relation['schema_user'] is None
-                     or relation['database'] is None)):
-                    # Missing info in relation for this unit, so skip it.
-                    continue
-            else:
-                raise RuntimeError(
-                    'Unknown relation type {}'.format(repr(relid)))
-
-            allowed_units.add(unit)
-            relation['private-address'] = munge_address(
-                relation['private-address'])
-            relation_data.append(relation)
-
-    log(str(relation_data), INFO)
 
     # Replication connections. Each unit needs to be able to connect to
     # every other unit's postgres database and the magic replication
