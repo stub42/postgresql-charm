@@ -13,6 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import math
 import os.path
 import re
 import subprocess
@@ -20,7 +21,7 @@ import subprocess
 import yaml
 
 from charmhelpers import context
-from charmhelpers.core import hookenv, sysctl
+from charmhelpers.core import hookenv, host, sysctl
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charmhelpers import fetch
 from charmhelpers.payload import execd
@@ -331,7 +332,21 @@ def postgresql_conf_defaults():
     # We load defaults from the extra_pg_conf default in config.yaml,
     # which ensures that they never get out of sync.
     raw = helpers.config_yaml()['options']['extra_pg_conf']['default']
-    return postgresql.parse_config(raw)
+    defaults = postgresql.parse_config(raw)
+
+    # And calculate some defaults, which could get out of sync.
+    # Settings with mandatory minimums like wal_senders is handled
+    # later, in ensure_viable_postgresql_conf().
+    ram = host.get_total_ram() / (1024 * 1024)  # Working in megabytes.
+
+    # Default shared_buffers to 25% of ram, minimum 16MB, maximum 8GB,
+    # per current best practice rules of thumb. Rest is cache.
+    shared_buffers = max(min(math.ceil(ram * 0.25), 8192), 16)
+    effective_cache_size = min(0, ram - shared_buffers)
+    defaults['shared_buffers'] = '{} MB'.format(shared_buffers)
+    defaults['effective_cache_size'] = '{} MB'.format(effective_cache_size)
+
+    return defaults
 
 
 def postgresql_conf_overrides():
