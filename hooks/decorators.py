@@ -16,37 +16,17 @@
 from functools import wraps
 
 from charmhelpers import context
-from charmhelpers.core import hookenv, services
+from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG
 
 import helpers
 import postgresql
 
 
-class ManagerCallback(services.ManagerCallback):
-    def __init__(self, callback=None):
-        self._cb = callback
-
-    def __call__(self, manager, service_name, event_name):
-        if self._cb is None:
-            raise NotImplementedError()
-        return self._cb(manager, service_name, event_name)
-
-
 def data_ready_action(func):
-    '''Decorate func to be used as a data_ready item.
-
-    Func must accept the 3 extended arguments per
-    charmhelpers.core.services.base.ManagerCallback
-        manager - the ServiceManager instance in play
-        service_name - the 'service' key of the service definition in play.
-        event_name - data_ready, data_lost, start, stop
-
-    Func is wrapped, adding logging, and with ManagerCallback so the
-    Services Framework invokes it with the desired paramter list.
-    '''
+    '''Decorate func to be used as a data_ready item.'''
     @wraps(func)
-    def wrapper(manager, service_name, event_name):
+    def wrapper(service_name=None):
         if hookenv.remote_unit():
             hookenv.log("** Action {}/{} ({})".format(hookenv.hook_name(),
                                                       func.__name__,
@@ -54,14 +34,8 @@ def data_ready_action(func):
         else:
             hookenv.log("** Action {}/{}".format(hookenv.hook_name(),
                                                  func.__name__))
-        if func.__code__.co_argcount == 1:
-            return func(service_name)
-        elif func.__code__.co_argcount == 3:
-            return func(manager, service_name, event_name)
-        else:
-            return func()
-
-    return ManagerCallback(wrapper)
+        return func()
+    return wrapper
 
 
 class requirement:
@@ -112,6 +86,7 @@ def leader_only(func):
             return func(*args, **kw)
         else:
             hookenv.log('Not the leader', DEBUG)
+    return wrapper
 
 
 def master_only(func):
@@ -125,11 +100,23 @@ def master_only(func):
     return wrapper
 
 
-def secondary_only(func):
+def not_master(func):
+    '''Don't run on the appointed master.'''
     @wraps(func)
     def wrapper(*args, **kw):
-        if postgresql.is_secondary():
-            return func(*args, **kw)
+        if postgresql.is_master():
+            hookenv.log("I'm the master", DEBUG)
         else:
-            hookenv.log('Not a secondary', DEBUG)
+            return func(*args, **kw)
     return wrapper
+
+
+# def require_peers(func):
+#     '''Only run if the peer relation has been joined.'''
+#     @wraps(func)
+#     def wrapper(*args, **kw):
+#         if Relations().peer is None:
+#             hookenv.log("Peer relation not yet joined", DEBUG)
+#         else:
+#             return func(*args, **kw)
+#     return wrapper

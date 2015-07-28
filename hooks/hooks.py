@@ -938,39 +938,6 @@ def replication_relation_broken():
     config_changed()
 
 
-@contextmanager
-def switch_cwd(new_working_directory):
-    org_dir = os.getcwd()
-    os.chdir(new_working_directory)
-    try:
-        yield new_working_directory
-    finally:
-        os.chdir(org_dir)
-
-
-def clone_database(master_unit, master_host, master_port):
-    with restart_lock(master_unit, False):
-        postgresql_stop()
-        log("Cloning master {}".format(master_unit))
-
-        config_data = hookenv.config()
-        version = pg_version()
-        cluster_name = config_data['cluster_name']
-        postgresql_cluster_dir = os.path.join(
-            postgresql_data_dir, version, cluster_name)
-        postgresql_config_dir = _get_postgresql_config_dir(config_data)
-        cmd = [
-            'sudo', '-E',  # -E needed to locate pgpass file.
-            '-u', 'postgres', 'pg_basebackup', '-D', postgresql_cluster_dir,
-            '--xlog', '--checkpoint=fast', '--no-password',
-            '-h', master_host, '-p', master_port,
-            '--username=juju_replication']
-        log(' '.join(cmd), DEBUG)
-
-        if os.path.isdir(postgresql_cluster_dir):
-            shutil.rmtree(postgresql_cluster_dir)
-
-        try:
             # Change directory the postgres user can read, and need
             # .pgpass too.
             with switch_cwd('/tmp'), pgpass():

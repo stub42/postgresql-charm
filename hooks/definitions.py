@@ -17,6 +17,7 @@
 from charmhelpers.core import services
 
 import clientrel
+import replication
 import service
 import syslogrel
 
@@ -29,16 +30,22 @@ SERVICE_DEFINITION = [
                      service.install_packages,
                      service.ensure_package_status,
                      service.update_kernel_settings,
+                     replication.ensure_replication_credentials,
                      service.appoint_master,
 
-                     service.wait_for_master,  # Exit if no master.
+                     replication.wait_for_master,  # Exit if no master.
 
                      service.ensure_cluster,
+                     service.update_pgpass,
+                     replication.publish_replication_details,
                      syslogrel.handle_syslog_relations,
                      service.update_postgresql_conf,
                      service.request_restart,
 
-                     service.wait_for_restart,  # Exit if unapplied config.
+                     service.wait_for_restart,  # Exit if cannot restart yet.
+
+                     replication.clone_master,
+                     replication.update_recovery_conf,
                      service.restart_or_reload,
 
                      clientrel.publish_db_relations,
@@ -48,11 +55,10 @@ SERVICE_DEFINITION = [
                      service.update_pg_hba_conf,
                      service.reload_config,
 
-                     # replication.clone_master,
-                     # replication.ensure_replication_credentials,
-                     # replication.ensure_replication_user,
+                     replication.ensure_replication_user,
 
                      service.set_active,
+
                      # At the end, as people check the end of logs
                      # most frequently.
                      service.emit_deprecated_option_warnings],

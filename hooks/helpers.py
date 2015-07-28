@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from contextlib import contextmanager
 import os
 import shutil
 import stat
@@ -87,9 +88,6 @@ def rewrite(path, content):
 
 def write(path, content, mode=0o640, user='root', group='root'):
     '''Write a file atomically.'''
-    attr = os.lstat(path)
-    assert stat.S_ISREG(attr.st_mode), '{} not a regular file'.format(path)
-
     open_mode = 'wb' if isinstance(content, bytes) else 'w'
     with tempfile.NamedTemporaryFile(mode=open_mode, delete=False) as f:
         try:
@@ -110,6 +108,17 @@ def makedirs(path, mode=0o750, user='root', group='root'):
         os.makedirs(path, mode=mode)
     shutil.chown(path, user, group)
     os.chmod(path, mode)
+
+
+@contextmanager
+def switch_cwd(new_working_directory='/tmp'):
+    'Switch working directory.'
+    org_dir = os.getcwd()
+    os.chdir(new_working_directory)
+    try:
+        yield new_working_directory
+    finally:
+        os.chdir(org_dir)
 
 
 def config_yaml():

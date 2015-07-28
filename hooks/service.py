@@ -16,6 +16,7 @@
 import math
 import os.path
 import re
+import shutil
 import subprocess
 
 import yaml
@@ -56,7 +57,8 @@ def valid_config():
                                'Invalid value for {} ({!r})'
                                .format(key, config[key]))
 
-    unchangeable_config = ['locale', 'encoding', 'version', 'pgdg']
+    unchangeable_config = ['locale', 'encoding', 'version', 'pgdg',
+                           'manual_replication']
     if config._prev_dict is not None:
         for name in unchangeable_config:
             if config.changed(name):
@@ -75,7 +77,7 @@ def preinstall():
     # Only run the preinstall hooks once, in the first hook. This is
     # either the leader-elected hook or the install hook.
     config = hookenv.config()
-    if config.get('preinstall_done'):
+    if not config.get('preinstall_done'):
         helpers.status_set('maintenance', 'Running preinstallation hooks')
         try:
             execd.execd_run('charm-pre-install', die_on_error=True)
@@ -182,10 +184,20 @@ def emit_deprecated_option_warnings():
 @data_ready_action
 def ensure_cluster():
     if not os.path.exists(postgresql.postgresql_conf_path()):
+        data_dir = postgresql.data_dir()
+        assert not os.path.exists(data_dir)
         postgresql.create_cluster()
         # The default pg_hba.conf doesn't allow root to connect.
         # Fix that, so this charm has the permissions it needs.
         update_pg_hba_conf()
+        # If this unit is not the master, we will shortly be replacing
+        # the contents of the $DATADIR. Remove it here, because here
+        # we know it is safe.
+        config = hookenv.config()
+        if not config['manual_replication'] and not postgresql.is_master():
+            hookenv.log('Removing {} in preparation for clone'
+                        ''.format(data_dir))
+            shutil.rmtree(data_dir)
 
 
 @data_ready_action
@@ -199,26 +211,6 @@ def appoint_master():
         hookenv.leader_set(master=hookenv.local_unit())
     else:
         hookenv.log('Waiting for leader to appoint master')
-
-
-@data_ready_action
-def wait_for_master():
-    '''Wait until the master has not authorized us.
-
-    If not, the unit is put into 'waiting' state and the hook exits.
-    '''
-    master = postgresql.master()
-    local = hookenv.local_unit()
-    if master == local:
-        return
-
-    relinfo = context.Relations().peer[master]
-    allowed = relinfo.get('allowed-units', '').split()
-    if local in allowed:
-        return
-
-    helpers.status_set('waiting', 'Waiting for master')
-    raise SystemExit(0)
 
 
 @data_ready_action
@@ -563,6 +555,19 @@ def update_postgresql_conf():
 
 
 @data_ready_action
+def update_pgpass():
+    leader = context.Leader()
+    accounts = ['root', 'postgres']
+    for account in accounts:
+        path = os.path.expanduser(os.path.join('~{}'.format(account),
+                                               '.pgpass'))
+        content = ('# Managed by Juju\n'
+                   '*:*:*:{}:{}'.format(replication.replication_username(),
+                                        leader['replication_password']))
+        helpers.write(path, content, mode=0o600, user=account, group=account)
+
+
+@data_ready_action
 def request_restart():
     if coordinator.requested('restart'):
         hookenv.log('Restart already requested')
@@ -593,23 +598,17 @@ def request_restart():
             new = new_config.get(key)
             if old != new:
                 hookenv.log('{} changed from {!r} to {!r}. '
-                            'Restart required.'.format(old, new))
+                            'Restart required.'.format(key, old, new))
                 # Request permission from the leader to restart. We cannot
                 # restart immediately or we risk interrupting operations
                 # like backups and replica rebuilds.
                 coordinator.acquire('restart')
 
-    # Similarly, if recovery.conf has changed we need to restart.
-    # eg. a secondary has been reparented, or the parent IP address
-    # has changed.
-    if config.changed('recovery_conf'):
-        coordinator.acquire('restart')
-
 
 @data_ready_action
 def wait_for_restart():
     if coordinator.requested('restart') and not coordinator.granted('restart'):
-        helpers.status_set('wait', 'Waiting for permission to restart')
+        helpers.status_set('waiting', 'Waiting for permission to restart')
         raise SystemExit(0)
 
 

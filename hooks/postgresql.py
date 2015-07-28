@@ -239,6 +239,11 @@ def create_cluster():
     subprocess.check_call(cmd, universal_newlines=True)
 
 
+def drop_cluster():
+    cmd = ['pg_dropcluster', version(), 'main']
+    subprocess.check_call(cmd, universal_newlines=True)
+
+
 def ensure_database(database):
     '''Create the database if it doesn't already exist.
 

@@ -24,6 +24,11 @@ import helpers
 import postgresql
 
 
+def wal_e_enabled():
+    config = hookenv.config()
+    return bool(config['wal_e_storage_uri'])
+
+
 def wal_e_env_dir():
     '''The envdir(1) environment location used to drive WAL-E.'''
     return os.path.join(postgresql.config_dir(), 'wal-e.env')
