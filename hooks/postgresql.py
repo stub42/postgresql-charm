@@ -388,12 +388,13 @@ def start():
     try:
         subprocess.check_call(['pg_ctlcluster',
                                version(), 'main', 'start',
-                               '--', '-t', str(STARTUP_TIMEOUT)],
+                               '--', '-w', '-t', str(STARTUP_TIMEOUT)],
                               universal_newlines=True)
     except subprocess.CalledProcessError as x:
         if x.returncode == 2:
             return  # The server is already running.
-        raise
+        helpers.status_set('blocked', 'PostgreSQL failed to start')
+        raise SystemExit(0)
 
 
 def stop():

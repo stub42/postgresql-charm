@@ -115,8 +115,14 @@ def clone_master():
 
     data_dir = postgresql.data_dir()
 
-    if os.path.isdir(data_dir):
-        os.rmdir(data_dir)
+    if os.path.exists(data_dir):
+        # End users should never see this. Both pg_basebackup and
+        # pg_dropcluster would need to fail.
+        helpers.status_set('blocked',
+                           'Cannot clone master while local cluster exists. '
+                           'Run pg_dropcluster {} main'
+                           ''.format(postgresql.version()))
+        raise SystemExit(0)
     helpers.makedirs(data_dir, mode=0o700, user='postgres', group='postgres')
 
     cmd = ['sudo', '-H',  # -H needed to locate $HOME/.pgpass

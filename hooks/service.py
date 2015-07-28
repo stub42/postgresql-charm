@@ -616,8 +616,10 @@ def wait_for_restart():
 def restart_or_reload():
     '''Restart if necessary and leader has given permission, or else reload.'''
     if not postgresql.is_running():
+        helpers.status_set('maintenance', 'Starting PostgreSQL')
         postgresql.start()
     elif coordinator.granted('restart'):
+        helpers.status_set('maintenance', 'Restarting PostgreSQL')
         postgresql.stop()
         postgresql.start()
     else:
