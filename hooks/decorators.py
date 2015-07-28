@@ -30,7 +30,6 @@ class ManagerCallback(services.ManagerCallback):
     def __call__(self, manager, service_name, event_name):
         if self._cb is None:
             raise NotImplementedError()
-
         return self._cb(manager, service_name, event_name)
 
 
@@ -55,7 +54,12 @@ def data_ready_action(func):
         else:
             hookenv.log("** Action {}/{}".format(hookenv.hook_name(),
                                                  func.__name__))
-        return func(manager, service_name, event_name)
+        if func.__code__.co_argcount == 1:
+            return func(service_name)
+        elif func.__code__.co_argcount == 3:
+            return func(manager, service_name, event_name)
+        else:
+            return func()
 
     return ManagerCallback(wrapper)
 
@@ -91,7 +95,7 @@ def relation_handler(*relnames):
 
     def decorator(func):
         @wraps(func)
-        def wrapper(servicename):
+        def wrapper(service_name=None):
             rels = context.Relations()
             for relname in relnames:
                 for rel in rels[relname].values():

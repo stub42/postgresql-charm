@@ -79,6 +79,8 @@ options:
         join_collapse_limit=16
         wal_buffers=-1
         checkpoint_completion_target=0.9
+        password_encryption=true
+        max_connections=100
       type: string
       description: >
           postgresql.conf settings, one per line in standard key=value

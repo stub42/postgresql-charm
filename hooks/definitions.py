@@ -16,28 +16,42 @@
 
 from charmhelpers.core import services
 
-import relations
+import clientrel
 import service
+import syslogrel
 
 
 SERVICE_DEFINITION = [
     dict(service='postgresql',
-         required_data=[service.valid_config,
-                        service.has_master],
+         required_data=[service.valid_config],
          data_ready=[service.preinstall,
                      service.configure_sources,
                      service.install_packages,
                      service.ensure_package_status,
                      service.update_kernel_settings,
-                     service.ensure_cluster,
                      service.appoint_master,
-                     relations.publish_db_relations,
-                     relations.ensure_db_relation_resources,
-                     service.update_pg_ident_conf,
-                     service.update_pg_hba_conf,
+
+                     service.wait_for_master,  # Exit if no master.
+
+                     service.ensure_cluster,
+                     syslogrel.handle_syslog_relations,
                      service.update_postgresql_conf,
                      service.request_restart,
-                     service.reload_or_restart,
+
+                     service.wait_for_restart,  # Exit if unapplied config.
+                     service.restart_or_reload,
+
+                     clientrel.publish_db_relations,
+                     clientrel.ensure_db_relation_resources,
+
+                     service.update_pg_ident_conf,
+                     service.update_pg_hba_conf,
+                     service.reload_config,
+
+                     # replication.clone_master,
+                     # replication.ensure_replication_credentials,
+                     # replication.ensure_replication_user,
+
                      service.set_active,
                      # At the end, as people check the end of logs
                      # most frequently.

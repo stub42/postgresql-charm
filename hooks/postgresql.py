@@ -253,13 +253,14 @@ def ensure_database(database):
         cur.execute('CREATE DATABASE %s', (pgidentifier(database),))
 
 
-def ensure_user(con, username, password, superuser=False):
+def ensure_user(con, username, password, superuser=False, replication=False):
     if role_exists(con, username):
         cmd = ["ALTER ROLE"]
     else:
         cmd = ["CREATE ROLE"]
     cmd.append("%s WITH LOGIN")
     cmd.append("SUPERUSER" if superuser else "NOSUPERUSER")
+    cmd.append("REPLICATION" if replication else "NOREPLICATION")
     cmd.append("PASSWORD %s")
     cur = con.cursor()
     cur.execute(' '.join(cmd), (pgidentifier(username), password))
@@ -416,6 +417,14 @@ def stop():
             return  # The server was not running.
         helpers.status_set('blocked', 'Unable to shutdown PostgreSQL')
         raise SystemExit(0)
+
+
+def reload_config():
+    '''Send a reload signal to a running PostgreSQL.
+
+    Alas, there is no easy way to confirm that the reload succeeded.
+    '''
+    subprocess.check_call(['pg_ctlcluster', version(), 'main', 'reload'])
 
 
 def parse_config(unparsed_config, fatal=True):

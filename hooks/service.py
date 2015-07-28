@@ -30,6 +30,7 @@ from coordinator import coordinator
 from decorators import data_ready_action, requirement
 import helpers
 import postgresql
+import replication
 import wal_e
 
 
@@ -68,14 +69,8 @@ def valid_config():
     return valid
 
 
-@requirement
-def has_master():
-    # The leader has chosen a master, or we are the leader and about to choose.
-    return hookenv.is_leader() or postgresql.master() is not None
-
-
 @data_ready_action
-def preinstall(manager, service_name, event_name):
+def preinstall():
     '''Invoke charmhelpers.payload.execd.execd_run for site customization.'''
     # Only run the preinstall hooks once, in the first hook. This is
     # either the leader-elected hook or the install hook.
@@ -91,7 +86,7 @@ def preinstall(manager, service_name, event_name):
 
 
 @data_ready_action
-def configure_sources(manager, service_name, event_name):
+def configure_sources():
     config = hookenv.config()
 
     if not (config.changed('install_sources')
@@ -127,7 +122,7 @@ def configure_sources(manager, service_name, event_name):
 
 
 @data_ready_action
-def ensure_locale(manager, service_name, event_name):
+def ensure_locale():
     '''Ensure that the requested database locale is available.'''
     config = hookenv.config()
     if hookenv.hook_name() == 'install' and config['locale'] != 'C':
@@ -140,7 +135,7 @@ def ensure_locale(manager, service_name, event_name):
 
 
 @data_ready_action
-def install_packages(manager, service_name, event_name):
+def install_packages():
     packages = postgresql.packages()
     packages.update(helpers.extra_packages())
 
@@ -160,7 +155,7 @@ def install_packages(manager, service_name, event_name):
 
 
 @data_ready_action
-def ensure_package_status(manager, service_name, event_name):
+def ensure_package_status():
     packages = postgresql.packages()
     packages.update(helpers.extra_packages())
 
@@ -177,7 +172,7 @@ def ensure_package_status(manager, service_name, event_name):
 
 
 @data_ready_action
-def emit_deprecated_option_warnings(manager, service_name, event_name):
+def emit_deprecated_option_warnings():
     deprecated = sorted(helpers.deprecated_config_in_use())
     if deprecated:
         hookenv.log('Deprecated configuration settings in use: {}'
@@ -185,13 +180,16 @@ def emit_deprecated_option_warnings(manager, service_name, event_name):
 
 
 @data_ready_action
-def ensure_cluster(manager, service_name, event_name):
+def ensure_cluster():
     if not os.path.exists(postgresql.postgresql_conf_path()):
         postgresql.create_cluster()
+        # The default pg_hba.conf doesn't allow root to connect.
+        # Fix that, so this charm has the permissions it needs.
+        update_pg_hba_conf()
 
 
 @data_ready_action
-def appoint_master(manager, service_name, event_name):
+def appoint_master():
     # Underconstruction. First leader is master forever.
     master = postgresql.master()
     if master is not None:
@@ -204,7 +202,27 @@ def appoint_master(manager, service_name, event_name):
 
 
 @data_ready_action
-def update_kernel_settings(manager, service_name, event_name):
+def wait_for_master():
+    '''Wait until the master has not authorized us.
+
+    If not, the unit is put into 'waiting' state and the hook exits.
+    '''
+    master = postgresql.master()
+    local = hookenv.local_unit()
+    if master == local:
+        return
+
+    relinfo = context.Relations().peer[master]
+    allowed = relinfo.get('allowed-units', '').split()
+    if local in allowed:
+        return
+
+    helpers.status_set('waiting', 'Waiting for master')
+    raise SystemExit(0)
+
+
+@data_ready_action
+def update_kernel_settings():
     lots_and_lots = pow(1024, 4)  # 1 TB
     sysctl_settings = {'kernel.shmmax': lots_and_lots,
                        'kernel.shmall': lots_and_lots}
@@ -213,7 +231,7 @@ def update_kernel_settings(manager, service_name, event_name):
 
 
 @data_ready_action
-def update_pg_ident_conf(manager, service_name, event_name):
+def update_pg_ident_conf():
     '''Add the charm's required entry to pg_ident.conf'''
     entries = set([('root', 'postgres'),
                    ('postgres', 'postgres')])
@@ -228,7 +246,7 @@ def update_pg_ident_conf(manager, service_name, event_name):
 
 
 @data_ready_action
-def update_pg_hba_conf(manager, service_name, event_name):
+def update_pg_hba_conf():
     '''Update the pg_hba.conf file (host based authentication).'''
     rules = []  # The ordered list, as tuples.
 
@@ -253,10 +271,16 @@ def update_pg_hba_conf(manager, service_name, event_name):
     rels = context.Relations()
 
     # Peers need replication access as the charm replication user.
-    for peer, relinfo in rels.peer.items():
-        addr = postgresql.addr_to_range(relinfo['private-address'])
-        add('host', 'replication', '_juju_repl',
-            postgresql.quote_identifier(addr), 'md5', '# {}'.format(relinfo))
+    if rels.peer:
+        for peer, relinfo in rels.peer.items():
+            addr = postgresql.addr_to_range(relinfo['private-address'])
+            qaddr = postgresql.quote_identifier(addr)
+            # Magic replication database, for replication.
+            add('host', 'replication', replication.replication_username(),
+                qaddr, 'md5', '# {}'.format(relinfo))
+            # postgres database, so the leader can query replication status.
+            add('host', 'postgres', replication.replication_username(),
+                qaddr, 'md5', '# {}'.format(relinfo))
 
     # Clients need access to the relation database as the relation users.
     for rel in list(rels['db'].values()) + list(rels['db-admin'].values()):
@@ -360,12 +384,12 @@ def postgresql_conf_defaults():
     # And calculate some defaults, which could get out of sync.
     # Settings with mandatory minimums like wal_senders is handled
     # later, in ensure_viable_postgresql_conf().
-    ram = host.get_total_ram() / (1024 * 1024)  # Working in megabytes.
+    ram = int(host.get_total_ram() / (1024 * 1024))  # Working in megabytes.
 
     # Default shared_buffers to 25% of ram, minimum 16MB, maximum 8GB,
     # per current best practice rules of thumb. Rest is cache.
     shared_buffers = max(min(math.ceil(ram * 0.25), 8192), 16)
-    effective_cache_size = min(0, ram - shared_buffers)
+    effective_cache_size = max(1, ram - shared_buffers)
     defaults['shared_buffers'] = '{} MB'.format(shared_buffers)
     defaults['effective_cache_size'] = '{} MB'.format(effective_cache_size)
 
@@ -441,10 +465,15 @@ def ensure_viable_postgresql_conf(opts):
                 opts[k] = v
 
     config = hookenv.config()
+    rels = context.Relations()
 
-    num_standbys = len(helpers.peers())
-    for relid in hookenv.relation_ids('master'):
-        num_standbys += len(hookenv.related_units(relid))
+    num_standbys = len(rels.peer or {})
+    for rel in rels['master'].values():
+        num_standbys += len(rel)
+
+    num_clients = 0
+    for rel in list(rels['db']) + list(rels['db-admin']):
+        num_clients += len(rel)
 
     # Even without replication, replication slots get used by
     # pg_basebackup(1). Bump up max_wal_senders so things work. It is
@@ -452,6 +481,11 @@ def ensure_viable_postgresql_conf(opts):
     min_wal_senders = num_standbys * 5 + 5
     if min_wal_senders > opts.get('max_wal_senders', 0):
         force(max_wal_senders=min_wal_senders)
+
+    # max_connections. One per client unit, plus replication.
+    min_max_connections = min_wal_senders + min(1, num_clients)
+    if min_max_connections > int(opts.get('max_connections', 0)):
+        force(max_connections=min_max_connections)
 
     # We want 'hot_standby' at a minimum, as it lets us run
     # pg_basebackup() and it is recommended over the more
@@ -485,7 +519,7 @@ def ensure_viable_postgresql_conf(opts):
 
 
 @data_ready_action
-def update_postgresql_conf(manager, service_name, event_name):
+def update_postgresql_conf():
     settings = assemble_postgresql_conf()
     path = postgresql.postgresql_conf_path()
 
@@ -529,7 +563,7 @@ def update_postgresql_conf(manager, service_name, event_name):
 
 
 @data_ready_action
-def request_restart(manager, service_name, event_name):
+def request_restart():
     if coordinator.requested('restart'):
         hookenv.log('Restart already requested')
         return
@@ -573,26 +607,38 @@ def request_restart(manager, service_name, event_name):
 
 
 @data_ready_action
-def reload_or_restart(manager, service_name, event_name):
-    '''Restart if necessary and leader has given permission, or else reload.'''
-    if coordinator.granted('restart') or not postgresql.is_running():
-        subprocess.check_call(['pg_ctlcluster', '--mode=fast',
-                              postgresql.version(), 'main', 'restart'],
-                              universal_newlines=True)
-    else:
-        subprocess.check_call(['pg_ctlcluster', postgresql.version(),
-                               'main', 'reload'],
-                              universal_newlines=True)
+def wait_for_restart():
+    if coordinator.requested('restart') and not coordinator.granted('restart'):
+        helpers.status_set('wait', 'Waiting for permission to restart')
+        raise SystemExit(0)
 
 
 @data_ready_action
-def stop_postgresql(manager, service_name, event_name):
+def restart_or_reload():
+    '''Restart if necessary and leader has given permission, or else reload.'''
+    if not postgresql.is_running():
+        postgresql.start()
+    elif coordinator.granted('restart'):
+        postgresql.stop()
+        postgresql.start()
+    else:
+        postgresql.reload_config()
+
+
+@data_ready_action
+def reload_config():
+    '''Send a reload signal.'''
+    postgresql.reload_config()
+
+
+@data_ready_action
+def stop_postgresql():
     if postgresql.is_running():
         postgresql.stop()
 
 
 @data_ready_action
-def open_ports(manager, service_name, event_name):
+def open_ports():
     # We can't use the standard Services Framework method of opening
     # our ports, as we don't know what they are when the ServiceManager
     # is instantiated.
@@ -608,13 +654,13 @@ def open_ports(manager, service_name, event_name):
 
 
 @data_ready_action
-def close_ports(manager, service_name, event_name):
+def close_ports():
     config = hookenv.config()
     hookenv.close_port(config['open_port'])
 
 
 @data_ready_action
-def set_active(manager, service_name, event_name):
+def set_active():
     if postgresql.is_running():
         if postgresql.is_master():
             msg = 'Live master'
