@@ -520,6 +520,10 @@ def validate_postgresql_conf(conf):
     setting. If we put invalid config in postgresql.conf, then config
     reloads will not take effect and restarts will fail.
 
+    I expect this isn't bulletproof and the operator can still shoot
+    themselves in the foot with string settings that PostgreSQL cannot
+    parse (eg. listen_address="** invalid **").
+
     It seems preferable to make bad configuration highly visible and
     block, rather than repair the situation with potentially dangerous
     settings and hope the operator notices the log messages.
