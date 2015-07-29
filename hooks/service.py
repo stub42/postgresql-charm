@@ -363,6 +363,9 @@ def assemble_postgresql_conf():
     # Ensure minimal settings so the charm can actually work.
     ensure_viable_postgresql_conf(conf)
 
+    # Strip out invalid config and warn.
+    validate_postgresql_conf(conf)
+
     return conf
 
 
@@ -500,14 +503,74 @@ def ensure_viable_postgresql_conf(opts):
         force(archive_mode=True)
         force(archive_command=wal_e.wal_e_archive_command())
 
-    # Log messages for syslog. This charm only supports 'standard' Debian
-    # logs, or Debian + syslog. This will grow more complex in the future,
-    # as the local logs are redundant if you are using syslog for log
-    # aggregation, and we will want to add csvlog because it is so much
-    # easier to parse.
+    # Log destinations for syslog. This charm only supports standard
+    # Debian logging, or Debian + syslog. This will grow more complex in
+    # the future, as the local logs are redundant if you are using syslog
+    # for log aggregation, and we will want to add csvlog because it is
+    # so much easier to parse.
     if context.Relations()['syslog']:
         force(log_destination='stderr,syslog',
               syslog_ident=hookenv.local_unit().replace('/', '_'))
+
+
+def validate_postgresql_conf(conf):
+    '''Block the unit and exit the hook if there is invalid configuration.
+
+    We do strict validation to pick up errors in the users pg_extra_conf
+    setting. If we put invalid config in postgresql.conf, then config
+    reloads will not take effect and restarts will fail.
+
+    It seems preferable to make bad configuration highly visible and
+    block, rather than repair the situation with potentially dangerous
+    settings and hope the operator notices the log messages.
+    '''
+    schema = postgresql.pg_settings_schema()
+    for k, v in list(conf.items()):
+        v = str(v)
+        try:
+            if k not in schema:
+                raise ValueError('Unknown option {}'.format(k))
+
+            r = schema[k]
+
+            if r.vartype == 'bool':
+                if v.lower() not in postgresql.VALID_BOOLS:
+                    raise ValueError('Invalid boolean {!r}'.format(v, None))
+
+            elif r.vartype == 'enum':
+                v = v.lower()
+                if v not in r.enumvals:
+                    raise ValueError('Must be one of {!r}'.format(r.enumvals))
+
+            elif r.vartype == 'integer':
+                if r.unit:
+                    try:
+                        v = postgresql.convert_unit(v, r.unit)
+                    except ValueError:
+                        raise ValueError('Invalid integer w/unit {!r}'
+                                         ''.format(v))
+                else:
+                    try:
+                        v = int(v)
+                    except ValueError:
+                        raise ValueError('Invalid integer {!r}'.format(v))
+
+            elif r.vartype == 'real':
+                try:
+                    v = float(v)
+                except ValueError:
+                    raise ValueError('Invalid real {!r}'.format(v))
+
+            if r.min_val and v < float(r.min_val):
+                raise ValueError('{} below minimum {}'.format(v, r.min_val))
+            elif r.max_val and v > float(r.max_val):
+                raise ValueError('{} above maximum {}'.format(v, r.maxvalue))
+
+        except ValueError as x:
+            helpers.status_set('blocked',
+                               'Invalid postgresql.conf setting {}: {}'
+                               ''.format(k, x))
+            raise SystemExit(0)
 
 
 @data_ready_action

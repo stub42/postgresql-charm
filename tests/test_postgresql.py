@@ -78,3 +78,37 @@ class TestPostgresql(unittest.TestCase):
         with self.assertRaises(SyntaxError) as x:
             postgresql.parse_config(r"key='\'")
         self.assertEqual(str(x.exception), 'Badly quoted value (line 1)')
+
+    def test_convert_unit(self):
+        c = postgresql.convert_unit
+        self.assertEqual(c('10 kB', 'kB'), 10.0)
+        self.assertEqual(c('10 MB', 'GB'), 10.0 / 1024)
+        self.assertEqual(c('800 kB', '8kB'), 800.0 / 8)
+        self.assertEqual(c('1TB', 'MB'), 1.0 * 1024 * 1024)
+        self.assertEqual(c('42', 'MB'), 42.0)
+
+        self.assertEqual(c('1s', 'ms'), 1000.0)
+        self.assertEqual(c('1d', 'h'), 24.0)
+        self.assertEqual(c('1 min', 'd'), 1.0 / (24 * 60))
+
+        with self.assertRaises(ValueError) as x:
+            c('10 MB', 'd')
+        self.assertEqual(x.exception.args[0], '10 MB')
+        self.assertEqual(x.exception.args[1], 'Cannot convert MB to d')
+
+        with self.assertRaises(ValueError) as x:
+            c('MB', 'MB')
+        self.assertEqual(x.exception.args[0], 'MB')
+        self.assertEqual(x.exception.args[1], 'Invalid number or unit')
+
+        with self.assertRaises(ValueError) as x:
+            c('1 KB', 'kB')  # Fail due to case sensitivity, per pg docs.
+        self.assertEqual(x.exception.args[0], '1 KB')
+        self.assertEqual(x.exception.args[1],
+                         "Unknown conversion unit 'KB'. "
+                         "Units are case sensitive.")
+
+        with self.assertRaises(ValueError) as x:
+            c('10.5MB', 'kB')  # Floats with units fail in postgresql.conf
+        self.assertEqual(x.exception.args[0], '10.5MB')
+        self.assertEqual(x.exception.args[1], 'Invalid number or unit')

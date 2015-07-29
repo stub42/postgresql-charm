@@ -14,10 +14,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from collections import OrderedDict
+from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
 from distutils.version import StrictVersion
 import itertools
+import json
 import os.path
 import re
 import subprocess
@@ -126,6 +127,10 @@ def recovery_conf_path():
 
 def pg_ctl_path():
     return '/usr/lib/postgresql/{}/bin/pg_ctl'.format(version())
+
+
+def postgres_path():
+    return '/usr/lib/postgresql/{}/bin/postgres'.format(version())
 
 
 def is_in_recovery():
@@ -388,6 +393,8 @@ def start():
     try:
         subprocess.check_call(['pg_ctlcluster',
                                version(), 'main', 'start',
+                               # These extra options cause pg_ctl to wait
+                               # for startup to finish, so we don't have to.
                                '--', '-w', '-t', str(STARTUP_TIMEOUT)],
                               universal_newlines=True)
     except subprocess.CalledProcessError as x:
@@ -484,3 +491,92 @@ def parse_config(unparsed_config, fatal=True):
                                                                   line))
             raise SystemExit(0)
     return parsed
+
+
+def pg_settings_schema():
+    '''Server setting definitions as a dictionary of records.
+
+    Alas, --describe-cluster doesn't provide us with everything
+    we need, and pg_settings is only available when the server is
+    running and correctly configured, so we load a copy of pg_settings
+    cached in $CHARM_DIR/lib.
+
+    Generate the file using lib/cache_settings.py.
+    '''
+    cache = os.path.join(hookenv.charm_dir(), 'lib',
+                         'pg_settings_{}.json'.format(version()))
+    assert os.path.exists(cache), 'No pg_settings cache {}'.format(cache)
+    with open(cache, 'r') as f:
+        schema = json.load(f)
+
+    # Convert to namedtuples.
+    for item in schema.values():
+        keys = sorted(item.keys())
+        break
+    rec = namedtuple('pg_settings', keys)
+    return {k: rec(**schema[k]) for k in schema.keys()}
+
+
+# def live_pg_settings():
+#     '''Return the pg_settings system view as a dictionary of records.
+#
+#     Returns the same information as pg_settings_schema, but with current
+#     live settings. PostgreSQL must be running.
+#     '''
+#     con = connect()
+#     cur = con.cursor(cursor_factory=NamedTupleCursor)
+#     cur.execute('SELECT * FROM pg_settings')
+#     return {record.name: record for record in cur.fetchall()}
+
+
+def convert_unit(value_with_unit, dest_unit):
+    '''Convert a number with a unit like '16MB' to the given unit.
+
+    Input is a string. Returns a integer.
+
+    If the source does not specify a unit, it is passed through
+    unmodified.
+
+    Units are case sensitive, per the postgresql documentation.
+    '''
+    m = re.search(r'^([-\d]+)\s*(\w+)?\s*$', value_with_unit)
+    if m is None:
+        raise ValueError(value_with_unit, 'Invalid number or unit')
+    v, source_unit = m.groups()
+    v = int(v)
+    if source_unit is None:
+        return v
+
+    mem_conv = {'kB': 1024,
+                '8kB': 1024 * 8,  # Output only, for postgresql.conf
+                'MB': 1024 * 1024,
+                'GB': 1024 * 1024 * 1024,
+                'TB': 1024 * 1024 * 1024 * 1024}
+
+    time_conv = {'ms': 1,
+                 's': 1000,
+                 'min': 1000 * 60,
+                 'h': 1000 * 60 * 60,
+                 'd': 1000 * 60 * 60 * 24}
+
+    for conv in (mem_conv, time_conv):
+        if source_unit in conv:
+            if dest_unit in conv:
+                return v * conv[source_unit] / conv[dest_unit]
+            else:
+                raise ValueError(value_with_unit,
+                                 'Cannot convert {} to {}'.format(source_unit,
+                                                                  dest_unit))
+    raise ValueError(value_with_unit,
+                     'Unknown conversion unit {!r}. '
+                     'Units are case sensitive.'.format(source_unit))
+
+
+# VALID_BOOLS is the set of unique prefixes accepted as valid boolean values.
+VALID_BOOLS = ['on', 'off', 'true', 'false', 'yes', 'no', '0', '1']
+VALID_BOOLS = frozenset(prefix
+                        for word in VALID_BOOLS
+                        for prefix in [word[:i + 1]
+                                       for i in range(0, len(word))]
+                        if len([w for w in VALID_BOOLS
+                                if w.startswith(prefix)]) == 1)
