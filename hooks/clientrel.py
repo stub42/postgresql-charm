@@ -80,7 +80,7 @@ def db_relation_mirror(rel):
         return
     hookenv.log('Mirroring {} database credentials from {}'.format(rel,
                                                                    master))
-    rel.local.update({k: master.get(k) for k in master_keys})
+    rel.local.update({k: master_info.get(k) for k in master_keys})
 
 
 def db_relation_common(rel):
