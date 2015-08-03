@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import os.path
+import subprocess
 import sys
 import tempfile
 from textwrap import dedent
@@ -371,8 +372,8 @@ class TestPostgresql(unittest.TestCase):
     def test_reset_user_roles(self, pgidentifier, ensure_role, log):
         pgidentifier.side_effect = lambda d: 'q_{}'.format(d)
 
-        existing_roles = ['roleA', 'roleB']
-        wanted_roles = ['roleB', 'roleC']
+        existing_roles = set(['roleA', 'roleB'])
+        wanted_roles = set(['roleB', 'roleC'])
 
         con = MagicMock()
         cur = con.cursor()
@@ -398,6 +399,166 @@ class TestPostgresql(unittest.TestCase):
             call(role_query, ('fred',)),
             call('GRANT %s TO %s', ('q_roleC', 'q_fred')),
             call('REVOKE %s FROM %s', ('q_roleA', 'q_fred'))])
+
+    @patch('postgresql.pgidentifier')
+    def test_ensure_role(self, pgidentifier):
+        con = MagicMock()
+        cur = con.cursor()
+
+        pgidentifier.side_effect = lambda d: 'q_{}'.format(d)
+
+        # If the role already exists, nothing happens.
+        cur.fetchone.return_value = sentinel.something
+        postgresql.ensure_role(con, 'roleA')
+        cur.execute.assert_called_once_with(
+            "SELECT TRUE FROM pg_roles WHERE rolname=%s", ('roleA',))
+
+        # If the role does not exist, it is created.
+        cur.fetchone.return_value = None
+        postgresql.ensure_role(con, 'roleA')
+        cur.execute.assert_has_call("CREATE ROLE %s INHERIT NOLOGIN",
+                                    ('q_roleA',))
+
+    @patch.object(hookenv, 'log')
+    @patch('postgresql.pgidentifier')
+    def test_ensure_extensions(self, pgidentifier, log):
+        con = MagicMock()
+        cur = con.cursor()
+
+        pgidentifier.side_effect = lambda d: 'q_{}'.format(d)
+
+        existing_extensions = set(['extA', 'extB'])
+        wanted_extensions = set(['extB', 'extC'])
+
+        cur.fetchall.return_value = [[x] for x in existing_extensions]
+        postgresql.ensure_extensions(con, wanted_extensions)
+        cur.execute.assert_has_calls([
+            call('SELECT extname FROM pg_extension'),
+            call('CREATE EXTENSION %s', ('q_extC',))])
+
+    def test_addr_to_range(self):
+        eggs = [('hostname', 'hostname'),
+                ('192.168.1.1', '192.168.1.1/32'),
+                ('192.168.1.0/24', '192.168.1.0/24'),
+                ('::whatever::', '::whatever::/128'),
+                ('::whatever::/64', '::whatever::/64'),
+                ('unparseable nonsense', 'unparseable nonsense')]
+        for addr, addr_range in eggs:
+            with self.subTest(addr=addr):
+                self.assertEqual(postgresql.addr_to_range(addr), addr_range)
+
+    @patch('postgresql.data_dir')
+    @patch('postgresql.pg_ctl_path')
+    @patch('subprocess.check_call')
+    def test_is_running(self, check_call, pg_ctl_path, data_dir):
+        pg_ctl_path.return_value = '/path/to/pg_ctl'
+        data_dir.return_value = '/path/to/DATADIR'
+        self.assertTrue(postgresql.is_running())
+        check_call.assert_called_once_with(['sudo', '-u', 'postgres',
+                                            '/path/to/pg_ctl', 'status',
+                                            '-D', '/path/to/DATADIR'],
+                                           universal_newlines=True,
+                                           stdout=subprocess.DEVNULL)
+
+        # Exit code 3 is pg_ctl(1) speak for 'not running'
+        check_call.side_effect = subprocess.CalledProcessError(3, 'whoops')
+        self.assertFalse(postgresql.is_running())
+
+        # Other failures bubble up, not that they should occur.
+        check_call.side_effect = subprocess.CalledProcessError(42, 'whoops')
+        with self.assertRaises(subprocess.CalledProcessError) as x:
+            postgresql.is_running()
+        self.assertEqual(x.exception.returncode, 42)
+
+    @patch('helpers.status_set')
+    @patch('subprocess.check_call')
+    @patch('postgresql.version')
+    def test_start(self, version, check_call, status_set):
+        version.return_value = '9.9'
+
+        # When it works, it works.
+        postgresql.start()
+        # Both -w and -t options are required to wait for startup.
+        # We wait a long time, as startup might take a long time.
+        # Maybe we should wait a lot longer.
+        check_call.assert_called_once_with(['pg_ctlcluster', '9.9', 'main',
+                                            'start', '--', '-w',
+                                            '-t', '86400'],
+                                           universal_newlines=True)
+
+        # If it is already running, pg_ctlcluster returns code 2.
+        # We block, and terminate whatever hook is running.
+        check_call.side_effect = subprocess.CalledProcessError(2, 'whoops')
+        check_call.reset_mock()
+        postgresql.start()
+        check_call.assert_called_once_with(['pg_ctlcluster', '9.9', 'main',
+                                            'start', '--', '-w',
+                                            '-t', '86400'],
+                                           universal_newlines=True)
+
+        # Other failures block the unit. Perhaps it is just taking too
+        # perform recovery after a power outage.
+        check_call.side_effect = subprocess.CalledProcessError(42, 'whoops')
+        with self.assertRaises(SystemExit) as x:
+            postgresql.start()
+        status_set.assert_called_once_with('blocked', ANY)  # Set blocked.
+        self.assertEqual(x.exception.code, 0)  # Terminated without error
+
+    @patch.object(hookenv, 'log')
+    @patch('helpers.status_set')
+    @patch('subprocess.check_call')
+    @patch('postgresql.version')
+    def test_stop(self, version, check_call, status_set, log):
+        version.return_value = '9.9'
+
+        # Normal shutdown shuts down.
+        postgresql.stop()
+        # -t option is required to wait for shutdown to complete. -w not
+        # required unlike 'start', but lets be explicit.
+        check_call.assert_called_once_with(['pg_ctlcluster',
+                                            '--mode', 'fast', '9.9', 'main',
+                                            'stop', '--', '-w', '-t', '300'],
+                                           universal_newlines=True)
+
+        # If the server is not running, pg_ctlcluster(1) signals this with
+        # returncode 2.
+        check_call.side_effect = subprocess.CalledProcessError(2, 'whoops')
+        check_call.reset_mock()
+        postgresql.stop()
+        # -t option is required to wait for shutdown to complete. -w not
+        # required unlike 'start', but lets be explicit.
+        check_call.assert_called_once_with(['pg_ctlcluster',
+                                            '--mode', 'fast', '9.9', 'main',
+                                            'stop', '--', '-w', '-t', '300'],
+                                           universal_newlines=True)
+
+        # If 'fast' shutdown fails, we retry with an 'immediate' shutdown
+        check_call.side_effect = iter([subprocess.CalledProcessError(42, 'x'),
+                                       None])
+        check_call.reset_mock()
+        postgresql.stop()
+        check_call.assert_has_calls([
+            call(['pg_ctlcluster', '--mode', 'fast', '9.9', 'main',
+                  'stop', '--', '-w', '-t', '300'],
+                 universal_newlines=True),
+            call(['pg_ctlcluster', '--mode', 'immediate', '9.9', 'main',
+                  'stop', '--', '-w', '-t', '300'],
+                 universal_newlines=True)])
+
+        # If both fail, we block the unit.
+        check_call.side_effect = subprocess.CalledProcessError(42, 'x')
+        with self.assertRaises(SystemExit) as x:
+            postgresql.stop()
+        status_set.assert_called_once_with('blocked', ANY)
+        self.assertEqual(x.exception.code, 0)  # Exit cleanly
+
+    @patch('subprocess.check_call')
+    @patch('postgresql.version')
+    def test_reload_config(self, version, check_call):
+        version.return_value = '9.9'
+        postgresql.reload_config()
+        check_call.assert_called_once_with(['pg_ctlcluster', '9.9', 'main',
+                                            'reload'])
 
     def test_parse_config(self):
         valid = [(r'# A comment', dict()),

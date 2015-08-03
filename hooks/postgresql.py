@@ -411,7 +411,7 @@ def stop():
     try:
         subprocess.check_call(['pg_ctlcluster', '--mode', 'fast',
                                version(), 'main', 'stop',
-                               '--', '-t', str(SHUTDOWN_TIMEOUT)],
+                               '--', '-w', '-t', str(SHUTDOWN_TIMEOUT)],
                               universal_newlines=True)
         return
     except subprocess.CalledProcessError as x:
@@ -424,7 +424,7 @@ def stop():
                     WARNING)
         subprocess.check_call(['pg_ctlcluster', '--mode', 'immediate',
                                version(), 'main', 'stop',
-                               '--', '-t', str(SHUTDOWN_TIMEOUT)],
+                               '--', '-w', '-t', str(SHUTDOWN_TIMEOUT)],
                               universal_newlines=True)
         return
     except subprocess.CalledProcessError as x:
