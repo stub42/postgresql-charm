@@ -22,6 +22,7 @@ import json
 import os.path
 import re
 import subprocess
+from textwrap import dedent
 
 import psycopg2
 from psycopg2.extensions import AsIs
@@ -295,7 +296,7 @@ def reset_user_roles(con, username, roles):
     wanted_roles = set(roles)
 
     cur = con.cursor()
-    cur.execute("""
+    cur.execute(dedent("""\
         SELECT role.rolname
         FROM
             pg_roles AS role,
@@ -305,7 +306,7 @@ def reset_user_roles(con, username, roles):
             member.oid = pg_auth_members.member
             AND role.oid = pg_auth_members.roleid
             AND member.rolname = %s
-        """, (username,))
+        """), (username,))
     existing_roles = set(r[0] for r in cur.fetchall())
 
     roles_to_grant = wanted_roles.difference(existing_roles)
@@ -325,7 +326,7 @@ def reset_user_roles(con, username, roles):
                                                  username))
         for role in roles_to_revoke:
             cur.execute("REVOKE %s FROM %s",
-                        (pgidentifier(role), pgidentifier(role)))
+                        (pgidentifier(role), pgidentifier(username)))
 
 
 def ensure_role(con, role):

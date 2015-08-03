@@ -16,9 +16,9 @@
 import os.path
 import sys
 import tempfile
+from textwrap import dedent
 import unittest
-from unittest import mock
-from unittest.mock import call, MagicMock, patch, sentinel
+from unittest.mock import ANY, call, MagicMock, patch, sentinel
 
 import psycopg2.extensions
 
@@ -288,7 +288,7 @@ class TestPostgresql(unittest.TestCase):
         cur.execute.assert_has_calls([
             call('SELECT datname FROM pg_database WHERE datname=%s',
                  ('hello',)),
-            call('CREATE DATABASE %s', (mock.ANY,))])
+            call('CREATE DATABASE %s', (ANY,))])
         # The database name in that last call was correctly quoted.
         quoted_dbname = cur.execute.call_args[0][1][0]
         self.assertIsInstance(quoted_dbname, psycopg2.extensions.AsIs)
@@ -351,10 +351,8 @@ class TestPostgresql(unittest.TestCase):
         postgresql.grant_database_privileges(con, 'a_Role', 'a_DB', privs)
 
         cur.execute.assert_has_calls([
-            call("GRANT %s ON DATABASE %s TO %s",
-                 (mock.ANY, mock.ANY, mock.ANY)),
-            call("GRANT %s ON DATABASE %s TO %s",
-                 (mock.ANY, mock.ANY, mock.ANY))])
+            call("GRANT %s ON DATABASE %s TO %s", (ANY, ANY, ANY)),
+            call("GRANT %s ON DATABASE %s TO %s", (ANY, ANY, ANY))])
 
         for i in range(2):
             with self.subTest(i=i):
@@ -366,6 +364,40 @@ class TestPostgresql(unittest.TestCase):
                 self.assertEqual(str(params[0]), priv)  # Unquoted
                 self.assertEqual(str(params[1]), '"a_DB"')  # Quoted
                 self.assertEqual(str(params[2]), '"a_Role"')  # Quoted
+
+    @patch.object(hookenv, 'log')
+    @patch('postgresql.ensure_role')
+    @patch('postgresql.pgidentifier')
+    def test_reset_user_roles(self, pgidentifier, ensure_role, log):
+        pgidentifier.side_effect = lambda d: 'q_{}'.format(d)
+
+        existing_roles = ['roleA', 'roleB']
+        wanted_roles = ['roleB', 'roleC']
+
+        con = MagicMock()
+        cur = con.cursor()
+        cur.fetchall.return_value = [(r,) for r in existing_roles]
+
+        postgresql.reset_user_roles(con, 'fred', wanted_roles)
+
+        # A new role was ensured. The others we know exist.
+        ensure_role.assert_called_once_with(con, 'roleC')
+
+        role_query = dedent("""\
+            SELECT role.rolname
+            FROM
+                pg_roles AS role,
+                pg_roles AS member,
+                pg_auth_members
+            WHERE
+                member.oid = pg_auth_members.member
+                AND role.oid = pg_auth_members.roleid
+                AND member.rolname = %s
+            """)
+        cur.execute.assert_has_calls([
+            call(role_query, ('fred',)),
+            call('GRANT %s TO %s', ('q_roleC', 'q_fred')),
+            call('REVOKE %s FROM %s', ('q_roleA', 'q_fred'))])
 
     def test_parse_config(self):
         valid = [(r'# A comment', dict()),
