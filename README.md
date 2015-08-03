@@ -33,7 +33,7 @@ This charm supports several deployment models:
 
  - A service containing multiple units. One unit will be a 'master', and every
    other unit is a 'hot standby'. The charm sets up and maintains replication
-for you, using standard PostgreSQL streaming replication.
+   for you, using standard PostgreSQL streaming replication.
 
 To setup a single 'standalone' service::
 
@@ -73,12 +73,6 @@ installation listening on port 8080::
 
 
 ## Known Limitations and Issues
-
-⚠ Due to current [limitations][1] with juju, you cannot reliably
-create a service initially containing more than 2 units (eg. juju deploy
--n 3 postgresql). Instead, you must first create a service with 2 units.
-Once the environment is stable and all the hooks have finished running,
-you may add more units.
 
 ⚠ Do not attempt to relate client charms to a PostgreSQL service containing
   multiple units unless you know the charm supports a replicated service.
@@ -210,28 +204,27 @@ and recreated after the PITR recovery.
 A PostgreSQL service may contain multiple units (a single master, and
 optionally one or more hot standbys). The client charm can tell which
 unit in a relation is the master and which are hot standbys by
-inspecting the 'state' property on the relation, and it needs to be
-aware of how many units are in the relation by using the 'relation-list'
+inspecting the 'state' property on the relation.
 hook tool.
 
-If there is a single PostgreSQL unit related, the state will be
-'standalone'. All database connections of course go to this unit.
+The 'standalone' state is deprecated, and when a unit advertises itself
+as 'standalone' you should treat it like a 'master'. The state only exists
+for backwards compatibility and will be removed soon.
 
-If there is more than one PostgreSQL unit related, the client charm
-must only use units with state set to 'master' or 'hot standby'.
-The unit with 'master' state can accept read and write connections. The
-units with 'hot standby' state can accept read-only connections, and
-any attempted writes will fail. Units with any other state must not be
-used and should be ignored ('standalone' units are new units joining the
-service that are not yet setup, and 'failover' state will occur when the
-master unit is being shutdown and a new master is being elected).
+Writes must go to the unit identifying itself as 'master' or 'standalone'.
+If you sent writes to a 'hot standby', they will fail.
+
+Reads may go to any unit. Ideally they should be load balanced over
+the 'hot standby' units. If you need to ensure consistency, you may
+need to read from the 'master'.
+
+Units in any other state, including no state, should not be used and
+connections to them will likely fail. These units may still be setting
+up, or performing a maintenance operation such as a failover.
 
 The client charm needs to watch for state changes in its
-relation-changed hook. New units may be added to a single unit service,
-and the client charm must stop using existing 'standalone' unit and wait
-for 'master' and 'hot standby' units to appear. Units may be removed,
-possibly causing a 'hot standby' unit to be promoted to a master, or
-even having the service revert to a single 'standalone' unit.
+relation-changed hook. During failover, one of the existing 'hot standby' 
+units will change into a 'master'.
 
 
 ## Example client hooks
@@ -271,9 +264,7 @@ Python::
             conn_str = conn_str_tmpl.format(**relation_get(unit=db_unit)
             remote_state = relation_get('state', db_unit)
 
-            if remote_state == 'standalone' and len(active_db_units) == 1:
-                master_conn_str = conn_str
-            elif relation_state == 'master':
+            if remote_state in ('master', 'standalone'):
                 master_conn_str = conn_str
             elif relation_state == 'hot standby':
                 slave_conn_strs.append(conn_str)
