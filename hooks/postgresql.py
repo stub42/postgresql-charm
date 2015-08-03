@@ -36,7 +36,7 @@ def version():
     '''PostgreSQL version. major.minor, as a string.'''
     # We use the charm configuration here, as multiple versions
     # of PostgreSQL may be installed.
-    version = hookenv.config()['version']
+    version = hookenv.config().get('version')
     if version:
         return version
 
@@ -68,7 +68,7 @@ def port():
     '''The port PostgreSQL is listening on.'''
     path = postgresql_conf_path()
     with open(path, 'r') as f:
-        m = re.search(r'^port\s*=\s*(\d+)', f.read(), re.I | re.M)
+        m = re.search(r"^\s*port\s*=\s*'?(\d+)", f.read(), re.I | re.M)
         if m is None:
             return 5432  # Default port.
         return int(m.group(1))
@@ -89,16 +89,17 @@ def inhibit_default_cluster_creation():
     We can't use the default cluster as it is likely created with an
     incorrect locale and without options such as data checksumming.
     '''
-    if os.path.exists(postgresql_conf_path()):
+    path = postgresql_conf_path()
+    if os.path.exists(path):
         yield
     else:
-        os.makedirs(config_dir(), mode=0o755, exist_ok=True)
-        with open(postgresql_conf_path(), 'w'):
+        os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
+        with open(path, 'w'):
             pass
         try:
             yield
         finally:
-            os.unlink(postgresql_conf_path())
+            os.unlink(path)
 
 
 def config_dir():
@@ -170,7 +171,7 @@ def is_master():
     transitional states like failover. If recently promoted, the master
     may not yet be a primary.
     '''
-    return hookenv.leader_get('master') == hookenv.local_unit()
+    return master() == hookenv.local_unit()
 
 
 def master():

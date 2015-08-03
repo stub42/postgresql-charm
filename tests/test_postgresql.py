@@ -15,14 +15,358 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import os.path
 import sys
+import tempfile
 import unittest
+from unittest import mock
+from unittest.mock import call, MagicMock, patch, sentinel
+
+import psycopg2.extensions
 
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, 'hooks'))
+
+from charmhelpers.core import hookenv
 
 import postgresql
 
 
 class TestPostgresql(unittest.TestCase):
+    @patch.object(hookenv, 'config')
+    @patch('helpers.distro_codename')
+    def test_version(self, codename, config):
+        # Explicit version in config.
+        config.return_value = {'version': sentinel.version}
+        self.assertEqual(postgresql.version(), sentinel.version)
+
+        # Precise fallback
+        config.return_value = {}
+        codename.return_value = 'precise'
+        self.assertEqual(postgresql.version(), '9.1')
+
+        # Trusty fallback
+        codename.return_value = 'trusty'
+        self.assertEqual(postgresql.version(), '9.3')
+
+        # No other fallbacks, yet.
+        codename.return_value = 'whatever'
+        with self.assertRaises(KeyError):
+            postgresql.version()
+
+    @patch('postgresql.version')
+    def test_has_version(self, version):
+        version.return_value = '9.4'
+        self.assertTrue(postgresql.has_version('9.1'))
+        self.assertTrue(postgresql.has_version('9.4'))
+        self.assertFalse(postgresql.has_version('9.5'))
+
+    @patch('postgresql.port')
+    @patch('psycopg2.connect')
+    def test_connect(self, psycopg2_connect, port):
+        psycopg2_connect.return_value = sentinel.connection
+        port.return_value = sentinel.port
+
+        self.assertEqual(postgresql.connect(), sentinel.connection)
+        psycopg2_connect.assert_called_once_with(user='postgres',
+                                                 database='postgres',
+                                                 port=sentinel.port)
+
+        psycopg2_connect.reset_mock()
+        self.assertEqual(postgresql.connect(sentinel.user, sentinel.db),
+                         sentinel.connection)
+        psycopg2_connect.assert_called_once_with(user=sentinel.user,
+                                                 database=sentinel.db,
+                                                 port=sentinel.port)
+
+    def test_username(self):
+        # Calculate the client username for the given service or unit
+        # to use.
+        self.assertEqual(postgresql.username('hello'), 'juju_hello')
+        self.assertEqual(postgresql.username('hello/0'), 'juju_hello')
+        self.assertEqual(postgresql.username('hello', superuser=True),
+                         'juju_hello_admin')
+        self.assertEqual(postgresql.username('hello/2', True),
+                         'juju_hello_admin')
+
+    @patch('postgresql.postgresql_conf_path')
+    def test_port(self, pgconf_path):
+        # Pull the configured port from postgresql.conf.
+        with tempfile.NamedTemporaryFile('w') as pgconf:
+            pgconf.write('# Some rubbish\n')
+            pgconf.write(' Port = 1234 # Picked by pg_createcluster(1)\n')
+            pgconf.flush()
+            pgconf_path.return_value = pgconf.name
+            self.assertEqual(postgresql.port(), 1234)
+
+        with tempfile.NamedTemporaryFile('w') as pgconf:
+            pgconf.write("port='1235'\n")
+            pgconf.write('# Some rubbish\n')
+            pgconf.flush()
+            pgconf_path.return_value = pgconf.name
+            self.assertEqual(postgresql.port(), 1235)
+
+        with tempfile.NamedTemporaryFile('w') as pgconf:
+            pgconf_path.return_value = pgconf.name
+            self.assertEqual(postgresql.port(), 5432)  # Fallback to default.
+
+    @patch('postgresql.version')
+    def test_packages(self, version):
+        version.return_value = '9.9'
+        expected = set(['postgresql-9.9', 'postgresql-common',
+                        'postgresql-client-common',
+                        'postgresql-contrib-9.9', 'postgresql-client-9.9'])
+        self.assertSetEqual(postgresql.packages(), expected)
+
+    @patch('os.makedirs')
+    @patch('postgresql.postgresql_conf_path')
+    def test_inhibit_default_cluster_creation(self, pgconf_path, makedirs):
+        # If the postgresql.conf file already exists for the default
+        # cluster, package installation will not recreate the default
+        # cluster.
+        with tempfile.NamedTemporaryFile() as f:
+            pgconf_path.return_value = f.name  # File already exists, noop.
+            with postgresql.inhibit_default_cluster_creation():
+                pass
+            self.assertFalse(makedirs.called)
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            pgconf_path.return_value = f.name  # File already exists
+            os.unlink(f.name)  # Remove it, to trigger creation
+
+            with postgresql.inhibit_default_cluster_creation():
+                self.assertTrue(os.path.isfile(pgconf_path()))  # It is back
+
+            self.assertFalse(os.path.isfile(pgconf_path()))  # And gone again.
+
+            # We ensured the path to the config file was created.
+            makedirs.assert_called_once_with(os.path.dirname(f.name),
+                                             mode=0o755, exist_ok=True)
+
+    @patch('postgresql.version')
+    def test_simple_paths(self, version):
+        # We have a pile of trivial helpers to get directory and file
+        # paths. We use these for consistency and ease of mocking.
+        version.return_value = '9.9'
+        self.assertEqual(postgresql.config_dir(),
+                         '/etc/postgresql/9.9/main')
+        self.assertEqual(postgresql.data_dir(),
+                         '/var/lib/postgresql/9.9/main')
+        self.assertEqual(postgresql.postgresql_conf_path(),
+                         '/etc/postgresql/9.9/main/postgresql.conf')
+        self.assertEqual(postgresql.pg_hba_conf_path(),
+                         '/etc/postgresql/9.9/main/pg_hba.conf')
+        self.assertEqual(postgresql.pg_ident_conf_path(),
+                         '/etc/postgresql/9.9/main/pg_ident.conf')
+        self.assertEqual(postgresql.recovery_conf_path(),
+                         '/var/lib/postgresql/9.9/main/recovery.conf')
+        self.assertEqual(postgresql.pg_ctl_path(),
+                         '/usr/lib/postgresql/9.9/bin/pg_ctl')
+        self.assertEqual(postgresql.postgres_path(),
+                         '/usr/lib/postgresql/9.9/bin/postgres')
+
+    @patch('postgresql.connect')
+    def test_is_in_recovery(self, connect):
+        connect().cursor().fetchone.return_value = [sentinel.flag]
+        connect().cursor.reset_mock()
+        connect.reset_mock()
+
+        self.assertEqual(postgresql.is_in_recovery(), sentinel.flag)
+
+        connect.assert_called_once_with()
+        connect().cursor.assert_called_once_with()
+        connect().cursor().execute.assert_called_once_with(
+            'SELECT pg_is_in_recovery()')
+
+    @patch('postgresql.is_secondary')
+    def test_is_primary(self, is_secondary):
+        is_secondary.return_value = True
+        self.assertFalse(postgresql.is_primary())
+        is_secondary.return_value = False
+        self.assertTrue(postgresql.is_primary())
+
+    @patch('postgresql.recovery_conf_path')
+    @patch('postgresql.is_in_recovery')
+    def test_is_secondary(self, is_in_recovery, recovery_path):
+        # If we are not in recovery mode, we are a primary.
+        is_in_recovery.return_value = False
+        postgresql.is_secondary()
+        self.assertFalse(postgresql.is_secondary())
+
+        # If we are in recovery mode and recovery.conf exists, we are
+        # a secondary.
+        is_in_recovery.return_value = True
+        with tempfile.NamedTemporaryFile() as f:
+            recovery_path.return_value = f.name
+            self.assertTrue(postgresql.is_secondary())
+
+        # If we are in recovery mode but there is no recovery.conf,
+        # we are a primary still starting up.
+        self.assertFalse(postgresql.is_secondary())
+
+    @patch.object(hookenv, 'local_unit')
+    @patch('postgresql.master')
+    def is_master(self, master, local_unit):
+        master.return_value = sentinel.master
+        local_unit.return_value = sentinel.other
+        self.assertFalse(postgresql.is_master())
+        local_unit.return_value = sentinel.master
+        self.assertTrue(postgresql.is_master())
+
+    @patch.object(hookenv, 'leader_get')
+    def master(self, leader_get):
+        # The master is whoever the leader says it is.
+        leader_get.return_value = sentinel.master
+        self.assertEqual(postgresql.master(), sentinel.master)
+        leader_get.assert_called_once_with('master')
+
+    def test_quote_identifier(self):
+        eggs = [('hello', '"hello"'),
+                ('Hello', '"Hello"'),
+                ("""'""", '''"'"'''),
+                ('"', '''""""'''),
+                ('\\', r'''"\"'''),
+                (r'\"', r'''"\"""'''),
+                # Unicode too, not that anything this odd should get through.
+                ('\\ aargh \u0441\u043b\u043e\u043d',
+                 r'U&"\\ aargh \0441\043b\043e\043d"')]
+        for raw, quote in eggs:
+            with self.subTest(raw=raw):
+                self.assertEqual(postgresql.quote_identifier(raw), quote)
+
+    def test_pgidentifier(self):
+        a = postgresql.pgidentifier('magic')
+        self.assertIsInstance(a, psycopg2.extensions.AsIs)
+        self.assertEqual(str(a), '"magic"')
+
+    @patch('subprocess.check_call')
+    @patch.object(hookenv, 'config')
+    @patch('postgresql.version')
+    def test_create_cluster(self, version, config, check_call):
+        version.return_value = '9.9'
+        config.return_value = {'locale': sentinel.locale,
+                               'encoding': sentinel.encoding}
+        postgresql.create_cluster()
+        check_call.assert_called_once_with(['pg_createcluster',
+                                            '-e', sentinel.encoding,
+                                            '--locale', sentinel.locale,
+                                            '9.9', 'main',
+                                            '--', '--data-checksums'],
+                                           universal_newlines=True)
+
+        # No data checksums with earlier PostgreSQL versions.
+        version.return_value = '9.2'
+        config.return_value = {'locale': sentinel.locale,
+                               'encoding': sentinel.encoding}
+        check_call.reset_mock()
+        postgresql.create_cluster()
+        check_call.assert_called_once_with(['pg_createcluster',
+                                            '-e', sentinel.encoding,
+                                            '--locale', sentinel.locale,
+                                            '9.2', 'main'],
+                                           universal_newlines=True)
+
+    @patch('subprocess.check_call')
+    @patch('postgresql.version')
+    def test_drop_cluster(self, version, check_call):
+        version.return_value = '9.9'
+        postgresql.drop_cluster()
+        check_call.assert_called_once_with(['pg_dropcluster', '9.9', 'main'],
+                                           universal_newlines=True)
+
+    @patch('postgresql.connect')
+    def test_ensure_database(self, connect):
+        cur = connect().cursor()
+        
+        # If the database exists, nothing happens.
+        cur.fetchone.return_value = sentinel.something
+        postgresql.ensure_database('hello')
+        cur.execute.assert_has_calls([
+            call('SELECT datname FROM pg_database WHERE datname=%s',
+                 ('hello',))])
+
+        # If the database does not exist, it is created.
+        cur.fetchone.return_value = None
+        postgresql.ensure_database('hello')
+        cur.execute.assert_has_calls([
+            call('SELECT datname FROM pg_database WHERE datname=%s',
+                 ('hello',)),
+            call('CREATE DATABASE %s', (mock.ANY,))])
+        # The database name in that last call was correctly quoted.
+        quoted_dbname = cur.execute.call_args[0][1][0]
+        self.assertIsInstance(quoted_dbname, psycopg2.extensions.AsIs)
+        self.assertEqual(str(quoted_dbname), '"hello"')
+
+    @patch('postgresql.pgidentifier')
+    @patch('postgresql.role_exists')
+    def test_ensure_user(self, role_exists, pgidentifier):
+        con = MagicMock()
+        cur = con.cursor()
+
+        # Create a new boring user
+        role_exists.return_value = False
+        pgidentifier.return_value = sentinel.quoted_user
+        postgresql.ensure_user(con, sentinel.user, sentinel.secret)
+        pgidentifier.assert_called_once_with(sentinel.user)
+        cur.execute.assert_called_once_with(
+            'CREATE ROLE %s WITH LOGIN NOSUPERUSER NOREPLICATION PASSWORD %s',
+            (sentinel.quoted_user, sentinel.secret))
+
+        # Ensure an existing user is a superuser
+        role_exists.return_value = True
+        cur.execute.reset_mock()
+        postgresql.ensure_user(con, sentinel.user, sentinel.secret,
+                               superuser=True)
+        cur.execute.assert_called_once_with(
+            'ALTER ROLE %s WITH LOGIN SUPERUSER NOREPLICATION PASSWORD %s',
+            (sentinel.quoted_user, sentinel.secret))
+
+        # Create a new user with replication permissions.
+        role_exists.return_value = False
+        cur.execute.reset_mock()
+        postgresql.ensure_user(con, sentinel.user, sentinel.secret,
+                               replication=True)
+        cur.execute.assert_called_once_with(
+            'CREATE ROLE %s WITH LOGIN NOSUPERUSER REPLICATION PASSWORD %s',
+            (sentinel.quoted_user, sentinel.secret))
+
+    def test_role_exists(self):
+        con = MagicMock()
+        cur = con.cursor()
+
+        # Exists
+        cur.fetchone.return_value = sentinel.something
+        self.assertTrue(postgresql.role_exists(con, sentinel.role))
+        cur.execute.assert_called_once_with(
+            "SELECT TRUE FROM pg_roles WHERE rolname=%s", (sentinel.role,))
+
+        # Does not exist
+        cur.fetchone.return_value = None
+        cur.execute.reset_mock()
+        self.assertFalse(postgresql.role_exists(con, sentinel.role))
+        cur.execute.assert_called_once_with(
+            "SELECT TRUE FROM pg_roles WHERE rolname=%s", (sentinel.role,))
+
+    def test_grant_database_privileges(self):
+        con = MagicMock()
+        cur = con.cursor()
+        privs = ['privA', 'privB']
+        postgresql.grant_database_privileges(con, 'a_Role', 'a_DB', privs)
+
+        cur.execute.assert_has_calls([
+            call("GRANT %s ON DATABASE %s TO %s",
+                 (mock.ANY, mock.ANY, mock.ANY)),
+            call("GRANT %s ON DATABASE %s TO %s",
+                 (mock.ANY, mock.ANY, mock.ANY))])
+
+        for i in range(2):
+            with self.subTest(i=i):
+                priv = privs[i]
+                params = cur.execute.call_args_list[i][0][1]
+                self.assertIsInstance(params[0], psycopg2.extensions.AsIs)
+                self.assertIsInstance(params[1], psycopg2.extensions.AsIs)
+                self.assertIsInstance(params[2], psycopg2.extensions.AsIs)
+                self.assertEqual(str(params[0]), priv)  # Unquoted
+                self.assertEqual(str(params[1]), '"a_DB"')  # Quoted
+                self.assertEqual(str(params[2]), '"a_Role"')  # Quoted
+
     def test_parse_config(self):
         valid = [(r'# A comment', dict()),
                  (r'key_1 = value', dict(key_1='value')),

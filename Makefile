@@ -4,60 +4,28 @@ SERIES := $(juju get-environment default-series)
 
 default:
 	@echo "One of:"
-	@echo "    make testdep"
+	@echo "    make testdeps"
 	@echo "    make lint"
+	@echo "    make test"
 	@echo "    make unit_test"
 	@echo "    make integration_test"
-	@echo "    make integration_test_91"
-	@echo "    make integration_test_92"
-	@echo "    make integration_test_93"
-	@echo "    make integration_test_94"
 	@echo
 	@echo "There is no 'make test'"
 
-test_bot_tests:
-	@echo "Installing dependencies and running automatic-testrunner tests"
-	tests/00-setup.sh
-	tests/01-lint.sh
-	tests/02-unit-tests.sh
-	tests/03-basic-amulet.py
+test: lint unittest integration
 
-testdep:
-	tests/00-setup.sh
+testdeps:
+	sudo apt-get install -y python3-psycopg2 python3-nose
 
-unit_test:
-	@echo "Unit tests of hooks"
-	cd hooks && trial test_hooks.py
-
-integration_test:
-	@echo "PostgreSQL integration tests, all non-beta versions, ${SERIES}"
-	trial test.PG91Tests
-	trial test.PG92Tests
-	trial test.PG93Tests
-	trial test.PG94Tests
-
-integration_test_91:
-	@echo "PostgreSQL 9.1 integration tests, ${SERIES}"
-	trial test.PG91Tests
-
-integration_test_92:
-	@echo "PostgreSQL 9.2 integration tests, ${SERIES}"
-	trial test.PG92Tests
-
-integration_test_93:
-	@echo "PostgreSQL 9.3 integration tests, ${SERIES}"
-	trial test.PG93Tests
-
-integration_test_94:
-	@echo "PostgreSQL 9.4 integration tests, ${SERIES}"
-	trial test.PG94Tests
+unittest:
+	nosetests3 -sv tests/test_postgresql.py
 
 lint: proof
 	@echo "Lint check (flake8)"
 	@flake8 -v \
-	    --exclude hooks/charmhelpers,hooks/_trial_temp \
+	    --exclude hooks/charmhelpers \
             --ignore=E402 \
-	    hooks actions testing tests test.py
+	    hooks actions testing tests
 
 proof:
 	@echo "Charm Proof"
