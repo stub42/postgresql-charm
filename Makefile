@@ -15,7 +15,7 @@ default:
 test: lint unittest integration
 
 testdeps:
-	sudo apt-get install -y python3-psycopg2 python3-nose
+	sudo apt-get install -y python3-psycopg2 python3-nose amulet
 
 unittest:
 	nosetests3 -sv tests/test_postgresql.py

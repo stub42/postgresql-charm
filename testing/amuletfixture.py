@@ -63,9 +63,9 @@ class AmuletFixture(amulet.Deployment):
         os.environ['JUJU_REPOSITORY'] = temp_repo
         os.makedirs(os.path.join(temp_repo, self.series), mode=0o700)
 
-    def tearDown(self, reset_environment=True):
+    def tearDown(self, reset_environment=True, keep=None):
         if reset_environment:
-            self.reset_environment()
+            self.reset_environment(keep=keep)
         if self.org_repo is None:
             del os.environ['JUJU_REPOSITORY']
         else:
@@ -112,7 +112,9 @@ class AmuletFixture(amulet.Deployment):
             print(x.output)
             raise
 
-    def reset_environment(self, force=False):
+    def reset_environment(self, force=False, keep=None):
+        if keep is None:
+            keep = frozenset()
         if force:
             status = self.get_status()
             machines = [m for m in status.get('machines', {}).keys()
@@ -122,50 +124,43 @@ class AmuletFixture(amulet.Deployment):
                                  '--force'] + machines,
                                 stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL)
+
         fails = dict()
+        keep_machines = set(["0"])
         while True:
             status = self.get_status()
             service_items = status.get('services', {}).items()
             if not service_items:
                 break
+
             for service_name, service in service_items:
+                if service_name in keep:
+                    # Don't mess with this service.
+                    keep_machines.update([unit['machine'] for unit
+                                          in service['units'].values()])
+                    continue
+
                 if service.get('life', '') not in ('dying', 'dead'):
                     subprocess.call(['juju', 'destroy-service', service_name],
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT)
+
                 for unit_name, unit in service.get('units', {}).items():
                     if unit.get('agent-state', None) == 'error':
-                        if force:
-                            # If any units have failed hooks, unstick them.
-                            # This should no longer happen now we are
-                            # using the 'destroy-machine --force' command
-                            # earlier.
-                            try:
-                                subprocess.check_output(
-                                    ['juju', 'resolved', unit_name],
-                                    stderr=subprocess.STDOUT)
-                            except subprocess.CalledProcessError:
-                                # A previous 'resolved' call make cause a
-                                # subsequent one to fail if it is still
-                                # being processed. However, we need to keep
-                                # retrying because after a successful
-                                # resolution a subsequent hook may cause an
-                                # error state.
-                                pass
-                        else:
-                            fails[unit_name] = unit
+                        fails[unit_name] = unit
             time.sleep(1)
 
         harvest_machines = []
         for machine, state in status.get('machines', {}).items():
-            if machine != "0" and state.get('life') not in ('dying', 'dead'):
+            if machine not in keep_machines and (state.get('life')
+                                                 not in ('dying', 'dead')):
                 harvest_machines.append(machine)
 
         if harvest_machines:
             cmd = ['juju', 'remove-machine', '--force'] + harvest_machines
             subprocess.check_output(cmd, stderr=subprocess.STDOUT)
 
-        if fails:
+        if fails and not force:
             raise Exception("Teardown failed", fails)
 
     def repackage_charm(self):

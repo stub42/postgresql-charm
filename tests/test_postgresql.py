@@ -275,7 +275,7 @@ class TestPostgresql(unittest.TestCase):
     @patch('postgresql.connect')
     def test_ensure_database(self, connect):
         cur = connect().cursor()
-        
+
         # If the database exists, nothing happens.
         cur.fetchone.return_value = sentinel.something
         postgresql.ensure_database('hello')
