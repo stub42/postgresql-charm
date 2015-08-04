@@ -169,7 +169,6 @@ class PostgreSQLCharmBaseTestCase(object):
                     # Its not going to work. Per Bug #802117, this
                     # is likely an invalid host key forcing
                     # tunnelling to be disabled.
-                    # TODO: We could use nc instead of an ssh tunnel.
                     raise
 
         return psycopg2.connect(
@@ -186,16 +185,13 @@ class PostgreSQLCharmBaseTestCase(object):
         con = self.connect(admin=True)
         con.autocommit = True
         cur = con.cursor()
-        cur.execute('CREATE DATABASE newone')
+        cur.execute('SELECT * FROM pg_stat_activity')
 
         # db-admin relations can connect to any database.
-        # (use postgres rather than the one we just created to avoid
-        # PostgreSQL races).
         con = self.connect(admin=True, database='postgres')
         cur = con.cursor()
-        cur.execute('SELECT TRUE')
+        cur.execute('SELECT * FROM pg_stat_activity')
         cur.fetchone()
-
 
 
 class PG93Tests(PostgreSQLCharmBaseTestCase, unittest.TestCase):

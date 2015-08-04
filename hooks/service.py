@@ -275,7 +275,7 @@ def update_pg_hba_conf():
                 qaddr, 'md5', '# {}'.format(relinfo))
 
     # Clients need access to the relation database as the relation users.
-    for rel in list(rels['db'].values()) + list(rels['db-admin'].values()):
+    for rel in rels['db'].values():
         if 'database' in rel.local:
             for relinfo in rel.values():
                 addr = postgresql.addr_to_range(relinfo['private-address'])
@@ -292,7 +292,20 @@ def update_pg_hba_conf():
                     postgresql.quote_identifier(addr),
                     'md5', '# {}'.format(relinfo))
 
-    # External replication connections. Somwwhat different than before
+    # Admin clients need access to all databases as the relation users.
+    for rel in rels['db-admin'].values():
+        for relinfo in rel.values():
+            addr = postgresql.addr_to_range(relinfo['private-address'])
+            add('host', 'all',
+                postgresql.quote_identifier(rel.local['user']),
+                postgresql.quote_identifier(addr),
+                'md5', '# {}'.format(relinfo))
+            add('host', 'all',
+                postgresql.quote_identifier(rel.local['schema_user']),
+                postgresql.quote_identifier(addr),
+                'md5', '# {}'.format(relinfo))
+
+    # External replication connections. Somewhat different than before
     # as the relation gets its own user to avoid sharing credentials,
     # and logical replication connections will want to specify the
     # database name.
