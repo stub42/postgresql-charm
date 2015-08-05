@@ -39,6 +39,8 @@ SERVICE_DEFINITION = [
                      service.update_pgpass,
                      replication.publish_replication_details,
                      syslogrel.handle_syslog_relations,
+                     service.update_pg_hba_conf,
+                     service.update_pg_ident_conf,
                      service.update_postgresql_conf,
                      service.request_restart,
 
@@ -51,8 +53,7 @@ SERVICE_DEFINITION = [
                      clientrel.publish_db_relations,
                      clientrel.ensure_db_relation_resources,
 
-                     service.update_pg_ident_conf,
-                     service.update_pg_hba_conf,
+                     service.update_pg_hba_conf,  # Again, after client setup.
                      service.reload_config,
 
                      replication.ensure_replication_user,

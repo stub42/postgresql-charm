@@ -20,7 +20,7 @@ import subprocess
 
 from charmhelpers import context
 from charmhelpers.core import host, hookenv, templating
-from charmhelpers.core.hookenv import DEBUG, ERROR
+from charmhelpers.core.hookenv import DEBUG, ERROR, WARNING
 
 from coordinator import coordinator
 from decorators import leader_only, master_only, not_master
@@ -62,7 +62,7 @@ def wait_for_master():
         return
 
     peer_rel = context.Relations().peer
-    if peer_rel and master:
+    if peer_rel and master and master in peer_rel:
         relinfo = peer_rel[master]
         allowed = relinfo.get('allowed-units', '').split()
         if local in allowed:
@@ -151,16 +151,25 @@ def clone_master():
         raise SystemExit(0)
 
 
-@not_master
 @replication_data_ready_action
 def update_recovery_conf():
     master = postgresql.master()
+    local_unit = hookenv.local_unit()
+    path = postgresql.recovery_conf_path()
+
+    if master == local_unit:
+        # Remove recovery.conf if this unit has been promoted to master.
+        if os.path.exists(path):
+            hookenv.log("I've been promoted to master", WARNING)
+            os.unlink(path)
+        return  # Am master. No need to continue here.
+
     peer = context.Relations().peer
     master_relinfo = peer[master]
     leader = context.Leader()
     config = hookenv.config()
 
-    path = postgresql.recovery_conf_path()
+    hookenv.log('Following master {}'.format(master))
     data = dict(streaming_replication=config['streaming_replication'],
                 host=master_relinfo['host'],
                 port=master_relinfo['port'],
@@ -178,3 +187,36 @@ def update_recovery_conf():
         config['recovery_conf'] = f.read()
         if config.changed('recovery_conf'):
             coordinator.acquire('restart')
+
+
+def elect_master():
+    rel = context.Relations().peer
+    assert rel is not None, 'Attempting to elect master with no peer rel'
+    local_unit = hookenv.local_unit()
+
+    # The unit with the most advanced WAL offset should be the new master.
+    local_offset = postgresql.wal_received_offset(postgresql.connect())
+    offsets = [(local_offset, local_unit)]
+
+    for unit, relinfo in rel.items():
+        # If the remote unit hasn't yet authorized us, it is certainly
+        # not suitable to become master.
+        if local_unit not in relinfo.get('allowed-units', '').split():
+            # TODO: Signal potential clone required. Or autodetect
+            # based on timeline switch.
+            break
+
+        # If the remote unit is restarting, it is not suitable to become
+        # master.
+        if coordinator.grants.get(unit, {}).get('restart'):
+            # TODO: Signal potential clone required. Or autodetect
+            # based on timeline switch.
+            break
+
+        con = postgresql.connect(user=replication_username(),
+                                 host=relinfo['host'], port=relinfo['port'])
+        offsets.append((postgresql.wal_received_offset(con), unit))
+
+    offsets.sort()
+    elected_master = offsets[0][1]
+    return elected_master

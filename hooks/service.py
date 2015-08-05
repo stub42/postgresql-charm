@@ -28,7 +28,7 @@ from charmhelpers import fetch
 from charmhelpers.payload import execd
 
 from coordinator import coordinator
-from decorators import data_ready_action, requirement
+from decorators import data_ready_action, leader_only, requirement
 import helpers
 import postgresql
 import replication
@@ -187,9 +187,6 @@ def ensure_cluster():
         data_dir = postgresql.data_dir()
         assert not os.path.exists(data_dir)
         postgresql.create_cluster()
-        # The default pg_hba.conf doesn't allow root to connect.
-        # Fix that, so this charm has the permissions it needs.
-        update_pg_hba_conf()
         # If this unit is not the master, we will shortly be replacing
         # the contents of the $DATADIR. Remove it here, because here
         # we know it is safe.
@@ -200,17 +197,25 @@ def ensure_cluster():
             shutil.rmtree(data_dir)
 
 
+@leader_only
 @data_ready_action
 def appoint_master():
-    # Underconstruction. First leader is master forever.
+    leader = context.Leader()
     master = postgresql.master()
-    if master is not None:
-        hookenv.log('{} is master'.format(master))
-    elif hookenv.is_leader():
+    rel = context.Relations().peer
+    local_unit = hookenv.local_unit()
+
+    if master is None or not rel:
         hookenv.log('Appointing myself master')
-        hookenv.leader_set(master=hookenv.local_unit())
-    else:
-        hookenv.log('Waiting for leader to appoint master')
+        leader['master'] = hookenv.local_unit()
+    elif master == local_unit:
+        hookenv.log('I will remain master')
+    elif master not in rel:
+        hookenv.log('Master {} is gone'.format(master), WARNING)
+        new_master = replication.elect_master()
+        hookenv.log('Failing over to new master {}'.format(new_master),
+                    WARNING)
+        leader['master'] = new_master
 
 
 @data_ready_action

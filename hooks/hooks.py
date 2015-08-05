@@ -931,42 +931,6 @@ def replication_relation_departed():
     local_state.publish()
 
 
-@hooks.hook()
-def replication_relation_broken():
-    # This unit has been removed from the service.
-    promote_database()
-    config_changed()
-
-
-            # Change directory the postgres user can read, and need
-            # .pgpass too.
-            with switch_cwd('/tmp'), pgpass():
-                # Clone the master with pg_basebackup.
-                output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-            log(output, DEBUG)
-            # SSL certificates need to exist in the datadir.
-            create_ssl_cert(postgresql_cluster_dir)
-            create_recovery_conf(master_host, master_port)
-        except subprocess.CalledProcessError as x:
-            # We failed, and this cluster is broken. Rebuild a
-            # working cluster so start/stop etc. works and we
-            # can retry hooks again. Even assuming the charm is
-            # functioning correctly, the clone may still fail
-            # due to eg. lack of disk space.
-            log(x.output, ERROR)
-            log("Clone failed, local db destroyed", ERROR)
-            if os.path.exists(postgresql_cluster_dir):
-                shutil.rmtree(postgresql_cluster_dir)
-            if os.path.exists(postgresql_config_dir):
-                shutil.rmtree(postgresql_config_dir)
-            createcluster()
-            config_changed()
-            raise
-        finally:
-            postgresql_start()
-            wait_for_db()
-
-
 def slave_count():
     num_slaves = 0
     for relid in hookenv.relation_ids('replication'):
@@ -993,37 +957,6 @@ def pg_basebackup_is_running():
         WHERE usename='juju_replication' AND application_name='pg_basebackup'
         """)
     return cur.fetchone()[0] > 0
-
-
-def postgresql_wal_received_offset():
-    """How much WAL we have.
-
-    WAL is replicated asynchronously from the master to hot standbys.
-    The more WAL a hot standby has received, the better a candidate it
-    makes for master during failover.
-
-    Note that this is not quite the same as how in sync the hot standby is.
-    That depends on how much WAL has been replayed. WAL is replayed after
-    it is received.
-    """
-    cur = db_cursor(autocommit=True)
-    cur.execute('SELECT pg_is_in_recovery(), pg_last_xlog_receive_location()')
-    is_in_recovery, xlog_received = cur.fetchone()
-    if is_in_recovery:
-        return wal_location_to_bytes(xlog_received)
-    return None
-
-
-def wal_location_to_bytes(wal_location):
-    """Convert WAL + offset to num bytes, so they can be compared."""
-    logid, offset = wal_location.split('/')
-    return int(logid, 16) * 16 * 1024 * 1024 * 255 + int(offset, 16)
-
-
-def wait_for_db(
-        timeout=120, db='postgres', user='postgres', host=None, port=None):
-    '''Wait until the db is fully up.'''
-    db_cursor(db=db, user=user, host=host, port=port, timeout=timeout)
 
 
 def delete_metrics_cronjob(cron_path):

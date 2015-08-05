@@ -51,8 +51,11 @@ def has_version(ver):
     return StrictVersion(version()) >= StrictVersion(ver)
 
 
-def connect(user='postgres', database='postgres'):
-    return psycopg2.connect(user=user, database=database, port=port())
+def connect(user='postgres', database='postgres', host=None, port=None):
+    if port is None:
+        port = _port()
+    return psycopg2.connect(user=user, database=database,
+                            host=host, port=port)
 
 
 def username(unit_or_service, superuser=False):
@@ -73,6 +76,9 @@ def port():
         if m is None:
             return 5432  # Default port.
         return int(m.group(1))
+
+
+_port = port
 
 
 def packages():
@@ -582,3 +588,28 @@ VALID_BOOLS = frozenset(prefix
                                        for i in range(0, len(word))]
                         if len([w for w in VALID_BOOLS
                                 if w.startswith(prefix)]) == 1)
+
+
+def wal_received_offset(con):
+    """How much WAL a hot standby has received.
+
+    Coverts PostgreSQL's pg_last_xlog_receive_location() to a number.
+    The higher the number, the more advanced in the timeline the unit
+    is. When we failover, the unit with the highest offset should become
+    the new master to minimize dataloss and avoid unnecessary rebuilds
+    of the remaining hot standbys.
+
+    Returns None if run against a primary.
+    """
+    cur = con.cursor()
+    cur.execute('SELECT pg_is_in_recovery(), pg_last_xlog_receive_location()')
+    is_in_recovery, xlog_received = cur.fetchone()
+    if is_in_recovery:
+        return wal_location_to_bytes(xlog_received)
+    return None
+
+
+def wal_location_to_bytes(wal_location):
+    """Convert WAL + offset to num bytes, so they can be compared."""
+    logid, offset = wal_location.split('/')
+    return int(logid, 16) * 16 * 1024 * 1024 * 255 + int(offset, 16)

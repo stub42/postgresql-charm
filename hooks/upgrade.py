@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from charmhelpers import context
 from charmhelpers.core import hookenv
 
 import helpers
@@ -30,15 +31,16 @@ def upgrade_charm():
     # Set the new flag so it doesn't run.
     config['preinstall_done'] = True
 
+    rels = context.Relations()
+
     # The master is now appointed by the leader.
     if hookenv.is_leader():
         master = postgresql.master()
         if not master:
-            relid = helpers.peer_relid()
             master = hookenv.local_unit()
-            for peer in helpers.peers():
-                peer_relinfo = hookenv.relation_get(rid=relid, unit=peer)
-                if peer_relinfo.get('state') == 'master':
-                    master = peer
-                    break
+            if rels.peer:
+                for peer_relinfo in rels.peer.values():
+                    if peer_relinfo.get('state') == 'master':
+                        master = peer_relinfo.unit
+                        break
             hookenv.leader_set(master=master)

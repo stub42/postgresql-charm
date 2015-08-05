@@ -22,10 +22,9 @@ import tempfile
 
 import yaml
 
+from charmhelpers import context
 from charmhelpers.core import hookenv, host
 from charmhelpers.core.hookenv import INFO, CRITICAL
-
-from coordinator import coordinator
 
 
 def status_set(status_or_msg, msg=None):
@@ -66,15 +65,10 @@ def extra_packages():
     return packages
 
 
-def peer_relid():
-    '''Return the peer relation id.'''
-    return coordinator.relid
-
-
 def peers():
     '''Return the set of peers, not including the local unit.'''
-    relid = peer_relid()
-    return set(hookenv.related_units(relid)) if relid else set()
+    rel = context.Relations().peer
+    return frozenset(rel.keys()) if rel else frozenset()
 
 
 def rewrite(path, content):
