@@ -281,7 +281,7 @@ def update_pg_hba_conf():
 
     # Clients need access to the relation database as the relation users.
     for rel in rels['db'].values():
-        if 'database' in rel.local:
+        if 'user' in rel.local:
             for relinfo in rel.values():
                 addr = postgresql.addr_to_range(relinfo['private-address'])
                 # Quote everything, including the address, to disenchant
@@ -299,16 +299,17 @@ def update_pg_hba_conf():
 
     # Admin clients need access to all databases as the relation users.
     for rel in rels['db-admin'].values():
-        for relinfo in rel.values():
-            addr = postgresql.addr_to_range(relinfo['private-address'])
-            add('host', 'all',
-                postgresql.quote_identifier(rel.local['user']),
-                postgresql.quote_identifier(addr),
-                'md5', '# {}'.format(relinfo))
-            add('host', 'all',
-                postgresql.quote_identifier(rel.local['schema_user']),
-                postgresql.quote_identifier(addr),
-                'md5', '# {}'.format(relinfo))
+        if 'user' in rel.local:
+            for relinfo in rel.values():
+                addr = postgresql.addr_to_range(relinfo['private-address'])
+                add('host', 'all',
+                    postgresql.quote_identifier(rel.local['user']),
+                    postgresql.quote_identifier(addr),
+                    'md5', '# {}'.format(relinfo))
+                add('host', 'all',
+                    postgresql.quote_identifier(rel.local['schema_user']),
+                    postgresql.quote_identifier(addr),
+                    'md5', '# {}'.format(relinfo))
 
     # External replication connections. Somewhat different than before
     # as the relation gets its own user to avoid sharing credentials,

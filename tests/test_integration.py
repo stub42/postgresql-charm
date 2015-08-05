@@ -23,6 +23,7 @@ import subprocess
 import sys
 import time
 import unittest
+import uuid
 
 import psycopg2
 
@@ -63,7 +64,7 @@ def skip_if_wabs_is_unavailable():
     return lambda x: x
 
 
-class PostgreSQLCharmBaseTestCase(object):
+class PGBaseTestCase(object):
     deployment = None  # Module scoped AmuletFixture()
 
     common_config = dict()
@@ -71,11 +72,11 @@ class PostgreSQLCharmBaseTestCase(object):
     # Override these in subclasses to run these tests multiple times
     # for different PostgreSQL versions.
     test_config = None
-    num_units = None
+    num_units = 1
 
     @classmethod
     def setUpClass(cls):
-        super(PostgreSQLCharmBaseTestCase, cls).setUpClass()
+        super(PGBaseTestCase, cls).setUpClass()
 
         # Set up the AmuletFixture. It would be nice to share some
         # of this setup with a module level fixture, but unfortunately
@@ -111,7 +112,28 @@ class PostgreSQLCharmBaseTestCase(object):
     def tearDownClass(cls):
         if cls.deployment is not None:
             cls.deployment.tearDown()
-        super(PostgreSQLCharmBaseTestCase, cls).setUpClass()
+        super(PGBaseTestCase, cls).setUpClass()
+
+    @property
+    def master(self):
+        status = self.deployment.get_status()
+        for unit, info in status['services']['postgresql']['units'].items():
+            status_message = info['workload-status']['message']
+            if status_message == 'Live master':
+                return unit
+        self.fail("There is no master")
+
+    @property
+    def secondaries(self):
+        status = self.deployment.get_status()
+        units = status['services']['postgresql']['units']
+        return set([unit for unit, info in units.items()
+                    if info['workload-status']['message'] == 'Live master'])
+
+    @property
+    def units(self):
+        status = self.deployment.get_status()
+        return set(status['services']['postgresql']['units'].keys())
 
     def connect(self, unit=None, admin=False, database=None):
         '''
@@ -176,31 +198,72 @@ class PostgreSQLCharmBaseTestCase(object):
             user=relinfo['user'], password=relinfo['password'])
 
     def test_db_relation(self):
-        con = self.connect()
-        cur = con.cursor()
-        cur.execute('SELECT TRUE')
-        cur.fetchone()
+        for unit in self.units:
+            con = self.connect(unit)
+            cur = con.cursor()
+            cur.execute('SELECT TRUE')
+            cur.fetchone()
 
     def test_db_admin_relation(self):
-        con = self.connect(admin=True)
+        for unit in self.units:
+            con = self.connect(unit, admin=True)
+            con.autocommit = True
+            cur = con.cursor()
+            cur.execute('SELECT * FROM pg_stat_activity')
+
+            # db-admin relations can connect to any database.
+            con = self.connect(unit, admin=True, database='postgres')
+            cur = con.cursor()
+            cur.execute('SELECT * FROM pg_stat_activity')
+            cur.fetchone()
+
+
+class PGMultiBaseTestCase(PGBaseTestCase):
+    num_units = 3
+
+    def _replication_test(self):
+        con = self.connect(self.master)
         con.autocommit = True
         cur = con.cursor()
-        cur.execute('SELECT * FROM pg_stat_activity')
+        cur.execute('CREATE TABLE IF NOT EXISTS tokens (x text)')
+        token = str(uuid.uuid1())
+        cur.execute('INSERT INTO tokens(x) VALUES (%s)', (token,))
 
-        # db-admin relations can connect to any database.
-        con = self.connect(admin=True, database='postgres')
-        cur = con.cursor()
-        cur.execute('SELECT * FROM pg_stat_activity')
-        cur.fetchone()
+        for secondary in self.secondaries:
+            con = self.connect(secondary)
+            con.autocommit = True
+            cur = con.cursor()
+            timeout = time.time() + 10
+            while True:
+                try:
+                    cur.execute('SELECT TRUE FROM tokens WHERE x=%s', (token,))
+                    break
+                except psycopg2.Error:
+                    if time.time() > timeout:
+                        raise
+            self.assertTrue(cur.fetchone()[0])
+
+    def test_replication(self):
+        self._replication_test()
+
+    def test_failover(self):
+        self.deployment.destroy_unit(self.master)
+        self.deployment.add_unit('postgresql')
+        self.deployment.wait()
+        self._replication_test()
 
 
-class PG93Tests(PostgreSQLCharmBaseTestCase, unittest.TestCase):
+class PG93Tests(PGBaseTestCase, unittest.TestCase):
     test_config = dict(version=(None if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True))
-    num_units = 1
 
 
-class PG94Tests(PostgreSQLCharmBaseTestCase, unittest.TestCase):
+class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
+    test_config = dict(version=(None if SERIES == 'trusty' else '9.3'),
+                       pgdg=(False if SERIES == 'trusty' else True))
+
+
+class PG94Tests(PGBaseTestCase, unittest.TestCase):
     test_config = dict(version='9.4',
                        pgdg=True)
     num_units = 1
