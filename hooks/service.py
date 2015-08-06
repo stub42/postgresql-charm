@@ -737,7 +737,23 @@ def open_ports():
 @data_ready_action
 def close_ports():
     config = hookenv.config()
-    hookenv.close_port(config['open_port'])
+    port = config.get('open_port')
+    if port is not None:
+        hookenv.close_port(config['open_port'])
+        config['open_port'] = None
+
+
+# @data_ready_action
+# def create_ssl_cert(cluster_dir):
+#     # PostgreSQL expects SSL certificates in the datadir.
+#     server_crt = os.path.join(cluster_dir, 'server.crt')
+#     server_key = os.path.join(cluster_dir, 'server.key')
+#     if not os.path.exists(server_crt):
+#         os.symlink('/etc/ssl/certs/ssl-cert-snakeoil.pem',
+#                    server_crt)
+#     if not os.path.exists(server_key):
+#         os.symlink('/etc/ssl/private/ssl-cert-snakeoil.key',
+#                    server_key)
 
 
 @data_ready_action

@@ -17,6 +17,7 @@
 from charmhelpers.core import services
 
 import clientrel
+import nagios
 import replication
 import service
 import syslogrel
@@ -31,6 +32,7 @@ SERVICE_DEFINITION = [
                      service.ensure_package_status,
                      service.update_kernel_settings,
                      replication.ensure_replication_credentials,
+                     nagios.ensure_nagios_credentials,
                      service.appoint_master,
 
                      replication.wait_for_master,  # Exit if no master.
@@ -52,6 +54,8 @@ SERVICE_DEFINITION = [
 
                      replication.ensure_replication_user,
                      replication.publish_replication_details,
+
+                     nagios.ensure_nagios_user,
 
                      clientrel.publish_db_relations,
                      clientrel.ensure_db_relation_resources,

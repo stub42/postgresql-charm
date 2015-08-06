@@ -146,6 +146,10 @@ def postgres_path():
     return '/usr/lib/postgresql/{}/bin/postgres'.format(version())
 
 
+def pid_path():
+    return '/var/run/postgresql/{}-main.pid'.format(version())
+
+
 def is_in_recovery():
     '''True if the local cluster is in recovery.
 
@@ -386,9 +390,14 @@ def is_running():
                               stdout=subprocess.DEVNULL)
         return True
     except subprocess.CalledProcessError as x:
-        if x.returncode == 3:
-            return False
-        raise
+        if has_version('9.2'):
+            if x.returncode == 3:
+                return False
+            raise
+        else:
+            if x.returncode == 1 and not os.path.exists(pid_path()):
+                return False
+            raise
 
 
 # Slow or busy systems can take much longer than the default 60 seconds
