@@ -27,6 +27,7 @@ from textwrap import dedent
 import psycopg2
 from psycopg2.extensions import AsIs
 
+from charmhelpers import context
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG, WARNING
 
@@ -51,11 +52,16 @@ def has_version(ver):
     return StrictVersion(version()) >= StrictVersion(ver)
 
 
-def connect(user='postgres', database='postgres', host=None, port=None):
-    if port is None:
-        port = _port()
+def connect(user='postgres', database='postgres', unit=None):
+    if unit is None:
+        host = None
+        port_ = port()
+    else:
+        relinfo = context.Relations().peer[unit]
+        host = relinfo['host']
+        port_ = relinfo['port']
     return psycopg2.connect(user=user, database=database,
-                            host=host, port=port)
+                            host=host, port=port_)
 
 
 def username(unit_or_service, superuser=False):
@@ -76,9 +82,6 @@ def port():
         if m is None:
             return 5432  # Default port.
         return int(m.group(1))
-
-
-_port = port
 
 
 def packages():
@@ -167,7 +170,7 @@ def is_secondary():
 
     Hot standbys are read only replicas.
     '''
-    return is_in_recovery() and os.path.exists(recovery_conf_path())
+    return os.path.exists(recovery_conf_path())
 
 
 def is_master():

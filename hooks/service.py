@@ -205,6 +205,9 @@ def appoint_master():
     rel = context.Relations().peer
     local_unit = hookenv.local_unit()
 
+    # TODO: Manual replication mode still needs a master. Detect and pick
+    # the first primary.
+
     if master is None or not rel:
         hookenv.log('Appointing myself master')
         leader['master'] = hookenv.local_unit()

@@ -199,8 +199,8 @@ def elect_master():
     offsets = [(local_offset, local_unit)]
 
     for unit, relinfo in rel.items():
-        # If the remote unit hasn't yet authorized us, it is certainly
-        # not suitable to become master.
+        # If the remote unit hasn't yet authorized us, it is not
+        # suitable to become master.
         if local_unit not in relinfo.get('allowed-units', '').split():
             # TODO: Signal potential clone required. Or autodetect
             # based on timeline switch.
@@ -213,8 +213,7 @@ def elect_master():
             # based on timeline switch.
             break
 
-        con = postgresql.connect(user=replication_username(),
-                                 host=relinfo['host'], port=relinfo['port'])
+        con = postgresql.connect(user=replication_username(), unit=unit)
         offsets.append((postgresql.wal_received_offset(con), unit))
 
     offsets.sort()

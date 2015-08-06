@@ -40,71 +40,6 @@ from jinja2 import Environment, FileSystemLoader
 hooks = hookenv.Hooks()
 
 
-class State(dict):
-    """Encapsulate state common to the unit for republishing to relations."""
-    def __init__(self, state_file):
-        super(State, self).__init__()
-        self._state_file = state_file
-        self.load()
-
-    def load(self):
-        '''Load stored state from local disk.'''
-        if os.path.exists(self._state_file):
-            state = pickle.load(open(self._state_file, 'rb'))
-        else:
-            state = {}
-        self.clear()
-
-        self.update(state)
-
-    def save(self):
-        '''Store state to local disk.'''
-        state = {}
-        state.update(self)
-        old_mask = os.umask(0o077)  # This file contains database passwords!
-        try:
-            pickle.dump(state, open(self._state_file, 'wb'))
-        finally:
-            os.umask(old_mask)
-
-    def publish(self):
-        """Publish relevant unit state to relations"""
-
-        def add(state_dict, key):
-            if key in self:
-                state_dict[key] = self[key]
-
-        client_state = {}
-        add(client_state, 'state')
-
-        for relid in hookenv.relation_ids('db'):
-            hookenv.relation_set(relid, client_state)
-
-        for relid in hookenv.relation_ids('db-admin'):
-            hookenv.relation_set(relid, client_state)
-
-        replication_state = dict(client_state)
-
-        add(replication_state, 'replication_password')
-        add(replication_state, 'port')
-        add(replication_state, 'wal_received_offset')
-        add(replication_state, 'following')
-        add(replication_state, 'client_relations')
-
-        authorized = self.get('authorized', None)
-        if authorized:
-            replication_state['authorized'] = ' '.join(sorted(authorized))
-
-        for relid in hookenv.relation_ids('replication'):
-            hookenv.relation_set(relid, replication_state)
-
-        for relid in hookenv.relation_ids('master'):
-            hookenv.relation_set(relid, state=self.get('state'))
-
-        log('saving local state', DEBUG)
-        self.save()
-
-
 def volume_get_all_mounted():
     command = ("mount |egrep %s" % external_volume_mount)
     status, output = commands.getstatusoutput(command)
@@ -112,30 +47,6 @@ def volume_get_all_mounted():
         return None
     return output
 
-
-def postgresql_autostart(enabled):
-    postgresql_config_dir = _get_postgresql_config_dir()
-    startup_file = os.path.join(postgresql_config_dir, 'start.conf')
-    if enabled:
-        log("Enabling PostgreSQL startup in {}".format(startup_file))
-        mode = 'auto'
-    else:
-        log("Disabling PostgreSQL startup in {}".format(startup_file))
-        mode = 'manual'
-    template_file = "{}/templates/start_conf.tmpl".format(hookenv.charm_dir())
-    contents = Template(open(template_file).read()).render({'mode': mode})
-    host.write_file(
-        startup_file, contents, 'postgres', 'postgres', perms=0o644)
-
-
-def create_postgresql_config(config_file):
-    '''Create the postgresql.conf file'''
-    if config_data["performance_tuning"].lower() != "manual":
-        total_ram = _get_system_ram()
-        config_data["kernel_shmmax"] = (int(total_ram) * 1024 * 1024) + 1024
-        config_data["kernel_shmall"] = config_data["kernel_shmmax"]
-
-    tune_postgresql_config(config_file)
 
 
 def tune_postgresql_config(config_file):
@@ -874,61 +785,6 @@ def publish_hot_standby_credentials():
                 log('Waiting for database {} to be replicated'.format(
                     connection_settings['database']))
                 time.sleep(10)
-
-
-@hooks.hook()
-def replication_relation_departed():
-    '''A unit has left the replication peer group.'''
-    remote_unit = hookenv.remote_unit()
-
-    assert remote_unit is not None
-
-    log("{} has left the peer group".format(remote_unit))
-
-    # If we are the last unit standing, we become standalone
-    remaining_peers = set(hookenv.related_units(hookenv.relation_id()))
-    remaining_peers.discard(remote_unit)  # Bug #1192433
-
-    # True if we were following the departed unit.
-    following_departed = (local_state.get('following', None) == remote_unit)
-
-    if remaining_peers and not following_departed:
-        log("Remaining {}".format(local_state['state']))
-
-    elif remaining_peers and following_departed:
-        # If the unit being removed was our master, prepare for failover.
-        # We need to suspend replication to ensure that the replay point
-        # remains consistent throughout the election, and publish that
-        # replay point. Once all units have entered this steady state,
-        # we can identify the most up to date hot standby and promote it
-        # to be the new master.
-        log("Entering failover state")
-        cur = db_cursor(autocommit=True)
-        cur.execute("SELECT pg_is_xlog_replay_paused()")
-        already_paused = cur.fetchone()[0]
-        local_state["paused_at_failover"] = already_paused
-        if not already_paused:
-            cur.execute("SELECT pg_xlog_replay_pause()")
-        # Switch to failover state. Don't cleanup the 'following'
-        # setting because having access to the former master is still
-        # useful.
-        local_state['state'] = 'failover'
-        local_state['wal_received_offset'] = postgresql_wal_received_offset()
-
-    else:
-        log("Last unit standing. Switching from {} to standalone.".format(
-            local_state['state']))
-        promote_database()
-        local_state['state'] = 'standalone'
-        if 'following' in local_state:
-            del local_state['following']
-        if 'wal_received_offset' in local_state:
-            del local_state['wal_received_offset']
-        if 'paused_at_failover' in local_state:
-            del local_state['paused_at_failover']
-
-    config_changed()
-    local_state.publish()
 
 
 def slave_count():

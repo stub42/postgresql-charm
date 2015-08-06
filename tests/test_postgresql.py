@@ -25,6 +25,7 @@ import psycopg2.extensions
 
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, 'hooks'))
 
+from charmhelpers import context
 from charmhelpers.core import hookenv
 
 import postgresql
@@ -59,23 +60,29 @@ class TestPostgresql(unittest.TestCase):
         self.assertTrue(postgresql.has_version('9.4'))
         self.assertFalse(postgresql.has_version('9.5'))
 
+    @patch.object(context, 'Relations')
     @patch('postgresql.port')
     @patch('psycopg2.connect')
-    def test_connect(self, psycopg2_connect, port):
+    def test_connect(self, psycopg2_connect, port, rels):
         psycopg2_connect.return_value = sentinel.connection
-        port.return_value = sentinel.port
+        port.return_value = sentinel.local_port
 
         self.assertEqual(postgresql.connect(), sentinel.connection)
         psycopg2_connect.assert_called_once_with(user='postgres',
                                                  database='postgres',
-                                                 port=sentinel.port)
+                                                 host=None,
+                                                 port=sentinel.local_port)
 
         psycopg2_connect.reset_mock()
-        self.assertEqual(postgresql.connect(sentinel.user, sentinel.db),
+        rels().peer = {sentinel.unit: {'host': sentinel.remote_host,
+                                       'port': sentinel.remote_port}}
+        self.assertEqual(postgresql.connect(sentinel.user, sentinel.db,
+                                            sentinel.unit),
                          sentinel.connection)
         psycopg2_connect.assert_called_once_with(user=sentinel.user,
                                                  database=sentinel.db,
-                                                 port=sentinel.port)
+                                                 host=sentinel.remote_host,
+                                                 port=sentinel.remote_port)
 
     def test_username(self):
         # Calculate the client username for the given service or unit
@@ -184,22 +191,11 @@ class TestPostgresql(unittest.TestCase):
         self.assertTrue(postgresql.is_primary())
 
     @patch('postgresql.recovery_conf_path')
-    @patch('postgresql.is_in_recovery')
-    def test_is_secondary(self, is_in_recovery, recovery_path):
-        # If we are not in recovery mode, we are a primary.
-        is_in_recovery.return_value = False
-        postgresql.is_secondary()
-        self.assertFalse(postgresql.is_secondary())
-
-        # If we are in recovery mode and recovery.conf exists, we are
-        # a secondary.
-        is_in_recovery.return_value = True
+    def test_is_secondary(self, recovery_path):
+        # if recovery.conf exists, we are a secondary.
         with tempfile.NamedTemporaryFile() as f:
             recovery_path.return_value = f.name
             self.assertTrue(postgresql.is_secondary())
-
-        # If we are in recovery mode but there is no recovery.conf,
-        # we are a primary still starting up.
         self.assertFalse(postgresql.is_secondary())
 
     @patch.object(hookenv, 'local_unit')

@@ -44,7 +44,8 @@ def skip_if_swift_is_unavailable():
                    'OS_USERNAME', 'OS_PASSWORD'])
     for os_key in os_keys:
         if os_key not in os.environ:
-            return unittest.skip('Swift is unavailable')
+            return unittest.skip('Swift is unavailable - '
+                                 '{} envvar is unset'.format(os_key))
     return lambda x: x
 
 
