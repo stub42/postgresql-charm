@@ -16,7 +16,6 @@
 import math
 import os.path
 import re
-import shutil
 import subprocess
 
 import yaml
@@ -187,14 +186,6 @@ def ensure_cluster():
         data_dir = postgresql.data_dir()
         assert not os.path.exists(data_dir)
         postgresql.create_cluster()
-        # If this unit is not the master, we will shortly be replacing
-        # the contents of the $DATADIR. Remove it here, because here
-        # we know it is safe.
-        config = hookenv.config()
-        if not config['manual_replication'] and not postgresql.is_master():
-            hookenv.log('Removing {} in preparation for clone'
-                        ''.format(data_dir))
-            shutil.rmtree(data_dir)
 
 
 @leader_only

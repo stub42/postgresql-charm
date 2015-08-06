@@ -37,26 +37,27 @@ SERVICE_DEFINITION = [
 
                      service.ensure_cluster,
                      service.update_pgpass,
-                     replication.publish_replication_details,
-                     syslogrel.handle_syslog_relations,
                      service.update_pg_hba_conf,
                      service.update_pg_ident_conf,
                      service.update_postgresql_conf,
+                     syslogrel.handle_syslog_relations,
                      service.request_restart,
 
                      service.wait_for_restart,  # Exit if cannot restart yet.
 
+                     replication.promote_master,
                      replication.clone_master,
                      replication.update_recovery_conf,
                      service.restart_or_reload,
+
+                     replication.ensure_replication_user,
+                     replication.publish_replication_details,
 
                      clientrel.publish_db_relations,
                      clientrel.ensure_db_relation_resources,
 
                      service.update_pg_hba_conf,  # Again, after client setup.
                      service.reload_config,
-
-                     replication.ensure_replication_user,
 
                      service.set_active,
 

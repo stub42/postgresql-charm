@@ -16,6 +16,7 @@
 
 from functools import wraps
 import os.path
+import shutil
 import subprocess
 
 from charmhelpers import context
@@ -113,16 +114,12 @@ def clone_master():
                     DEBUG)
         return
 
-    data_dir = postgresql.data_dir()
+    assert not postgresql.is_running()
 
+    data_dir = postgresql.data_dir()
     if os.path.exists(data_dir):
-        # End users should never see this. Both pg_basebackup and
-        # pg_dropcluster would need to fail.
-        helpers.status_set('blocked',
-                           'Cannot clone master while local cluster exists. '
-                           'Run pg_dropcluster {} main'
-                           ''.format(postgresql.version()))
-        raise SystemExit(0)
+        hookenv.log('Removing {} in preparation for clone'.format(data_dir))
+        shutil.rmtree(data_dir)
     helpers.makedirs(data_dir, mode=0o700, user='postgres', group='postgres')
 
     cmd = ['sudo', '-H',  # -H needed to locate $HOME/.pgpass
@@ -151,21 +148,26 @@ def clone_master():
         raise SystemExit(0)
 
 
+@master_only
+@replication_data_ready_action
+def promote_master():
+    if postgresql.is_secondary():
+        hookenv.log("I've been promoted to master", WARNING)
+        postgresql.promote()
+    else:
+        hookenv.log("I'm already master and remaining so.", DEBUG)
+
+    # Update the cached copy used to detect changes.
+    hookenv.config()['recovery_conf'] = None
+
+
+@not_master
 @replication_data_ready_action
 def update_recovery_conf():
     master = postgresql.master()
-    local_unit = hookenv.local_unit()
     path = postgresql.recovery_conf_path()
 
-    if master == local_unit:
-        # Remove recovery.conf if this unit has been promoted to master.
-        if os.path.exists(path):
-            hookenv.log("I've been promoted to master", WARNING)
-            os.unlink(path)
-        return  # Am master. No need to continue here.
-
-    peer = context.Relations().peer
-    master_relinfo = peer[master]
+    master_relinfo = context.Relations().peer[master]
     leader = context.Leader()
     config = hookenv.config()
 

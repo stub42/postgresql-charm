@@ -254,6 +254,24 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         self._replication_test()
 
 
+class PG91Tests(PGBaseTestCase, unittest.TestCase):
+    test_config = dict(version=(None if SERIES == 'precise' else '9.1'),
+                       pgdg=(False if SERIES == 'precise' else True))
+
+
+class PG91MultiTests(PGMultiBaseTestCase, unittest.TestCase):
+    test_config = dict(version=(None if SERIES == 'precise' else '9.1'),
+                       pgdg=(False if SERIES == 'precise' else True))
+
+
+class PG92Tests(PGBaseTestCase, unittest.TestCase):
+    test_config = dict(version='9.2', pgdg=True)
+
+
+class PG92MultiTests(PGBaseTestCase, unittest.TestCase):
+    test_config = dict(version='9.2', pgdg=True)
+
+
 class PG93Tests(PGBaseTestCase, unittest.TestCase):
     test_config = dict(version=(None if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True))
@@ -265,9 +283,13 @@ class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
 
 
 class PG94Tests(PGBaseTestCase, unittest.TestCase):
-    test_config = dict(version='9.4',
-                       pgdg=True)
-    num_units = 1
+    test_config = dict(version=(None if SERIES == 'wily' else '9.4'),
+                       pgdg=(False if SERIES == 'wily' else True))
+
+
+class PG94MultiTests(PGMultiBaseTestCase, unittest.TestCase):
+    test_config = dict(version=(None if SERIES == 'wily' else '9.4'),
+                       pgdg=(False if SERIES == 'wily' else True))
 
 
 def setUpModule():

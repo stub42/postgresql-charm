@@ -31,7 +31,9 @@ from charmhelpers import context
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG, WARNING
 
+import coordinator
 import helpers
+import wal_e
 
 
 def version():
@@ -616,3 +618,22 @@ def wal_location_to_bytes(wal_location):
     """Convert WAL + offset to num bytes, so they can be compared."""
     logid, offset = wal_location.split('/')
     return int(logid, 16) * 16 * 1024 * 1024 * 255 + int(offset, 16)
+
+
+def promote():
+    assert is_secondary(), 'Cannot promote primary'
+    assert is_running(), 'Attempting to promote a stopped server'
+
+    # TODO: If we publish the history files to the peer relation,
+    # we can do a timeline switch with all PG versions.
+    if has_version('9.3') or wal_e.wal_e_enabled():
+        rc = subprocess.call([pg_ctl_path(), 'promote', '-D', data_dir()],
+                             universal_newlines=True)
+        if rc != 0 or not is_primary():
+            helpers.status_set('blocked', 'Failed to promote to primary')
+            raise SystemExit(0)
+    else:
+        # Removing recovery.conf will promote the unit to master without
+        # a timeline switch when PostgreSQL is restarted.
+        os.unlink(recovery_conf_path())
+        coordinator.acquire('restart')

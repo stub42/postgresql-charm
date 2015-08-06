@@ -287,60 +287,9 @@ def config_changed(force_restart=False, mount_point=None):
     write_metrics_cronjob('/usr/local/bin/postgres_to_statsd.py',
                           '/etc/cron.d/postgres_metrics')
 
-    # If an external mountpoint has caused an old, existing DB to be
-    # mounted, we need to ensure that all the users, databases, roles
-    # etc. exist with known passwords.
-    if local_state['state'] in ('standalone', 'master'):
-        client_relids = (
-            hookenv.relation_ids('db') + hookenv.relation_ids('db-admin'))
-        for relid in client_relids:
-            rel = hookenv.relation_get(rid=relid, unit=hookenv.local_unit())
-            client_rel = None
-            for unit in hookenv.related_units(relid):
-                client_rel = hookenv.relation_get(unit=unit, rid=relid)
-            if not client_rel:
-                continue  # No client units - in between departed and broken?
-
-            database = rel.get('database')
-            if database is None:
-                continue  # The relation exists, but we haven't joined it yet.
-
-            roles = filter(None, (client_rel.get('roles') or '').split(","))
-            user = rel.get('user')
-            if user:
-                admin = relid.startswith('db-admin')
-                password = create_user(user, admin=admin)
-                reset_user_roles(user, roles)
-                hookenv.relation_set(relid, password=password)
-
-            schema_user = rel.get('schema_user')
-            if schema_user:
-                schema_password = create_user(schema_user)
-                hookenv.relation_set(relid, schema_password=schema_password)
-
-            if user and schema_user and not (
-                    database is None or database == 'all'):
-                ensure_database(user, schema_user, database)
-
-    if force_restart:
-        postgresql_restart()
-    postgresql_reload_or_restart()
-
-    # In case the log_line_prefix has changed, inform syslog consumers.
-    for relid in hookenv.relation_ids('syslog'):
-        hookenv.relation_set(
-            relid, log_line_prefix=hookenv.config('log_line_prefix'))
-
 
 @hooks.hook()
 def install(run_pre=True, force_restart=True):
-    if run_pre:
-        for f in glob.glob('exec.d/*/charm-pre-install'):
-            if os.path.isfile(f) and os.access(f, os.X_OK):
-                subprocess.check_call(['sh', '-c', f])
-
-    validate_config()
-
     config_data = hookenv.config()
     update_repos_and_packages()
     if 'state' not in local_state:
@@ -497,43 +446,6 @@ def upgrade_charm():
             # So juju admins can see the hook fail and note the steps to fix
             # per our WARNINGs above
             sys.exit(1)
-
-
-@contextmanager
-def pgpass():
-    passwords = {}
-
-    # Replication.
-    # pg_basebackup only works with the password in .pgpass, or entered
-    # at the command prompt.
-    if 'replication_password' in local_state:
-        passwords['juju_replication'] = local_state['replication_password']
-
-    pgpass_contents = '\n'.join(
-        "*:*:*:{}:{}".format(username, password)
-        for username, password in passwords.items())
-    pgpass_file = NamedTemporaryFile()
-    pgpass_file.write(pgpass_contents)
-    pgpass_file.flush()
-    os.chown(pgpass_file.name, getpwnam('postgres').pw_uid, -1)
-    os.chmod(pgpass_file.name, 0o400)
-    org_pgpassfile = os.environ.get('PGPASSFILE', None)
-    os.environ['PGPASSFILE'] = pgpass_file.name
-    try:
-        yield pgpass_file.name
-    finally:
-        if org_pgpassfile is None:
-            del os.environ['PGPASSFILE']
-        else:
-            os.environ['PGPASSFILE'] = org_pgpassfile
-
-
-def authorized_by(unit):
-    '''Return True if the peer has authorized our database connections.'''
-    for relid in hookenv.relation_ids('replication'):
-        relation = hookenv.relation_get(unit=unit, rid=relid)
-        authorized = relation.get('authorized', '').split()
-        return hookenv.local_unit() in authorized
 
 
 def promote_database():
