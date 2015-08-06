@@ -6,3 +6,4 @@ include:
     - core
     - fetch
     - payload
+    - contrib.charmsupport.nrpe
