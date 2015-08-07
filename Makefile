@@ -57,7 +57,7 @@ lint:
 	@flake8 -v \
 	    --exclude hooks/charmhelpers,hooks/_trial_temp \
             --ignore=E402 \
-	    hooks testing tests test.py
+	    hooks actions testing tests test.py
 
 sync:
 	@bzr cat \
