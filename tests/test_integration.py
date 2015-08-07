@@ -200,23 +200,25 @@ class PGBaseTestCase(object):
 
     def test_db_relation(self):
         for unit in self.units:
-            con = self.connect(unit)
-            cur = con.cursor()
-            cur.execute('SELECT TRUE')
-            cur.fetchone()
+            with self.subTest(unit=unit):
+                con = self.connect(unit)
+                cur = con.cursor()
+                cur.execute('SELECT TRUE')
+                cur.fetchone()
 
     def test_db_admin_relation(self):
         for unit in self.units:
-            con = self.connect(unit, admin=True)
-            con.autocommit = True
-            cur = con.cursor()
-            cur.execute('SELECT * FROM pg_stat_activity')
+            with self.subTest(unit=unit):
+                con = self.connect(unit, admin=True)
+                con.autocommit = True
+                cur = con.cursor()
+                cur.execute('SELECT * FROM pg_stat_activity')
 
-            # db-admin relations can connect to any database.
-            con = self.connect(unit, admin=True, database='postgres')
-            cur = con.cursor()
-            cur.execute('SELECT * FROM pg_stat_activity')
-            cur.fetchone()
+                # db-admin relations can connect to any database.
+                con = self.connect(unit, admin=True, database='postgres')
+                cur = con.cursor()
+                cur.execute('SELECT * FROM pg_stat_activity')
+                cur.fetchone()
 
 
 class PGMultiBaseTestCase(PGBaseTestCase):
@@ -231,18 +233,20 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         cur.execute('INSERT INTO tokens(x) VALUES (%s)', (token,))
 
         for secondary in self.secondaries:
-            con = self.connect(secondary)
-            con.autocommit = True
-            cur = con.cursor()
-            timeout = time.time() + 10
-            while True:
-                try:
-                    cur.execute('SELECT TRUE FROM tokens WHERE x=%s', (token,))
-                    break
-                except psycopg2.Error:
-                    if time.time() > timeout:
-                        raise
-            self.assertTrue(cur.fetchone()[0])
+            with self.subTest(secondary=secondary):
+                con = self.connect(secondary)
+                con.autocommit = True
+                cur = con.cursor()
+                timeout = time.time() + 10
+                while True:
+                    try:
+                        cur.execute('SELECT TRUE FROM tokens WHERE x=%s',
+                                    (token,))
+                        break
+                    except psycopg2.Error:
+                        if time.time() > timeout:
+                            raise
+                self.assertTrue(cur.fetchone()[0])
 
     def test_replication(self):
         self._replication_test()

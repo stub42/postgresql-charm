@@ -33,6 +33,7 @@ SERVICE_DEFINITION = [
                      service.update_kernel_settings,
                      replication.ensure_replication_credentials,
                      nagios.ensure_nagios_credentials,
+                     replication.publish_replication_details,
                      service.appoint_master,
 
                      replication.wait_for_master,  # Exit if no master.
@@ -53,7 +54,6 @@ SERVICE_DEFINITION = [
                      service.restart_or_reload,
 
                      replication.ensure_replication_user,
-                     replication.publish_replication_details,
 
                      nagios.ensure_nagios_user,
 

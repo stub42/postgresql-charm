@@ -79,11 +79,12 @@ def username(unit_or_service, superuser=False):
 def port():
     '''The port PostgreSQL is listening on.'''
     path = postgresql_conf_path()
-    with open(path, 'r') as f:
-        m = re.search(r"^\s*port\s*=\s*'?(\d+)", f.read(), re.I | re.M)
-        if m is None:
-            return 5432  # Default port.
-        return int(m.group(1))
+    if os.path.exists(path):
+        with open(path, 'r') as f:
+            m = re.search(r"^\s*port\s*=\s*'?(\d+)", f.read(), re.I | re.M)
+            if m is not None:
+                return int(m.group(1))
+    return 5432  # Default port.
 
 
 def packages():
