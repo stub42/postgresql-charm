@@ -55,7 +55,7 @@ def has_version(ver):
 
 
 def connect(user='postgres', database='postgres', unit=None):
-    if unit is None:
+    if unit is None or unit == hookenv.local_unit():
         host = None
         port_ = port()
     else:
@@ -636,7 +636,8 @@ def promote():
     # TODO: If we publish the history files to the peer relation,
     # we can do a timeline switch with all PG versions.
     if has_version('9.3') or wal_e.wal_e_enabled():
-        rc = subprocess.call([pg_ctl_path(), 'promote', '-D', data_dir()],
+        rc = subprocess.call(['sudo', '-u', 'postgres', '-H',
+                              pg_ctl_path(), 'promote', '-D', data_dir()],
                              universal_newlines=True)
         if rc != 0 or not is_primary():
             helpers.status_set('blocked', 'Failed to promote to primary')
