@@ -192,8 +192,16 @@ def update_recovery_conf():
 
 
 def elect_master():
+    '''Elect a new master after the old one has departed.
+
+    The new master is the secondary that has received the most
+    WAL data. There must be no hot standbys still replicating
+    data from the previous master, or we may end up with diverged
+    timelines.
+    '''
     rel = context.Relations().peer
     assert rel is not None, 'Attempting to elect master with no peer rel'
+
     local_unit = hookenv.local_unit()
 
     # The unit with the most advanced WAL offset should be the new master.

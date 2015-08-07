@@ -25,6 +25,7 @@ from decorators import data_ready_action, relation_handler
 
 @data_ready_action
 def handle_syslog_relations():
+    # TODO: Only bounce rsyslog when necessary, not every hook.
     enable_syslog_relations()
     cleanup_syslog_relations()
     host.service_restart('rsyslog')

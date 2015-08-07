@@ -206,10 +206,35 @@ def appoint_master():
         hookenv.log('I will remain master')
     elif master not in rel:
         hookenv.log('Master {} is gone'.format(master), WARNING)
-        new_master = replication.elect_master()
-        hookenv.log('Failing over to new master {}'.format(new_master),
-                    WARNING)
-        leader['master'] = new_master
+
+        # Per Bug #1417874, the master doesn't know it is dying until it
+        # is too late, and standbys learn about their master dying at
+        # different times. We need to wait until all remaining units
+        # are aware that the master is gone, which we can see by looking
+        # at which units they have authorized. If we fail to do this step,
+        # then we risk appointing a new master while some units are still
+        # replicating data from the ex-master and we will end up with
+        # diverging timelines. Unfortunately, this means failover will
+        # not complete until hooks can be run on all remaining units,
+        # which could be several hours if maintenance operations are in
+        # progress. Once Bug #1417874 is addressed, the departing master
+        # can cut off replication to all units simultaneously and we
+        # can skip this step and allow failover to occur as soon as the
+        # leader learns that the master is gone.
+        ready_for_election = True
+        for unit, relinfo in rel.items():
+            if master in relinfo.get('allowed-units', '').split():
+                hookenv.log('Waiting for {} to stop replicating ex-master'
+                            ''.format(unit))
+                ready_for_election = False
+        if ready_for_election:
+            new_master = replication.elect_master()
+            hookenv.log('Failing over to new master {}'.format(new_master),
+                        WARNING)
+            leader['master'] = new_master
+        else:
+            helpers.status_set('Coordinating failover')
+            raise SystemExit(0)
 
 
 @data_ready_action

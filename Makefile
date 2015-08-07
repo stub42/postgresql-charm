@@ -26,7 +26,7 @@ unittest:
 lint: proof
 	@echo "Lint check (flake8)"
 	@flake8 -v \
-	    --exclude hooks/charmhelpers \
+	    --exclude 'hooks/charmhelpers,hooks/hooks.py' \
             --ignore=E402 \
 	    hooks actions testing tests
 
