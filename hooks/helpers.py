@@ -140,3 +140,7 @@ def scripts_dir():
 def logs_dir():
     '''Where the charm administrative scripts log their output.'''
     return '/var/lib/postgresql/logs'
+
+
+def backups_log_path():
+    return os.path.join(logs_dir(), 'backups.log')

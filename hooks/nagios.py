@@ -61,6 +61,21 @@ def update_nagios_pgpass():
 
 @data_ready_action
 def update_nrpe_config():
-    nrpe_compat = NRPE()
-    nrpe_compat.add_check()
-    nrpe_compat.write()
+    nrpe = NRPE()
+
+    user = nagios_username()
+    port = postgresql.port()
+    nrpe.add_check(shortname='pgsql',
+                   description='Check pgsql',
+                   check_cmd='check_pgsql -P {} -l {}'.format(port, user))
+
+    # TODO: These should be calcualted from the backup schedule,
+    # which is difficult since that is specified in crontab format.
+    warn_age = 172800
+    crit_age = 194400
+    backups_log = helpers.backups_log_path()
+    nrpe.add_check(shortname='pgsql_backups',
+                   description='Check pgsql backups',
+                   check_cmd=('check_file_age -w {} -c {} -f {}'
+                              ''.format(warn_age, crit_age, backups_log)))
+    nrpe.write()

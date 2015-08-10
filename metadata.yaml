@@ -28,6 +28,9 @@ provides:
   master:
     interface: pgreplication
     optional: true
+  local-monitors:
+    interface: local-monitors
+    scope: container
 requires:
   data:
     interface: block-storage
