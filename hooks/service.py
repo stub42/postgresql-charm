@@ -834,6 +834,8 @@ def update_postgresql_crontab():
     data = dict(config)
 
     data['scripts_dir'] = postgresql.scripts_dir()
+    data['is_master'] = postgresql.is_master()
+    data['is_primary'] = postgresql.is_primary()
 
     if wal_e.wal_e_enabled():
         data['wal_e_enabled'] = True

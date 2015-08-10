@@ -56,7 +56,6 @@ def create_wal_e_env_dir():
         WALE_WABS_PREFIX='')
 
     uri = config.get('wal_e_storage_uri', None)
-
     if uri:
         required_env = []
         parsed_uri = urlparse(uri)
