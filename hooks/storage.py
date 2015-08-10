@@ -14,10 +14,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import os.path
+import subprocess
+import time
+
 from charmhelpers import context
+from charmhelpers.core import hookenv
+from charmhelpers.core.hookenv import DEBUG
 
+from coordinator import coordinator
 from decorators import data_ready_action
-
+import helpers
+import postgresql
 
 # Hard coded mount point for the block storage subordinate.
 external_volume_mount = "/srv/data"
@@ -57,8 +65,8 @@ def remount():
 
     old_data_dir = postgresql.data_dir()
     new_data_dir = os.path.join(external_volume_mount, 'postgresql',
-                                version(), 'main')
-    backup_data_dir = '{}-{}'.(old_data_dir, int(time.time()))
+                                postgresql.version(), 'main')
+    backup_data_dir = '{}-{}'.format(old_data_dir, int(time.time()))
 
     if not os.path.isdir(new_data_dir):
         hookenv.log('Migrating data from {} to {}'.format(old_data_dir,

@@ -127,6 +127,11 @@ def deprecated_config_in_use():
     return set(deprecated)
 
 
+def cron_dir():
+    '''Where we put crontab files.'''
+    return '/etc/cron.d'
+
+
 def scripts_dir():
     '''Where the charm puts adminstrative scripts.'''
     return '/var/lib/postgresql/scripts'

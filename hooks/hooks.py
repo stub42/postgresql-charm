@@ -12,31 +12,6 @@ def volume_get_all_mounted():
     return output
 
 
-@hooks.hook()
-def config_changed(force_restart=False, mount_point=None):
-    validate_config()
-    config_data = hookenv.config()
-    update_repos_and_packages()
-
-    if mount_point is not None:
-        # config_changed_volume_apply will stop the service if it finds
-        # it necessary, ie: new volume setup
-        if config_changed_volume_apply(mount_point=mount_point):
-            postgresql_autostart(True)
-        else:
-            postgresql_autostart(False)
-            postgresql_stop()
-            mounts = volume_get_all_mounted()
-            if mounts:
-                log("current mounted volumes: {}".format(mounts))
-            log(
-                "Disabled and stopped postgresql service "
-                "(config_changed_volume_apply failure)", ERROR)
-            sys.exit(1)
-
-    create_wal_e_envdir()
-    update_service_port()
-    update_nrpe_checks()
     write_metrics_cronjob('/usr/local/bin/postgres_to_statsd.py',
                           '/etc/cron.d/postgres_metrics')
 
@@ -208,51 +183,6 @@ def slave_count():
     for relid in hookenv.relation_ids('master'):
         num_slaves += len(hookenv.related_units(relid))
     return num_slaves
-
-
-def delete_metrics_cronjob(cron_path):
-    try:
-        os.unlink(cron_path)
-    except OSError:
-        pass
-
-
-def write_metrics_cronjob(script_path, cron_path):
-    config_data = hookenv.config()
-
-    # need the following two configs to be valid
-    metrics_target = config_data['metrics_target'].strip()
-    metrics_sample_interval = config_data['metrics_sample_interval']
-    if (not metrics_target
-            or ':' not in metrics_target
-            or not metrics_sample_interval):
-        log("Required config not found or invalid "
-            "(metrics_target, metrics_sample_interval), "
-            "disabling statsd metrics", DEBUG)
-        delete_metrics_cronjob(cron_path)
-        return
-
-    charm_dir = os.environ['CHARM_DIR']
-    statsd_host, statsd_port = metrics_target.split(':', 1)
-    metrics_prefix = config_data['metrics_prefix'].strip()
-    metrics_prefix = metrics_prefix.replace(
-        "$UNIT", hookenv.local_unit().replace('.', '-').replace('/', '-'))
-
-    # ensure script installed
-    charm_script = os.path.join(charm_dir, 'files', 'metrics',
-                                'postgres_to_statsd.py')
-    host.write_file(script_path, open(charm_script, 'rb').read(), perms=0755)
-
-    # write the crontab
-    with open(cron_path, 'w') as cronjob:
-        cronjob.write(render_template("metrics_cronjob.template", {
-            'interval': config_data['metrics_sample_interval'],
-            'script': script_path,
-            'metrics_prefix': metrics_prefix,
-            'metrics_sample_interval': metrics_sample_interval,
-            'statsd_host': statsd_host,
-            'statsd_port': statsd_port,
-        }))
 
 
 @hooks.hook('nrpe-external-master-relation-changed')

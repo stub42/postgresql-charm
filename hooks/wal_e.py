@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import ERROR
 
+from decorators import data_ready_action
 import helpers
 import postgresql
 
@@ -37,7 +38,7 @@ def wal_e_env_dir():
 @data_ready_action
 def create_wal_e_env_dir():
     '''Regenerate the envdir(1) environment used to drive WAL-E.
-   
+
     We do this even if wal-e is not enabled to ensure we destroy
     any secrets perhaps left around from when it was enabled.
     '''

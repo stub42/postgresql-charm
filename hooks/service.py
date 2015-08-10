@@ -21,7 +21,7 @@ import subprocess
 import yaml
 
 from charmhelpers import context
-from charmhelpers.core import hookenv, host, sysctl
+from charmhelpers.core import hookenv, host, sysctl, templating
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charmhelpers import fetch
 from charmhelpers.payload import execd
@@ -815,7 +815,7 @@ def install_administrative_scripts():
                 scripts_dir=scripts_dir,
                 # backup_dir probably should be deprecated in favour of
                 # a juju storage mount.
-                backup_dir=config['backup_dir'])
+                backup_dir=hookenv.config()['backup_dir'])
     destination = os.path.join(postgresql.scripts_dir(), 'pg_backup_job')
     templating.render('pg_backup_job.tmpl', destination, data,
                       owner='root', group='postgres', perms=0o755)

@@ -20,7 +20,9 @@ import client
 import nagios
 import replication
 import service
+import storage
 import syslogrel
+import wal_e
 
 
 SERVICE_DEFINITION = [
