@@ -11,83 +11,6 @@ def volume_get_all_mounted():
     return output
 
 
-    write_metrics_cronjob('/usr/local/bin/postgres_to_statsd.py',
-                          '/etc/cron.d/postgres_metrics')
-
-
-@hooks.hook()
-def install(run_pre=True, force_restart=True):
-    config_data = hookenv.config()
-    update_repos_and_packages()
-    if 'state' not in local_state:
-        log('state not in {}'.format(local_state.keys()), DEBUG)
-        # Fresh installation. Because this function is invoked by both
-        # the install hook and the upgrade-charm hook, we need to guard
-        # any non-idempotent setup. We should probably fix this; it
-        # seems rather fragile.
-        local_state.setdefault('state', 'standalone')
-        log(repr(local_state.keys()), DEBUG)
-
-        # Drop the cluster created when the postgresql package was
-        # installed, and rebuild it with the requested locale and encoding.
-        version = pg_version()
-        for ver, name in lsclusters(slice(2)):
-            if version == ver and name == 'main':
-                run("pg_dropcluster --stop {} main".format(version))
-        listen_port = config_data.get('listen_port', None)
-        if listen_port:
-            port_opt = "--port={}".format(config_data['listen_port'])
-        else:
-            port_opt = ''
-        createcluster()
-        assert (
-            not port_opt
-            or get_service_port() == config_data['listen_port']), (
-            'allocated port {!r} != {!r}'.format(
-                get_service_port(), config_data['listen_port']))
-        local_state['port'] = get_service_port()
-        log('publishing state', DEBUG)
-        local_state.publish()
-
-    postgresql_backups_dir = (
-        config_data['backup_dir'].strip() or
-        os.path.join(postgresql_data_dir, 'backups'))
-
-    host.mkdir(postgresql_backups_dir, owner="postgres", perms=0o755)
-    host.mkdir(postgresql_scripts_dir, owner="postgres", perms=0o755)
-    host.mkdir(postgresql_logs_dir, owner="postgres", perms=0o755)
-    paths = {
-        'base_dir': postgresql_data_dir,
-        'backup_dir': postgresql_backups_dir,
-        'scripts_dir': postgresql_scripts_dir,
-        'logs_dir': postgresql_logs_dir,
-    }
-    charm_dir = hookenv.charm_dir()
-    template_file = "{}/templates/pg_backup_job.tmpl".format(charm_dir)
-    backup_job = Template(open(template_file).read()).render(paths)
-    host.write_file(
-        os.path.join(postgresql_scripts_dir, 'dump-pg-db'),
-        open('scripts/pgbackup.py', 'r').read(), perms=0o755)
-    host.write_file(
-        os.path.join(postgresql_scripts_dir, 'pg_backup_job'),
-        backup_job, perms=0755)
-    install_postgresql_crontab(postgresql_crontab)
-
-    # Create this empty log file on installation to avoid triggering
-    # spurious monitoring system alerts, per Bug #1329816.
-    if not os.path.exists(backup_log):
-        host.write_file(backup_log, '', 'postgres', 'postgres', 0664)
-
-    hookenv.open_port(get_service_port())
-
-    # Ensure at least minimal access granted for hooks to run.
-    # Reload because we are using the default cluster setup and started
-    # when we installed the PostgreSQL packages.
-    config_changed(force_restart=force_restart)
-
-    snapshot_relations()
-
-
 @hooks.hook()
 def upgrade_charm():
     """Handle saving state during an upgrade-charm hook.
@@ -325,29 +248,6 @@ def master_relation_departed():
         'allowed-units': ' '.join(allowed_units)})
 
 
-def _get_postgresql_config_dir(config_data=None):
-    """ Return the directory path of the postgresql configuration files. """
-    if config_data is None:
-        config_data = hookenv.config()
-    version = pg_version()
-    cluster_name = config_data['cluster_name']
-    return os.path.join("/etc/postgresql", version, cluster_name)
 
-
-###############################################################################
-# Global variables
-###############################################################################
 postgresql_data_dir = "/var/lib/postgresql"
-postgresql_scripts_dir = os.path.join(postgresql_data_dir, 'scripts')
-postgresql_logs_dir = os.path.join(postgresql_data_dir, 'logs')
-
-postgresql_sysctl = "/etc/sysctl.d/50-postgresql.conf"
-postgresql_crontab = "/etc/cron.d/postgresql"
-postgresql_service_config_dir = "/var/run/postgresql"
-local_state = State('local_state.pickle')
-hook_name = os.path.basename(sys.argv[0])
-juju_log_dir = "/var/log/juju"
 external_volume_mount = "/srv/data"
-
-backup_log = os.path.join(postgresql_logs_dir, "backups.log")
-

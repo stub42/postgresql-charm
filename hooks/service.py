@@ -846,7 +846,7 @@ def update_postgresql_crontab():
     else:
         data['wal_e_enabled'] = False
 
-    destination = '/etc/cron.d/juju_postgresql'
+    destination = os.path.join(helpers.cron_dir(), 'juju-postgresql')
     templating.render('postgres.cron.tmpl', destination, data,
                       owner='root', group='postgres',
                       perms=0o640)

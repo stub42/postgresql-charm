@@ -44,3 +44,8 @@ def upgrade_charm():
                         master = peer_relinfo.unit
                         break
             hookenv.leader_set(master=master)
+
+    # The name of this crontab has changed. It will get regenerated in
+    # config-changed.
+    if os.path.exists('/etc/cron.d/postgresql'):
+        os.unlink('/etc/cron.d/postgresql')
