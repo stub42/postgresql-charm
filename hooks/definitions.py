@@ -44,12 +44,14 @@ SERVICE_DEFINITION = [
                      service.update_pg_ident_conf,
                      service.update_postgresql_conf,
                      syslogrel.handle_syslog_relations,
+                     storage.handle_storage_relation,
                      wal_e.create_wal_e_env_dir,
                      service.request_restart,
 
                      service.wait_for_restart,  # Exit if cannot restart yet.
 
                      replication.promote_master,
+                     storage.remount,
                      replication.clone_master,
                      replication.update_recovery_conf,
                      service.restart_or_reload,

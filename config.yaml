@@ -120,10 +120,6 @@ options:
         Note that this option makes it possible to create a PostgreSQL
         service with multiple master units, which is a very silly thing
         to do unless you are also using multi-master software like BDR.
-  backup_dir:
-    default: "/var/lib/postgresql/backups"
-    type: string
-    description: Directory to place backups in
   backup_schedule:
     default: "13 4 * * *"
     type: string
@@ -615,3 +611,10 @@ options:
     type: float
     description: >
         DEPRECATED. Use extra_pg_conf. Random page cost
+  backup_dir:
+    default: "/var/lib/postgresql/backups"
+    type: string
+    description: >
+        DEPRECATED. Directory to place backups in. If you change this,
+        your backups will go to this path and not the 'backups' Juju
+        storage mount.

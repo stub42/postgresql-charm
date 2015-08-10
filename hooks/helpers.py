@@ -59,9 +59,6 @@ def extra_packages():
         packages.add('daemontools')
         packages.add('wal-e')
 
-    if config['performance_tuning'] != 'manual':
-        packages.add('pgtune')
-
     return packages
 
 

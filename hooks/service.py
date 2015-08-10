@@ -137,7 +137,8 @@ def ensure_locale():
 
 @data_ready_action
 def install_packages():
-    packages = postgresql.packages()
+    packages = set(['rsync'])
+    packages.update(postgresql.packages())
     packages.update(helpers.extra_packages())
 
     config = hookenv.config()
