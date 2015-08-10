@@ -16,7 +16,7 @@
 
 from charmhelpers.core import services
 
-import clientrel
+import client
 import nagios
 import replication
 import service
@@ -44,6 +44,7 @@ SERVICE_DEFINITION = [
                      service.update_pg_ident_conf,
                      service.update_postgresql_conf,
                      syslogrel.handle_syslog_relations,
+                     wal_e.create_wal_e_env_dir,
                      service.request_restart,
 
                      service.wait_for_restart,  # Exit if cannot restart yet.
@@ -54,11 +55,12 @@ SERVICE_DEFINITION = [
                      service.restart_or_reload,
 
                      replication.ensure_replication_user,
-
                      nagios.ensure_nagios_user,
+                     service.install_administrative_scripts,
+                     service.update_postgresql_crontab,
 
-                     clientrel.publish_db_relations,
-                     clientrel.ensure_db_relation_resources,
+                     client.publish_db_relations,
+                     client.ensure_db_relation_resources,
 
                      service.update_pg_hba_conf,  # Again, after client setup.
                      service.reload_config,

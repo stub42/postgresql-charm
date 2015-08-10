@@ -794,3 +794,55 @@ def set_active():
     elif hookenv.status_get() == 'active':
         helpers.status_set('blocked', 'PostgreSQL unexpectedly shut down')
         raise SystemExit(0)
+
+
+@data_ready_action
+def install_administrative_scripts():
+    scripts_dir = helpers.scripts_dir()
+    logs_dir = helpers.logs_dir()
+    helpers.makedirs(scripts_dir, mode=0o755)
+
+    # The database backup script. Most of this is redundant now.
+    source = os.path.join(hookenv.charm_dir(), 'scripts', 'pgbackup.py')
+    destination = os.path.join(scripts_dir, 'dump-pg-db')
+    with open(source, 'r') as f:
+        helpers.write(destination, f.read(), mode=0o755)
+
+    # Generate a wrapper that invokes the backup script for each
+    # database.
+    data = dict(logs_dir=logs_dir,
+                scripts_dir=scripts_dir,
+                # backup_dir probably should be deprecated in favour of
+                # a juju storage mount.
+                backup_dir=config['backup_dir'])
+    destination = os.path.join(postgresql.scripts_dir(), 'pg_backup_job')
+    templating.render('pg_backup_job.tmpl', destination, data,
+                      owner='root', group='postgres', perms=0o755)
+
+    if not os.path.exists(logs_dir):
+        backups_log = os.path.join(logs_dir, 'backups.log')
+        helpers.makedirs(logs_dir, mode=0o755)
+        # Create the backups.log file used by the backup wrapper if it
+        # does not exist, in order to trigger spurious alerts when a
+        # unit is installed, per Bug #1329816.
+        helpers.write(backups_log, '', mode=0o644)
+
+
+@data_ready_action
+def update_postgresql_crontab():
+    config = hookenv.config()
+    data = dict(config)
+
+    data['scripts_dir'] = postgresql.scripts_dir()
+
+    if wal_e.wal_e_enabled():
+        data['wal_e_enabled'] = True
+        data['wal_e_backup_command'] = wal_e.wal_e_backup_command()
+        data['wal_e_prune_command'] = wal_e.wal_e_prune_command()
+    else:
+        data['wal_e_enabled'] = False
+
+    destination = '/etc/cron.d/juju_postgresql'
+    templating.render('postgres.cron.tmpl', destination, data,
+                      owner='root', group='postgres',
+                      perms=0o640)

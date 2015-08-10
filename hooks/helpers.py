@@ -128,3 +128,12 @@ def deprecated_config_in_use():
                   if ('DEPRECATED' in options[key]['description']
                       and config[key] != options[key]['default'])]
     return set(deprecated)
+
+
+def scripts_dir():
+    '''Where the charm puts adminstrative scripts.'''
+    return '/var/lib/postgresql/scripts'
+
+
+def logs_dir():
+    '''Where the charm administrative scripts log their output.'''

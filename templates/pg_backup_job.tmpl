@@ -38,19 +38,8 @@ echo backups started `date`
 
 export PGPORT=5432 
 
-ROOT={{base_dir}}
 DUMP_DIR={{backup_dir}}
 SCRIPTS={{scripts_dir}}
-cd ${ROOT}
-
-# Clean up archived WAL files.
-WALBACKUPS=${ROOT}/walbackups
-
-# Cleanup old archived WAL files and base backups. These should have
-# already been shipped to external disk via rsync.
-if [[ -d ${WALBACKUPS} ]]; then
-    find ${WALBACKUPS} -type f -ctime +${DAYS} -delete;
-fi
 
 # Check the size of the last backup, and that we have enough space
 # to do a backup
@@ -80,6 +69,12 @@ else
     echo "No previous backup to check space requirements against. Continuing"
 fi
 
+TODAY=`date +'%Y%m%d'`
+
+# Dump globals, which we often need to restore a database dump.
+pg_dumpall --globals-only --quote-all-identifiers \
+    --file=${DUMP_DIR}/globals.${TODAY}.sql
+
 # Backup our databases. Go no further if this fails.
 # And let's nice it too, since bzip has a tendency 
 # to spike the load average
@@ -88,8 +83,6 @@ nice -n 19 ${SCRIPTS}/dump-pg-db --dir=${DUMP_DIR} --compression=postgres ${DATA
 # Prune old backups:
 # - Delete anything older than $DAYS days
 find ${DUMP_DIR}/ -mtime +${DAYS} -delete
-
-TODAY=`date +'%Y%m%d'`
 
 echo backups completed `date`
 

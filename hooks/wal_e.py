@@ -34,8 +34,13 @@ def wal_e_env_dir():
     return os.path.join(postgresql.config_dir(), 'wal-e.env')
 
 
+@data_ready_action
 def create_wal_e_env_dir():
-    '''Regenerate the envdir(1) environment used to drive WAL-E.'''
+    '''Regenerate the envdir(1) environment used to drive WAL-E.
+   
+    We do this even if wal-e is not enabled to ensure we destroy
+    any secrets perhaps left around from when it was enabled.
+    '''
     config = hookenv.config()
     env = dict(
         SWIFT_AUTHURL=config.get('os_auth_url', ''),

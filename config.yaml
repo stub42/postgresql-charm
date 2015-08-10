@@ -104,15 +104,10 @@ options:
     default: "Mixed"
     type: string
     description: >
-        Possible values here are "manual", "DW" (data warehouse),
-        "OLTP" (online transaction processing), "Web" (web application),
-        "Desktop" or "Mixed". When this is set to a value other than
-        "manual", the charm invokes the pgtune tool to tune a number
-        of performance parameters based on the specified load type.
-        pgtune gathers information about the node on which you are deployed and
-        tries to make intelligent guesses about what tuning parameters to set
-        based on available RAM and CPU under the assumption that it's the only
-        significant service running on this node.
+        DEPRECATED AND IGNORED. The pgtune project has been abandoned
+        and the packages dropped from Debian and Ubuntu. The charm
+        still performs some basic tuning, which users can tweak using
+        extra_pg_config.
   manual_replication:
     type: boolean
     default: False
