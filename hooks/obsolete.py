@@ -1,7 +1,6 @@
-#!/usr/bin/env python
-# vim: et ai ts=4 sw=4:
-
-hooks = hookenv.Hooks()
+#
+# Stuff yet to migrate in the charm rewrite
+# 
 
 
 def volume_get_all_mounted():
@@ -101,12 +100,6 @@ def upgrade_charm():
     and block-storage-broker services. These steps are generalised in the
     README as well.
     """
-    install(run_pre=False, force_restart=False)
-    snapshot_relations()
-    version = pg_version()
-    cluster_name = hookenv.config('cluster_name')
-    data_directory_path = os.path.join(
-        postgresql_data_dir, version, cluster_name)
     if (os.path.islink(data_directory_path)):
         link_target = os.readlink(data_directory_path)
         if "/srv/juju" in link_target:
@@ -278,32 +271,6 @@ check_file_age -w {} -c {} -f {}".format(warn_age, crit_age, backup_log))
 
     if os.path.isfile('/etc/init.d/nagios-nrpe-server'):
         host.service_reload('nagios-nrpe-server')
-
-
-@hooks.hook('data-relation-changed')
-def data_relation_changed():
-    """Listen for configured mountpoint from storage subordinate relation"""
-    if not hookenv.relation_get("mountpoint"):
-        hookenv.log("Waiting for mountpoint from the relation: %s"
-                    % external_volume_mount, hookenv.DEBUG)
-    else:
-        hookenv.log("Storage ready and mounted", hookenv.DEBUG)
-        config_changed(mount_point=external_volume_mount)
-
-
-@hooks.hook('data-relation-joined')
-def data_relation_joined():
-    """Request mountpoint from storage subordinate by setting mountpoint"""
-    hookenv.log("Setting mount point in the relation: %s"
-                % external_volume_mount, hookenv.DEBUG)
-    hookenv.relation_set(mountpoint=external_volume_mount)
-
-
-@hooks.hook('data-relation-departed')
-def stop_postgres_on_data_relation_departed():
-    hookenv.log("Data relation departing. Stopping PostgreSQL",
-                hookenv.DEBUG)
-    postgresql_stop()
 
 
 @hooks.hook('master-relation-joined', 'master-relation-changed')
