@@ -25,17 +25,20 @@ if hooks_dir not in sys.path:
     sys.path.append(hooks_dir)
 
 from charmhelpers.core import hookenv
-import hooks
+import postgresql
 
 
 def replication_pause(params):
-    offset = hooks.postgresql_wal_received_offset()
-    if offset is None:
+    if not postgresql.is_secondary():
         hookenv.action_fail('Not a hot standby')
         return
+
+    offset = postgresql.wal_received_offset()
     hookenv.action_set(dict(offset=offset))
 
-    cur = hooks.db_cursor(autocommit=True)
+    con = postgresql.connect()
+    con.autocommit = True
+    cur = con.cursor()
     cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is True:
         hookenv.action_fail('Already paused')
@@ -45,13 +48,16 @@ def replication_pause(params):
 
 
 def replication_resume(params):
-    offset = hooks.postgresql_wal_received_offset()
-    if offset is None:
+    if not postgresql.is_secondary():
         hookenv.action_fail('Not a hot standby')
         return
+
+    offset = postgresql.wal_received_offset()
     hookenv.action_set(dict(offset=offset))
 
-    cur = hooks.db_cursor(autocommit=True)
+    con = postgresql.connect()
+    con.autocommit = True
+    cur = con.cursor()
     cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is False:
         hookenv.action_fail('Already resumed')

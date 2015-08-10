@@ -94,7 +94,7 @@ def write(path, content, mode=0o640, user='root', group='root'):
 
 def makedirs(path, mode=0o750, user='root', group='root'):
     if os.path.exists(path):
-        assert os.path.is_dir(path), '{} is not a directory'
+        assert os.path.isdir(path), '{} is not a directory'
     else:
         os.makedirs(path, mode=mode)
     shutil.chown(path, user, group)
@@ -139,3 +139,4 @@ def scripts_dir():
 
 def logs_dir():
     '''Where the charm administrative scripts log their output.'''
+    return '/var/lib/postgresql/logs'

@@ -45,8 +45,6 @@ def valid_config():
     config = hookenv.config()
 
     enums = dict(version=set(['', '9.1', '9.2', '9.3', '9.4']),
-                 performance_tuning=set(['dw', 'oltp', 'web', 'mixed',
-                                         'desktop', 'manual']),
                  package_status=set(['install', 'hold']))
     for key, vals in enums.items():
         config[key] = config[key].lower()  # Rewrite to lower case.
@@ -66,7 +64,6 @@ def valid_config():
                                    'Cannot change {!r} after install '
                                    '(was {!r}).'.format(name,
                                                         config.previous(name)))
-
     return valid
 
 
@@ -809,6 +806,10 @@ def install_administrative_scripts():
     with open(source, 'r') as f:
         helpers.write(destination, f.read(), mode=0o755)
 
+    backup_dir = hookenv.config()['backup_dir']
+    helpers.makedirs(backup_dir, mode=0o750,
+                     user='postgres', group='postgres')
+
     # Generate a wrapper that invokes the backup script for each
     # database.
     data = dict(logs_dir=logs_dir,
@@ -816,7 +817,7 @@ def install_administrative_scripts():
                 # backup_dir probably should be deprecated in favour of
                 # a juju storage mount.
                 backup_dir=hookenv.config()['backup_dir'])
-    destination = os.path.join(postgresql.scripts_dir(), 'pg_backup_job')
+    destination = os.path.join(helpers.scripts_dir(), 'pg_backup_job')
     templating.render('pg_backup_job.tmpl', destination, data,
                       owner='root', group='postgres', perms=0o755)
 
@@ -834,7 +835,7 @@ def update_postgresql_crontab():
     config = hookenv.config()
     data = dict(config)
 
-    data['scripts_dir'] = postgresql.scripts_dir()
+    data['scripts_dir'] = helpers.scripts_dir()
     data['is_master'] = postgresql.is_master()
     data['is_primary'] = postgresql.is_primary()
 

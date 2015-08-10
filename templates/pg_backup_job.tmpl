@@ -24,22 +24,28 @@ backup_success () {
     chmod a+r "{{logs_dir}}/backups.log"
 }
 
-DATABASES=$(psql -tAc "select datname from pg_database where datname not in ('template0','template1','postgres')")
-if [ -z "${DATABASES}" ]; then
-    # nothing to back up
-    backup_success
-    exit 0
-fi
-
 # Set umask so backups are automatically created without group and other
 umask 0077
 
 echo backups started `date`
 
 export PGPORT=5432 
+export PGUSER=postgres
 
 DUMP_DIR={{backup_dir}}
 SCRIPTS={{scripts_dir}}
+TODAY=`date +'%Y%m%d'`
+
+# Dump globals, which we often need to restore a database dump.
+pg_dumpall --globals-only --quote-all-identifiers \
+    --file=${DUMP_DIR}/globals.${TODAY}.sql
+
+DATABASES=$(psql -tAc "select datname from pg_database where datname not in ('template0','template1','postgres')")
+if [ -z "${DATABASES}" ]; then
+    # nothing to back up
+    backup_success
+    exit 0
+fi
 
 # Check the size of the last backup, and that we have enough space
 # to do a backup
@@ -68,12 +74,6 @@ if [[ $TOTAL_SIZE -gt 0 ]]; then
 else
     echo "No previous backup to check space requirements against. Continuing"
 fi
-
-TODAY=`date +'%Y%m%d'`
-
-# Dump globals, which we often need to restore a database dump.
-pg_dumpall --globals-only --quote-all-identifiers \
-    --file=${DUMP_DIR}/globals.${TODAY}.sql
 
 # Backup our databases. Go no further if this fails.
 # And let's nice it too, since bzip has a tendency 

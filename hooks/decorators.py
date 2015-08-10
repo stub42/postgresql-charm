@@ -20,7 +20,6 @@ from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG
 
 import helpers
-import postgresql
 
 
 def data_ready_action(func):
@@ -93,6 +92,7 @@ def master_only(func):
     '''Only run on the appointed master.'''
     @wraps(func)
     def wrapper(*args, **kw):
+        import postgresql
         if postgresql.is_master():
             return func(*args, **kw)
         else:
@@ -104,19 +104,9 @@ def not_master(func):
     '''Don't run on the appointed master.'''
     @wraps(func)
     def wrapper(*args, **kw):
+        import postgresql
         if postgresql.is_master():
             hookenv.log("I'm the master", DEBUG)
         else:
             return func(*args, **kw)
     return wrapper
-
-
-# def require_peers(func):
-#     '''Only run if the peer relation has been joined.'''
-#     @wraps(func)
-#     def wrapper(*args, **kw):
-#         if Relations().peer is None:
-#             hookenv.log("Peer relation not yet joined", DEBUG)
-#         else:
-#             return func(*args, **kw)
-#     return wrapper

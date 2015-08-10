@@ -35,7 +35,7 @@ external_volume_mount = "/srv/data"
 def handle_storage_relation():
     # Remove this once Juju storage is no longer experiemental and
     # everyone has had a chance to upgrade.
-    data_rels = context.Relations['data']
+    data_rels = context.Relations()['data']
     if len(data_rels) > 1:
         helpers.status_set('blocked',
                            'Too many relations to the storage subordinate')
