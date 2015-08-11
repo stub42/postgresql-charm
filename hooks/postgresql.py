@@ -308,7 +308,7 @@ def grant_database_privileges(con, role, database, privs):
                     (AsIs(priv), pgidentifier(database), pgidentifier(role)))
 
 
-def reset_user_roles(con, username, roles):
+def grant_user_roles(con, username, roles):
     wanted_roles = set(roles)
 
     cur = con.cursor()
@@ -335,14 +335,15 @@ def reset_user_roles(con, username, roles):
             cur.execute("GRANT %s TO %s",
                         (pgidentifier(role), pgidentifier(username)))
 
-    roles_to_revoke = existing_roles.difference(wanted_roles)
-
-    if roles_to_revoke:
-        hookenv.log("Revoking {} from {}".format(",".join(roles_to_grant),
-                                                 username))
-        for role in roles_to_revoke:
-            cur.execute("REVOKE %s FROM %s",
-                        (pgidentifier(role), pgidentifier(username)))
+    # We no longer revoke roles, as this interferes with manually
+    # granted permissions.
+    # roles_to_revoke = existing_roles.difference(wanted_roles)
+    # if roles_to_revoke:
+    #     hookenv.log("Revoking {} from {}".format(",".join(roles_to_grant),
+    #                                              username))
+    #     for role in roles_to_revoke:
+    #         cur.execute("REVOKE %s FROM %s",
+    #                     (pgidentifier(role), pgidentifier(username)))
 
 
 def ensure_role(con, role):

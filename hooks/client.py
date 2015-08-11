@@ -156,7 +156,7 @@ def ensure_db_relation_resources(rel):
     # Reset the roles granted to the user as requested.
     if 'roles' in master:
         roles = filter(None, master.get('roles', '').split(','))
-        postgresql.reset_user_roles(con, master['user'], roles)
+        postgresql.grant_user_roles(con, master['user'], roles)
 
     # Create requested extensions. We never drop extensions, as there
     # may be dependent objects.
