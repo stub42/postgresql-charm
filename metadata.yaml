@@ -31,13 +31,12 @@ provides:
   local-monitors:
     interface: local-monitors
     scope: container
-requires:
-  data:
-    interface: block-storage
-    scope: container
-    optional: true
   nrpe-external-master:
     interface: nrpe-external-master
+    scope: container
+    optional: true
+  data:
+    interface: block-storage
     scope: container
     optional: true
   # We do not yet support slaving a PostgreSQL service to another
@@ -49,9 +48,10 @@ peers:
   replication:
     interface: pgpeer
 
-# It would be nice to use native Juju storage with Juju 1.24, but
-# it does not allow us to upgrade existing deployments. Wait for
-# Juju to support charm upgrades which add non-optional storage.
+# It would be nice to use native Juju storage with Juju 1.24
+# (experimental), but it does not allow us to upgrade existing
+# deployments. Wait for Juju to support charm upgrades which add
+# non-optional storage.
 #
 # storage:
 #   data:

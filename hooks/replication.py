@@ -19,6 +19,8 @@ import os.path
 import shutil
 import subprocess
 
+import psycopg2
+
 from charmhelpers import context
 from charmhelpers.core import host, hookenv, templating
 from charmhelpers.core.hookenv import DEBUG, ERROR, WARNING
@@ -53,7 +55,7 @@ def replication_data_ready_action(func):
 
 @replication_data_ready_action
 def wait_for_master():
-    '''Wait until the master has not authorized us.
+    '''Wait until the master has authorized us.
 
     If not, the unit is put into 'waiting' state and the hook exits.
     '''
@@ -205,27 +207,25 @@ def elect_master():
     local_unit = hookenv.local_unit()
 
     # The unit with the most advanced WAL offset should be the new master.
-    local_offset = postgresql.wal_received_offset(postgresql.connect())
-    offsets = [(local_offset, local_unit)]
+    if postgresql.is_running():
+        local_offset = postgresql.wal_received_offset(postgresql.connect())
+        offsets = [(local_offset, local_unit)]
+    else:
+        offsets = []
 
     for unit, relinfo in rel.items():
-        # If the remote unit hasn't yet authorized us, it is not
-        # suitable to become master.
-        if local_unit not in relinfo.get('allowed-units', '').split():
-            # TODO: Signal potential clone required. Or autodetect
-            # based on timeline switch.
-            break
-
-        # If the remote unit is restarting, it is not suitable to become
-        # master.
-        if coordinator.grants.get(unit, {}).get('restart'):
-            # TODO: Signal potential clone required. Or autodetect
-            # based on timeline switch.
-            break
-
-        con = postgresql.connect(user=replication_username(), unit=unit)
-        offsets.append((postgresql.wal_received_offset(con), unit))
+        try:
+            con = postgresql.connect(user=replication_username(), unit=unit)
+            offsets.append((postgresql.wal_received_offset(con), unit))
+        except psycopg2.Error as x:
+            hookenv.log('Unable to query replication state of {}: {}'
+                        ''.format(unit, x), WARNING)
+            # TODO: Signal re-cloning required. Or autodetect
+            # based on timeline switch. Or PG9.3+ could use pg_rewind.
 
     offsets.sort()
+    if not offsets:
+        helpers.status_set('blocked', 'No candidates for master found!')
+        raise SystemExit(0)
     elected_master = offsets[0][1]
     return elected_master

@@ -23,8 +23,6 @@ import postgresql
 
 @relation_handler('db', 'db-admin')
 def publish_db_relations(rel):
-    if not rel:
-        return  # No clients, nothing to do. Must be a relation-departed hook.
     if postgresql.is_master():
         superuser = (rel.relname == 'db-admin')
         db_relation_master(rel, superuser=superuser)

@@ -72,7 +72,8 @@ def relation_handler(*relnames):
             rels = context.Relations()
             for relname in relnames:
                 for rel in rels[relname].values():
-                    func(rel)
+                    if rel:
+                        func(rel)
         return wrapper
     return decorator
 

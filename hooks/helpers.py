@@ -142,5 +142,10 @@ def logs_dir():
     return '/var/lib/postgresql/logs'
 
 
+def backups_dir():
+    '''Where pg_dump backups are stored.'''
+    return hookenv.config()['backup_dir']
+
+
 def backups_log_path():
     return os.path.join(logs_dir(), 'backups.log')

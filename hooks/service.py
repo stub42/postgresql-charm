@@ -197,7 +197,9 @@ def appoint_master():
     # TODO: Manual replication mode still needs a master. Detect and pick
     # the first primary.
 
-    if master is None or not rel:
+    if not rel:
+        hookenv.log('No peer relation. Leaving master unchanged.')
+    elif master is None:
         hookenv.log('Appointing myself master')
         leader['master'] = hookenv.local_unit()
     elif master == local_unit:
@@ -806,17 +808,17 @@ def install_administrative_scripts():
     with open(source, 'r') as f:
         helpers.write(destination, f.read(), mode=0o755)
 
-    backup_dir = hookenv.config()['backup_dir']
-    helpers.makedirs(backup_dir, mode=0o750,
+    backups_dir = helpers.backups_dir()
+    helpers.makedirs(backups_dir, mode=0o750,
                      user='postgres', group='postgres')
 
     # Generate a wrapper that invokes the backup script for each
     # database.
     data = dict(logs_dir=logs_dir,
                 scripts_dir=scripts_dir,
-                # backup_dir probably should be deprecated in favour of
+                # backups_dir probably should be deprecated in favour of
                 # a juju storage mount.
-                backup_dir=hookenv.config()['backup_dir'])
+                backups_dir=backups_dir)
     destination = os.path.join(helpers.scripts_dir(), 'pg_backup_job')
     templating.render('pg_backup_job.tmpl', destination, data,
                       owner='root', group='postgres', perms=0o755)

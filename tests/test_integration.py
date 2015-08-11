@@ -99,8 +99,19 @@ class PGBaseTestCase(object):
         deployment.configure('postgresql', config)
 
         # Relate it to the client service.
-        cls.deployment.relate('postgresql:db', 'client:db')
-        cls.deployment.relate('postgresql:db-admin', 'client:db-admin')
+        deployment.relate('postgresql:db', 'client:db')
+        deployment.relate('postgresql:db-admin', 'client:db-admin')
+
+        # Add the nagios subordinate to exercise the nrpe hooks.
+        deployment.add('nrpe', 'cs:trusty/nrpe')
+        deployment.relate('postgresql:nrpe-external-master',
+                          'nrpe:nrpe-external-master')
+
+        # Add a storage subordinate. Defaults just use local disk.
+        # We need to use an unofficial branch, as there is not yet
+        # an official branch of the storage charm for trusty.
+        deployment.add('storage', 'lp:~stub/charms/trusty/storage/trunk')
+        deployment.relate('postgresql:data', 'storage:data')
 
         try:
             cls.deployment.deploy()
