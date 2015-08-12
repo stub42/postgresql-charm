@@ -325,10 +325,6 @@ def update_pg_hba_conf():
                     postgresql.quote_identifier(rel.local['user']),
                     postgresql.quote_identifier(addr),
                     'md5', '# {}'.format(relinfo))
-                add('host', 'all',
-                    postgresql.quote_identifier(rel.local['schema_user']),
-                    postgresql.quote_identifier(addr),
-                    'md5', '# {}'.format(relinfo))
 
     # External replication connections. Somewhat different than before
     # as the relation gets its own user to avoid sharing credentials,
