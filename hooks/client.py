@@ -55,6 +55,7 @@ def db_relation_master(rel, superuser):
         master['user'] = user
         master['password'] = host.pwgen()
 
+    if 'schema_user' not in master:
         # schema_user has never been documented and is deprecated.
         master['schema_user'] = user + '_schema'
         master['schema_password'] = host.pwgen()

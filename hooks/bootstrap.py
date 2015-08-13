@@ -23,24 +23,31 @@ from charmhelpers.core import hookenv
 def bootstrap():
     try:
         import psycopg2  # NOQA: flake8
+        import jinja2  # NOQA: flake8
     except ImportError:
-        packages = ['python3-psycopg2']
+        packages = ['python3-psycopg2', 'python3-jinja2']
         fetch.apt_install(packages, fatal=True)
         import psycopg2  # NOQA: flake8
 
 
-def upgrade_charm():
-    import upgrade
-    upgrade.upgrade_charm()
-
-
-def default_hook():
+def block_on_bad_juju():
     if not hookenv.has_juju_version('1.24'):
         hookenv.status_set('blocked', 'Requires Juju 1.24 or higher')
         # Error state, since we don't have 1.24 to give a nice blocked state.
         raise SystemExit(1)
 
-    # These need to be imported after bootstrap() or required Python
+
+def upgrade_charm():
+    block_on_bad_juju()
+    # This needs to be imported after bootstrap() or required Python
+    # packages may not have been installed.
+    import upgrade
+    upgrade.upgrade_charm()
+
+
+def default_hook():
+    block_on_bad_juju()
+    # This needs to be imported after bootstrap() or required Python
     # packages may not have been installed.
     import definitions
 
