@@ -140,8 +140,9 @@ def ensure_db_relation_resources(rel):
 
     postgresql.ensure_user(con, master['user'], master['password'],
                            superuser=superuser)
-    postgresql.ensure_user(con,
-                           master['schema_user'], master['schema_password'])
+    if not superuser:
+        postgresql.ensure_user(con,
+                               master['schema_user'], master['schema_password'])
 
     # Grant specified privileges on the database to the user. This comes
     # from the PostgreSQL service configuration, as allowing the
@@ -151,8 +152,9 @@ def ensure_db_relation_resources(rel):
                        config['relation_database_privileges'].split(',')))
     postgresql.grant_database_privileges(con, master['user'],
                                          master['database'], privs)
-    postgresql.grant_database_privileges(con, master['schema_user'],
-                                         master['database'], privs)
+    if not superuser:
+        postgresql.grant_database_privileges(con, master['schema_user'],
+                                             master['database'], privs)
 
     # Reset the roles granted to the user as requested.
     if 'roles' in master:
