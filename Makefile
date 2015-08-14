@@ -18,7 +18,7 @@ testdeps:
 	sudo add-apt-repository -y ppa:stub/juju
 	sudo apt-get install -y \
 	    python3-psycopg2 python3-nose python3-flake8 amulet \
-	    python3-jinja2 python3-yaml juju-wait
+	    python3-jinja2 python3-yaml juju-wait bzr
 
 unittest:
 	nosetests3 -sv tests/test_postgresql.py

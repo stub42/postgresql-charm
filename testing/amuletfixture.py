@@ -26,7 +26,8 @@ import yaml
 
 
 class AmuletFixture(amulet.Deployment):
-    def __init__(self, series):
+    def __init__(self, series, charm_dir=None):
+        self.charm_dir = charm_dir  # If None, reset by repackage_charm()
         # We use a wrapper around juju-deployer so we can fix how it is
         # invoked. In particular, turn off all the noise so we can
         # actually read our test output.
@@ -45,7 +46,8 @@ class AmuletFixture(amulet.Deployment):
         # to strip our virtualenv symlinks that would otherwise cause
         # juju to abort. We also strip the .bzr directory, working
         # around Bug #1394078.
-        self.repackage_charm()
+        if self.charm_dir is None:
+            self.repackage_charm()
 
         # Fix amulet.Deployment so it doesn't depend on environment
         # variables or the current working directory, but rather the

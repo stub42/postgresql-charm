@@ -21,6 +21,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 import uuid
@@ -74,15 +75,18 @@ class PGBaseTestCase(object):
     # for different PostgreSQL versions.
     test_config = None
     num_units = 1
+    nagios_subordinate = False
+    storage_subordinate = False
 
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls, postgresql_charm_dir=None):
         super(PGBaseTestCase, cls).setUpClass()
 
         # Set up the AmuletFixture. It would be nice to share some
         # of this setup with a module level fixture, but unfortunately
         # Amulet does not let us add services after the initial deploy.
         deployment = AmuletFixture(series=SERIES)
+        deployment.charm_dir = postgresql_charm_dir
         deployment.setUp()
         cls.deployment = deployment
 
@@ -91,7 +95,8 @@ class PGBaseTestCase(object):
         deployment.add('client', CLIENT_CHARMDIR)
 
         # Add and configure the PostgreSQL units.
-        deployment.add('postgresql', units=cls.num_units,
+        deployment.add('postgresql', postgresql_charm_dir,
+                       units=cls.num_units,
                        constraints=dict(mem="512M"))
         deployment.expose('postgresql')
         config = dict(cls.common_config)
@@ -103,15 +108,17 @@ class PGBaseTestCase(object):
         deployment.relate('postgresql:db-admin', 'client:db-admin')
 
         # Add the nagios subordinate to exercise the nrpe hooks.
-        deployment.add('nrpe', 'cs:trusty/nrpe')
-        deployment.relate('postgresql:nrpe-external-master',
-                          'nrpe:nrpe-external-master')
+        if cls.nagios_subordinate:
+            deployment.add('nrpe', 'cs:trusty/nrpe')
+            deployment.relate('postgresql:nrpe-external-master',
+                            'nrpe:nrpe-external-master')
 
         # Add a storage subordinate. Defaults just use local disk.
         # We need to use an unofficial branch, as there is not yet
         # an official branch of the storage charm for trusty.
-        deployment.add('storage', 'lp:~stub/charms/trusty/storage/trunk')
-        deployment.relate('postgresql:data', 'storage:data')
+        if cls.storage_subordinate:
+            deployment.add('storage', 'lp:~stub/charms/trusty/storage/trunk')
+            deployment.relate('postgresql:data', 'storage:data')
 
         try:
             cls.deployment.deploy()
@@ -293,6 +300,8 @@ class PG93Tests(PGBaseTestCase, unittest.TestCase):
 
 
 class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
+    storage_subordinate = True
+    nagios_subordinate = True
     test_config = dict(version=(None if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True))
 
@@ -305,6 +314,42 @@ class PG94Tests(PGBaseTestCase, unittest.TestCase):
 class PG94MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     test_config = dict(version=(None if SERIES == 'wily' else '9.4'),
                        pgdg=(False if SERIES == 'wily' else True))
+
+
+class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
+    num_units = 2  # Old charm only supported 2 unit initial deploy.
+    test_config = dict(version=None)
+    storage_subordinate = True
+    nagios_subordinate = False  # Nagios was broken with the old revision.
+
+    @classmethod
+    def setUpClass(cls):
+        # Ensure an old version of the charm is first installed (but not
+        # too old!). This version was what we internally recommended
+        # before the rewrite to support Juju leadership and unit status,
+        # and you can tell the correct version is deployed as the unit
+        # status will remain 'unknown'.
+        old_charm_dir = tempfile.mkdtemp(suffix='.charm')
+        try:
+            subprocess.check_call(['bzr', 'checkout', '-q', '--lightweight',
+                                   '-r', '127', 'lp:charms/trusty/postgresql',
+                                   old_charm_dir])
+            super(UpgradedCharmTests, cls).setUpClass(old_charm_dir)
+        finally:
+            shutil.rmtree(old_charm_dir)
+
+        # Replace the pre-leadership charm in the repo with this version,
+        # so we can upgrade.
+        cls.deployment.charm_dir = None
+        cls.deployment.repackage_charm()
+        repo_path = os.path.join(os.environ['JUJU_REPOSITORY'], SERIES,
+                                 'postgresql')
+        shutil.rmtree(repo_path)
+        shutil.copytree(cls.deployment.charm_dir, repo_path)
+
+        # Upgrade.
+        subprocess.check_call(['juju', 'upgrade-charm', 'postgresql'])
+        cls.deployment.wait()
 
 
 def setUpModule():
