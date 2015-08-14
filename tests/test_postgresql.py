@@ -60,10 +60,11 @@ class TestPostgresql(unittest.TestCase):
         self.assertTrue(postgresql.has_version('9.4'))
         self.assertFalse(postgresql.has_version('9.5'))
 
+    @patch.object(hookenv, 'local_unit')
     @patch.object(context, 'Relations')
     @patch('postgresql.port')
     @patch('psycopg2.connect')
-    def test_connect(self, psycopg2_connect, port, rels):
+    def test_connect(self, psycopg2_connect, port, rels, local_unit):
         psycopg2_connect.return_value = sentinel.connection
         port.return_value = sentinel.local_port
 
@@ -74,15 +75,29 @@ class TestPostgresql(unittest.TestCase):
                                                  port=sentinel.local_port)
 
         psycopg2_connect.reset_mock()
-        rels().peer = {sentinel.unit: {'host': sentinel.remote_host,
-                                       'port': sentinel.remote_port}}
+        local_unit.return_value = sentinel.local_unit
+        rels().peer = {sentinel.local_unit: {'host': sentinel.local_host,
+                                             'port': sentinel.local_port},
+                       sentinel.remote_unit: {'host': sentinel.remote_host,
+                                              'port': sentinel.remote_port}}
+
         self.assertEqual(postgresql.connect(sentinel.user, sentinel.db,
-                                            sentinel.unit),
+                                            sentinel.local_unit),
+                         sentinel.connection)
+        psycopg2_connect.assert_called_once_with(user=sentinel.user,
+                                                 database=sentinel.db,
+                                                 host=None,
+                                                 port=sentinel.local_port)
+
+        psycopg2_connect.reset_mock()
+        self.assertEqual(postgresql.connect(sentinel.user, sentinel.db,
+                                            sentinel.remote_unit),
                          sentinel.connection)
         psycopg2_connect.assert_called_once_with(user=sentinel.user,
                                                  database=sentinel.db,
                                                  host=sentinel.remote_host,
                                                  port=sentinel.remote_port)
+
 
     def test_username(self):
         # Calculate the client username for the given service or unit
@@ -365,7 +380,7 @@ class TestPostgresql(unittest.TestCase):
     @patch.object(hookenv, 'log')
     @patch('postgresql.ensure_role')
     @patch('postgresql.pgidentifier')
-    def test_reset_user_roles(self, pgidentifier, ensure_role, log):
+    def test_grant_user_roles(self, pgidentifier, ensure_role, log):
         pgidentifier.side_effect = lambda d: 'q_{}'.format(d)
 
         existing_roles = set(['roleA', 'roleB'])
@@ -375,7 +390,7 @@ class TestPostgresql(unittest.TestCase):
         cur = con.cursor()
         cur.fetchall.return_value = [(r,) for r in existing_roles]
 
-        postgresql.reset_user_roles(con, 'fred', wanted_roles)
+        postgresql.grant_user_roles(con, 'fred', wanted_roles)
 
         # A new role was ensured. The others we know exist.
         ensure_role.assert_called_once_with(con, 'roleC')
@@ -393,8 +408,7 @@ class TestPostgresql(unittest.TestCase):
             """)
         cur.execute.assert_has_calls([
             call(role_query, ('fred',)),
-            call('GRANT %s TO %s', ('q_roleC', 'q_fred')),
-            call('REVOKE %s FROM %s', ('q_roleA', 'q_fred'))])
+            call('GRANT %s TO %s', ('q_roleC', 'q_fred'))])
 
     @patch('postgresql.pgidentifier')
     def test_ensure_role(self, pgidentifier):
@@ -443,10 +457,12 @@ class TestPostgresql(unittest.TestCase):
             with self.subTest(addr=addr):
                 self.assertEqual(postgresql.addr_to_range(addr), addr_range)
 
+    @patch('postgresql.version')
     @patch('postgresql.data_dir')
     @patch('postgresql.pg_ctl_path')
     @patch('subprocess.check_call')
-    def test_is_running(self, check_call, pg_ctl_path, data_dir):
+    def test_is_running(self, check_call, pg_ctl_path, data_dir, version):
+        version.return_value = '9.9'
         pg_ctl_path.return_value = '/path/to/pg_ctl'
         data_dir.return_value = '/path/to/DATADIR'
         self.assertTrue(postgresql.is_running())
@@ -465,6 +481,45 @@ class TestPostgresql(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError) as x:
             postgresql.is_running()
         self.assertEqual(x.exception.returncode, 42)
+
+    @patch('postgresql.pid_path')
+    @patch('postgresql.version')
+    @patch('postgresql.data_dir')
+    @patch('postgresql.pg_ctl_path')
+    @patch('subprocess.check_call')
+    def test_is_running_91(self, check_call, pg_ctl_path, data_dir, version,
+                           pid_path):
+        version.return_value = '9.1'
+        pg_ctl_path.return_value = '/path/to/pg_ctl'
+        data_dir.return_value = '/path/to/DATADIR'
+        self.assertTrue(postgresql.is_running())
+        check_call.assert_called_once_with(['sudo', '-u', 'postgres',
+                                            '/path/to/pg_ctl', 'status',
+                                            '-D', '/path/to/DATADIR'],
+                                           universal_newlines=True,
+                                           stdout=subprocess.DEVNULL)
+
+        # Exit code 1 is all we get from pg_ctl(1) with PostgreSQL 9.1
+        check_call.side_effect = subprocess.CalledProcessError(1, 'whoops')
+
+
+        # If the pid file exists, and pg_ctl failed, the failure is raised.
+        with tempfile.NamedTemporaryFile() as f:
+            pid_path.return_value = f.name
+            with self.assertRaises(subprocess.CalledProcessError) as x:
+                postgresql.is_running()
+            self.assertEqual(x.exception.returncode, 1)
+
+        # If the pid file does not exist, and pg_ctl failed, we assume
+        # PostgreSQL is not running.
+        self.assertFalse(postgresql.is_running())
+
+        # Other failures bubble up, not that they should occur.
+        check_call.side_effect = subprocess.CalledProcessError(42, 'whoops')
+        with self.assertRaises(subprocess.CalledProcessError) as x:
+            postgresql.is_running()
+        self.assertEqual(x.exception.returncode, 42)
+
 
     @patch('helpers.status_set')
     @patch('subprocess.check_call')
