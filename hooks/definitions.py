@@ -38,7 +38,11 @@ SERVICE_DEFINITION = [
                      replication.publish_replication_details,
                      service.appoint_master,
 
-                     replication.wait_for_master,  # Exit if no master.
+                     # Exit if required leader settings are not set.
+                     service.wait_for_leader,
+
+                     # Exit if the master is not yet available.
+                     replication.wait_for_master,
 
                      service.ensure_cluster,
                      service.update_pgpass,

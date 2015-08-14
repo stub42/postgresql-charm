@@ -89,6 +89,17 @@ def leader_only(func):
     return wrapper
 
 
+def not_leader(func):
+    '''Only run on the service leader.'''
+    @wraps(func)
+    def wrapper(*args, **kw):
+        if not hookenv.is_leader():
+            return func(*args, **kw)
+        else:
+            hookenv.log("I'm the leader", DEBUG)
+    return wrapper
+
+
 def master_only(func):
     '''Only run on the appointed master.'''
     @wraps(func)

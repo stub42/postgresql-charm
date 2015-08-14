@@ -55,7 +55,6 @@ def db_relation_master(rel, superuser):
         master['user'] = user
         master['password'] = host.pwgen()
 
-    if 'schema_user' not in master:
         # schema_user has never been documented and is deprecated.
         master['schema_user'] = user + '_schema'
         master['schema_password'] = host.pwgen()
@@ -142,7 +141,8 @@ def ensure_db_relation_resources(rel):
                            superuser=superuser)
     if not superuser:
         postgresql.ensure_user(con,
-                               master['schema_user'], master['schema_password'])
+                               master['schema_user'],
+                               master['schema_password'])
 
     # Grant specified privileges on the database to the user. This comes
     # from the PostgreSQL service configuration, as allowing the

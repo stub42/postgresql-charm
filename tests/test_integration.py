@@ -111,7 +111,7 @@ class PGBaseTestCase(object):
         if cls.nagios_subordinate:
             deployment.add('nrpe', 'cs:trusty/nrpe')
             deployment.relate('postgresql:nrpe-external-master',
-                            'nrpe:nrpe-external-master')
+                              'nrpe:nrpe-external-master')
 
         # Add a storage subordinate. Defaults just use local disk.
         # We need to use an unofficial branch, as there is not yet
@@ -348,7 +348,9 @@ class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
         shutil.copytree(cls.deployment.charm_dir, repo_path)
 
         # Upgrade.
-        subprocess.check_call(['juju', 'upgrade-charm', 'postgresql'])
+        subprocess.check_call(['juju', 'upgrade-charm', 'postgresql'],
+                              stdout=subprocess.DEVNULL,
+                              universal_newlines=True)
         cls.deployment.wait()
 
 

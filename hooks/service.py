@@ -27,7 +27,7 @@ from charmhelpers import fetch
 from charmhelpers.payload import execd
 
 from coordinator import coordinator
-from decorators import data_ready_action, leader_only, requirement
+from decorators import data_ready_action, leader_only, not_leader, requirement
 import helpers
 import postgresql
 import replication
@@ -80,6 +80,31 @@ def preinstall():
             config['preinstall_done'] = True
         except SystemExit:
             helpers.block('execd_preinstall failed')
+            raise SystemExit(0)
+
+
+@not_leader
+@data_ready_action
+def wait_for_leader():
+    """Terminate the hook if required leadership settings do not exist.
+
+    This should only happen on upgrade-charm if new required leadership
+    settings have been added. We can't ensure the new leadership settings
+    are added in the upgrade-charm hook because we cannot ensure that
+    the leader's upgrade-charm hook is run before non-leader config-changed
+    hooks are run.
+
+    This will no longer be required if Bug #1484930 can be addressed.
+    """
+    required_keys = ['nagios_password']
+    if not hookenv.config()['manual_replication']:
+        required_keys.append('replication_password')
+
+    leader = context.Leader()
+    for key in required_keys:
+        if key not in leader:
+            hookenv.status_set('waiting',
+                               'Waiting for leader to set {}'.format(key))
             raise SystemExit(0)
 
 
