@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from contextlib import suppress
+from datetime import datetime
 import os.path
 import shutil
 import signal
@@ -27,6 +28,7 @@ import unittest
 import uuid
 
 import psycopg2
+import yaml
 
 HERE = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(os.path.abspath(os.path.join(HERE, os.pardir)))
@@ -40,14 +42,14 @@ CLIENT_CHARMDIR = os.path.abspath(os.path.join(HERE, os.pardir,
 assert os.path.isdir(CLIENT_CHARMDIR)
 
 
-def skip_if_swift_is_unavailable():
+def skip_if_swift_is_unavailable(f):
     os_keys = set(['OS_TENANT_NAME', 'OS_AUTH_URL',
                    'OS_USERNAME', 'OS_PASSWORD'])
     for os_key in os_keys:
         if os_key not in os.environ:
             return unittest.skip('Swift is unavailable - '
                                  '{} envvar is unset'.format(os_key))
-    return lambda x: x
+    return f
 
 
 def skip_if_s3_is_unavailable():
@@ -133,6 +135,26 @@ class PGBaseTestCase(object):
             cls.deployment.tearDown()
         super(PGBaseTestCase, cls).setUpClass()
 
+    def _get_config(self):
+        raw = subprocess.check_output(['juju', 'get', 'postgresql'],
+                                      universal_newlines=True)
+        settings = yaml.safe_load(raw)['settings']
+        return {k: settings[k]['value'] for k in settings.keys()}
+
+    def setUp(self):
+        starting_config = self._get_config()
+
+        def _maybe_reset_config():
+            # Reset any changed configuration.
+            current_config = self._get_config()
+            if current_config != starting_config:
+                conf = {k: v for k, v in starting_config.items()
+                        if starting_config[k] != current_config[k]}
+                self.deployment.configure('postgresql', conf)
+                self.deployment.wait()
+
+        self.addCleanup(_maybe_reset_config)
+
     @property
     def master(self):
         status = self.deployment.get_status()
@@ -148,6 +170,13 @@ class PGBaseTestCase(object):
         units = status['services']['postgresql']['units']
         return set([unit for unit, info in units.items()
                     if info['workload-status']['message'] == 'Live master'])
+
+    @property
+    def secondary(self):
+        secondaries = self.secondaries
+        if secondaries:
+            return secondaries[0]
+        return None
 
     @property
     def units(self):
@@ -274,6 +303,55 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         self.deployment.add_unit('postgresql')
         self.deployment.wait()
         self._replication_test()
+
+    @skip_if_swift_is_unavailable
+    def test_wal_e_swift_logshipping(self):
+        now = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+        container = '_juju_pg_tests'
+
+        config = dict(streaming_replication=False,
+                      wal_e_storage_uri='swift://{}/{}'.format(container, now))
+
+        # OpenStack credentials
+        os_keys = set(['OS_TENANT_NAME', 'OS_AUTH_URL',
+                       'OS_USERNAME', 'OS_PASSWORD'])
+        for os_key in os_keys:
+            config[os_key.lower()] = os.environ[os_key]
+
+        # The swift command line tool uses the same environment variables
+        # as this test suite.
+        self.addCleanup(subprocess.check_call,
+                        ['swift', 'delete', container],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.STDOUT,
+                        universal_newlines=True)
+
+        self.deployment.wait()
+
+        # Confirm that the slave has not opened a streaming
+        # replication connection.
+        con = self.connect(self.master, admin=True)
+        con.autocommit = True
+        cur = con.cursor()
+        cur.execute("SELECT COUNT(*) FROM pg_stat_replication")
+        self.assertEqual(cur.fetchone()[0], 0, 'Streaming connection found')
+
+        # Confirm that replication is actually happening.
+        # Create a table and force a WAL change.
+        cur.execute("CREATE TABLE wale AS SELECT generate_series(0,100)")
+        cur.execute("SELECT pg_switch_xlog()")
+        self.addCleanup(cur.execute, 'DROP TABLE wale')
+
+        con = self.connect(self.secondary, admin=True)
+        con.autocommit = True
+        cur = con.cursor()
+        timeout = time.time() + 120
+        table_found = False
+        while time.time() < timeout and not table_found:
+            time.sleep(1)
+            cur.execute("SELECT COUNT(*) FROM pg_class WHERE relname='wale'")
+            table_found = cur.fetchone()[0] == 1
+        self.assertTrue(table_found, "Replication not replicating")
 
 
 class PG91Tests(PGBaseTestCase, unittest.TestCase):

@@ -35,13 +35,13 @@ class NotReady(Exception):
     pass
 
 
-def skip_if_swift_is_unavailable():
+def skip_if_swift_is_unavailable(f):
     os_keys = set(['OS_TENANT_NAME', 'OS_AUTH_URL',
                    'OS_USERNAME', 'OS_PASSWORD'])
     for os_key in os_keys:
         if os_key not in os.environ:
             return unittest.skip('Swift is unavailable')
-    return lambda x: x
+    return f
 
 
 def skip_if_s3_is_unavailable():

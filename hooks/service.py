@@ -223,11 +223,11 @@ def appoint_master():
     # TODO: Manual replication mode still needs a master. Detect and pick
     # the first primary.
 
-    if not rel:
-        hookenv.log('No peer relation. Leaving master unchanged.')
-    elif master is None:
+    if master is None:
         hookenv.log('Appointing myself master')
         leader['master'] = hookenv.local_unit()
+    elif not rel:
+        hookenv.log('No peer relation. Leaving master unchanged.')
     elif master == local_unit:
         hookenv.log('I will remain master')
     elif master not in rel:
@@ -535,11 +535,13 @@ def ensure_viable_postgresql_conf(opts):
     # pg_basebackup(1). Bump up max_wal_senders so things work. It is
     # cheap, so perhaps we should just pump it to several thousand.
     min_wal_senders = num_standbys * 2 + 5
-    if min_wal_senders > opts.get('max_wal_senders', 0):
+    if min_wal_senders > int(opts.get('max_wal_senders', 0)):
         force(max_wal_senders=min_wal_senders)
 
     # max_connections. One per client unit, plus replication.
-    min_max_connections = min_wal_senders + min(1, num_clients)
+    max_wal_senders = int(opts.get('max_wal_senders', 0))
+    assert max_wal_senders > 0
+    min_max_connections = max_wal_senders + max(1, num_clients)
     if min_max_connections > int(opts.get('max_connections', 0)):
         force(max_connections=min_max_connections)
 
@@ -555,8 +557,8 @@ def ensure_viable_postgresql_conf(opts):
 
     # Having two config options for the one setting is confusing. Perhaps
     # we should deprecate this.
-    if num_standbys and (config['replicated_wal_keep_segments']
-                         > opts.get('wal_keep_segments', 0)):
+    if num_standbys and (int(config['replicated_wal_keep_segments'])
+                         > int(opts.get('wal_keep_segments', 0))):
         force(wal_keep_segments=config['replicated_wal_keep_segments'])
 
     # Log shipping with WAL-E.
@@ -705,6 +707,7 @@ def request_restart():
     # restarting a stopped server.
     if not postgresql.is_running():
         hookenv.log('PostgreSQL is not running. No need to request restart.')
+        return
 
     # Detect if PostgreSQL settings have changed that require a restart.
     config = hookenv.config()
