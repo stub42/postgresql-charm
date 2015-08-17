@@ -98,16 +98,21 @@ class TestPostgresql(unittest.TestCase):
                                                  host=sentinel.remote_host,
                                                  port=sentinel.remote_port)
 
-
     def test_username(self):
         # Calculate the client username for the given service or unit
         # to use.
-        self.assertEqual(postgresql.username('hello'), 'juju_hello')
-        self.assertEqual(postgresql.username('hello/0'), 'juju_hello')
-        self.assertEqual(postgresql.username('hello', superuser=True),
-                         'juju_hello_admin')
-        self.assertEqual(postgresql.username('hello/2', True),
-                         'juju_hello_admin')
+        self.assertEqual(postgresql.username('hello', False, False),
+                         'juju_hello')
+        self.assertEqual(postgresql.username('hello/0', False, False),
+                         'juju_hello')
+        self.assertEqual(postgresql.username('hello',
+                                             superuser=True,
+                                             replication=False),
+                         'jujuadmin_hello')
+        self.assertEqual(postgresql.username('hello/2', True, False),
+                         'jujuadmin_hello')
+        self.assertEqual(postgresql.username('hello', False, True),
+                         'jujurepl_hello')
 
     @patch('postgresql.postgresql_conf_path')
     def test_port(self, pgconf_path):
@@ -462,7 +467,7 @@ class TestPostgresql(unittest.TestCase):
     @patch('postgresql.pg_ctl_path')
     @patch('subprocess.check_call')
     def test_is_running(self, check_call, pg_ctl_path, data_dir, version):
-        version.return_value = '9.9'
+        version.return_value = '9.2'
         pg_ctl_path.return_value = '/path/to/pg_ctl'
         data_dir.return_value = '/path/to/DATADIR'
         self.assertTrue(postgresql.is_running())
@@ -472,9 +477,25 @@ class TestPostgresql(unittest.TestCase):
                                            universal_newlines=True,
                                            stdout=subprocess.DEVNULL)
 
-        # Exit code 3 is pg_ctl(1) speak for 'not running'
+        # Exit code 3 is pg_ctl(1) speak for 'not running', PG9.2+
+        version.return_value = '9.2'
         check_call.side_effect = subprocess.CalledProcessError(3, 'whoops')
         self.assertFalse(postgresql.is_running())
+        version.return_value = '9.1'
+        check_call.side_effect = subprocess.CalledProcessError(3, 'whoops')
+        with self.assertRaises(subprocess.CalledProcessError) as x:
+            postgresql.is_running()
+        self.assertEqual(x.exception.returncode, 3)
+
+        # Exit code 4 is pg_ctl(1) speak for 'wtf is the $DATADIR', PG9.4+
+        version.return_value = '9.4'
+        check_call.side_effect = subprocess.CalledProcessError(4, 'whoops')
+        self.assertFalse(postgresql.is_running())
+        version.return_value = '9.3'
+        check_call.side_effect = subprocess.CalledProcessError(4, 'whoops')
+        with self.assertRaises(subprocess.CalledProcessError) as x:
+            postgresql.is_running()
+        self.assertEqual(x.exception.returncode, 4)
 
         # Other failures bubble up, not that they should occur.
         check_call.side_effect = subprocess.CalledProcessError(42, 'whoops')
@@ -502,7 +523,6 @@ class TestPostgresql(unittest.TestCase):
         # Exit code 1 is all we get from pg_ctl(1) with PostgreSQL 9.1
         check_call.side_effect = subprocess.CalledProcessError(1, 'whoops')
 
-
         # If the pid file exists, and pg_ctl failed, the failure is raised.
         with tempfile.NamedTemporaryFile() as f:
             pid_path.return_value = f.name
@@ -519,7 +539,6 @@ class TestPostgresql(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError) as x:
             postgresql.is_running()
         self.assertEqual(x.exception.returncode, 42)
-
 
     @patch('helpers.status_set')
     @patch('subprocess.check_call')

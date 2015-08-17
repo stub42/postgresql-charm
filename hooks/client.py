@@ -21,17 +21,22 @@ import helpers
 import postgresql
 
 
-@relation_handler('db', 'db-admin')
+@relation_handler('db', 'db-admin', 'master')
 def publish_db_relations(rel):
     if postgresql.is_master():
-        superuser = (rel.relname == 'db-admin')
-        db_relation_master(rel, superuser=superuser)
+        db_relation_master(rel)
     else:
         db_relation_mirror(rel)
     db_relation_common(rel)
 
 
-def db_relation_master(rel, superuser):
+def _credential_types(rel):
+    superuser = (rel.relname in ('db-admin', 'master'))
+    replication = (rel.relname == 'master')
+    return (superuser, replication)
+
+
+def db_relation_master(rel):
     '''The master generates credentials and negotiates resources.'''
     master = rel.local
     # Pick one remote unit as representative. They should all converge.
@@ -50,14 +55,19 @@ def db_relation_master(rel, superuser):
     elif 'database' not in master:
         master['database'] = remote.service
 
+    superuser, replication = _credential_types(rel)
+
     if 'user' not in master:
-        user = postgresql.username(remote.service, superuser=superuser)
+        user = postgresql.username(remote.service, superuser=superuser,
+                                   replication=replication)
+        password = host.pwgen()
         master['user'] = user
-        master['password'] = host.pwgen()
+        master['password'] = password
 
         # schema_user has never been documented and is deprecated.
-        master['schema_user'] = user + '_schema'
-        master['schema_password'] = host.pwgen()
+        if not superuser:
+            master['schema_user'] = user
+            master['schema_password'] = password
 
     hookenv.log('** Master providing {} ({}/{})'.format(rel,
                                                         master['database'],
@@ -65,8 +75,9 @@ def db_relation_master(rel, superuser):
 
     # Reflect these settings back so the client knows when they have
     # taken effect.
-    master['roles'] = remote.get('roles')
-    master['extensions'] = remote.get('extensions')
+    if not replication:
+        master['roles'] = remote.get('roles')
+        master['extensions'] = remote.get('extensions')
 
 
 def db_relation_mirror(rel):
@@ -122,10 +133,10 @@ def db_relation_common(rel):
 
 
 @master_only
-@relation_handler('db', 'db-admin')
+@relation_handler('db', 'db-admin', 'master')
 def ensure_db_relation_resources(rel):
     '''Create the database resources needed for the relation.'''
-    superuser = (rel.relname == 'db-admin')
+
     master = rel.local
 
     hookenv.log('Ensuring database {!r} and user {!r} exist for {}'
@@ -137,8 +148,9 @@ def ensure_db_relation_resources(rel):
     # Next, connect to the database to create the rest in a transaction.
     con = postgresql.connect(database=master['database'])
 
+    superuser, replication = _credential_types(rel)
     postgresql.ensure_user(con, master['user'], master['password'],
-                           superuser=superuser)
+                           superuser=superuser, replication=replication)
     if not superuser:
         postgresql.ensure_user(con,
                                master['schema_user'],

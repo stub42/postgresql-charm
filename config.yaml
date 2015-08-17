@@ -70,7 +70,8 @@ options:
         archive_mode=true
         archive_command='/bin/true'
         hot_standby=true
-        # max_wal_senders=num_units * 5 + 5
+        max_wal_senders=100,
+        # max_wal_senders=num_units * 2 + 5
         # wal_level=hot_standby (<9.4) or logical (>=9.4)
         # shared_buffers=total_ram*0.25
         # effective_cache_size=total_ram*0.75

@@ -59,6 +59,7 @@ def valid_config():
     if config._prev_dict is not None:
         for name in unchangeable_config:
             if config.changed(name):
+                config[name] = config.previous(name)
                 valid = False
                 helpers.status_set('blocked',
                                    'Cannot change {!r} after install '
@@ -423,7 +424,7 @@ def assemble_postgresql_conf():
     ensure_viable_postgresql_conf(conf)
 
     # Strip out invalid config and warn.
-    validate_postgresql_conf(conf)
+    validate_postgresql_conf(conf)  # May terminate.
 
     return conf
 
@@ -521,6 +522,7 @@ def ensure_viable_postgresql_conf(opts):
     config = hookenv.config()
     rels = context.Relations()
 
+    # Number of standby units - count peers and 'master' relations.
     num_standbys = len(rels.peer or {})
     for rel in rels['master'].values():
         num_standbys += len(rel)
@@ -532,7 +534,7 @@ def ensure_viable_postgresql_conf(opts):
     # Even without replication, replication slots get used by
     # pg_basebackup(1). Bump up max_wal_senders so things work. It is
     # cheap, so perhaps we should just pump it to several thousand.
-    min_wal_senders = num_standbys * 5 + 5
+    min_wal_senders = num_standbys * 2 + 5
     if min_wal_senders > opts.get('max_wal_senders', 0):
         force(max_wal_senders=min_wal_senders)
 
@@ -638,7 +640,7 @@ def validate_postgresql_conf(conf):
 
 @data_ready_action
 def update_postgresql_conf():
-    settings = assemble_postgresql_conf()
+    settings = assemble_postgresql_conf()  # Terminates on invalid config.
     path = postgresql.postgresql_conf_path()
 
     with open(path, 'r') as f:

@@ -66,11 +66,16 @@ def connect(user='postgres', database='postgres', unit=None):
                             host=host, port=port_)
 
 
-def username(unit_or_service, superuser=False):
+def username(unit_or_service, superuser, replication):
     '''Return the username to use for connections from the unit or service.'''
     servicename = unit_or_service.split('/', 1)[0]
-    if superuser:
-        username = 'juju_{}_admin'.format(servicename)
+    # The prefixes ensure that a client service can use all three relation
+    # types to a single PostgreSQL service. And names starting with 'juju'
+    # should not conflict with manually created roles.
+    if replication:
+        username = 'jujurepl_{}'.format(servicename)
+    elif superuser:
+        username = 'jujuadmin_{}'.format(servicename)
     else:
         username = 'juju_{}'.format(servicename)
     return username
@@ -392,14 +397,14 @@ def is_running():
                               stdout=subprocess.DEVNULL)
         return True
     except subprocess.CalledProcessError as x:
-        if has_version('9.2'):
-            if x.returncode == 3:
-                return False
-            raise
-        else:
-            if x.returncode == 1 and not os.path.exists(pid_path()):
-                return False
-            raise
+        if x.returncode == 3 and has_version('9.2'):
+            return False  # PostgreSQL not running, PG 9.2+
+        elif x.returncode == 4 and has_version('9.4'):
+            return False  # $DATA_DIR inaccessible, PG 9.4+
+        elif x.returncode == 1 and (not has_version('9.2')
+                                    and not os.path.exists(pid_path())):
+            return False  # Use pid file existance for old PG versions.
+        raise  # Unexpected failure.
 
 
 # Slow or busy systems can take much longer than the default 60 seconds
