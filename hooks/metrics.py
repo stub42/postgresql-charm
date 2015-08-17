@@ -52,7 +52,7 @@ def write_metrics_cronjob():
                                 'postgres_to_statsd.py')
     script_path = os.path.join(helpers.scripts_dir(), 'postgres_to_statsd.py')
     with open(charm_script, 'r') as f:
-        helpers.write(script_path, f.read(), mode=0755)
+        helpers.write(script_path, f.read(), mode=0o755)
 
     # write the crontab
     data = dict(interval=config['metrics_sample_interval'],
