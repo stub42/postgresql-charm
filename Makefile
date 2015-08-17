@@ -34,8 +34,7 @@ unittest: lint
 	@echo OK: Unit tests pass `date`
 
 coverage: lint
-	nosetests3 -sv ${TESTFILES} \
-	    --cover-package=${PACKAGES} \
+	nosetests3 -sv ${TESTFILES} --cover-package=${PACKAGES} \
 	    --with-coverage --cover-branches \
 	    --cover-erase --cover-html --cover-html-dir=coverage \
 	    --cover-min-percentage=100 || \
