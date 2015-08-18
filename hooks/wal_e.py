@@ -15,12 +15,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os.path
+import subprocess
 from urllib.parse import urlparse
 
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import ERROR
 
-from decorators import data_ready_action
+from decorators import data_ready_action, leader_only
 import helpers
 import postgresql
 
@@ -36,7 +37,7 @@ def wal_e_env_dir():
 
 
 @data_ready_action
-def create_wal_e_env_dir():
+def update_wal_e_env_dir():
     '''Regenerate the envdir(1) environment used to drive WAL-E.
 
     We do this even if wal-e is not enabled to ensure we destroy
@@ -44,14 +45,26 @@ def create_wal_e_env_dir():
     '''
     config = hookenv.config()
     env = dict(
+        # wal-e Swift creds
         SWIFT_AUTHURL=config.get('os_auth_url', ''),
         SWIFT_TENANT=config.get('os_tenant_name', ''),
         SWIFT_USER=config.get('os_username', ''),
         SWIFT_PASSWORD=config.get('os_password', ''),
+
+        # wal-e AWS creds
         AWS_ACCESS_KEY_ID=config.get('aws_access_key_id', ''),
         AWS_SECRET_ACCESS_KEY=config.get('aws_secret_access_key', ''),
+
+        # wal-e Azure cred
         WABS_ACCOUNT_NAME=config.get('wabs_account_name', ''),
         WABS_ACCESS_KEY=config.get('wabs_access_key', ''),
+
+        # OpenStack creds for swift(1) cli tool
+        OS_AUTH_URL=config.get('os_auth_url', ''),
+        OS_USERNAME=config.get('os_username', ''),
+        OS_PASSWORD=config.get('os_password', ''),
+        OS_TENANT_NAME=config.get('os_tenant_name', ''),
+
         WALE_SWIFT_PREFIX='',
         WALE_S3_PREFIX='',
         WALE_WABS_PREFIX='')
@@ -64,7 +77,6 @@ def create_wal_e_env_dir():
             env['WALE_SWIFT_PREFIX'] = uri
             required_env = ['SWIFT_AUTHURL', 'SWIFT_TENANT',
                             'SWIFT_USER', 'SWIFT_PASSWORD']
-            ensure_swift_container(parsed_uri.netloc)
         elif parsed_uri.scheme == 's3':
             env['WALE_S3_PREFIX'] = uri
             required_env = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
@@ -85,6 +97,10 @@ def create_wal_e_env_dir():
     for k, v in env.items():
         helpers.write(os.path.join(wal_e_env_dir(), k), v.strip(),
                       mode=0o640, user='postgres', group='postgres')
+
+    # Now the environment is setup, create any remote resources we need.
+    if uri and parsed_uri.scheme == 'swift':
+        ensure_swift_container(parsed_uri.netloc)
 
 
 def wal_e_archive_command():
@@ -107,17 +123,7 @@ def wal_e_prune_command():
             ''.format(wal_e_env_dir(), config['wal_e_backup_retention']))
 
 
+@leader_only
 def ensure_swift_container(container):
-    from swiftclient import client as swiftclient
-    config = hookenv.config()
-    con = swiftclient.Connection(
-        authurl=config.get('os_auth_url', ''),
-        user=config.get('os_username', ''),
-        key=config.get('os_password', ''),
-        tenant_name=config.get('os_tenant_name', ''),
-        auth_version='2.0',
-        retries=0)
-    try:
-        con.head_container(container)
-    except swiftclient.ClientException:
-        con.put_container(container)
+    cmd = ['envdir', wal_e_env_dir(), 'swift', 'post', container]
+    subprocess.check_call(cmd, universal_newlines=True)

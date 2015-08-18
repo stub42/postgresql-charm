@@ -646,7 +646,7 @@ def promote():
         rc = subprocess.call(['sudo', '-u', 'postgres', '-H',
                               pg_ctl_path(), 'promote', '-D', data_dir()],
                              universal_newlines=True)
-        if rc != 0 or not is_primary():
+        if rc != 0:
             helpers.status_set('blocked', 'Failed to promote to primary')
             raise SystemExit(0)
     else:

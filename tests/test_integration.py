@@ -175,7 +175,7 @@ class PGBaseTestCase(object):
     def secondary(self):
         secondaries = self.secondaries
         if secondaries:
-            return secondaries[0]
+            return list(secondaries)[0]
         return None
 
     @property
@@ -269,7 +269,7 @@ class PGBaseTestCase(object):
 
 
 class PGMultiBaseTestCase(PGBaseTestCase):
-    num_units = 3
+    num_units = 2
 
     def _replication_test(self):
         con = self.connect(self.master)
@@ -326,6 +326,7 @@ class PGMultiBaseTestCase(PGBaseTestCase):
                         stderr=subprocess.STDOUT,
                         universal_newlines=True)
 
+        self.deployment.configure('postgresql', config)
         self.deployment.wait()
 
         # Confirm that the slave has not opened a streaming
@@ -390,6 +391,7 @@ class PG94Tests(PGBaseTestCase, unittest.TestCase):
 
 
 class PG94MultiTests(PGMultiBaseTestCase, unittest.TestCase):
+    num_units = 3
     test_config = dict(version=(None if SERIES == 'wily' else '9.4'),
                        pgdg=(False if SERIES == 'wily' else True))
 

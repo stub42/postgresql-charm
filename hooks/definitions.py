@@ -51,7 +51,7 @@ SERVICE_DEFINITION = [
                      service.update_postgresql_conf,
                      syslogrel.handle_syslog_relations,
                      storage.handle_storage_relation,
-                     wal_e.create_wal_e_env_dir,
+                     wal_e.update_wal_e_env_dir,
                      service.request_restart,
 
                      service.wait_for_restart,  # Exit if cannot restart yet.
