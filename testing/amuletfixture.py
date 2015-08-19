@@ -55,7 +55,8 @@ class AmuletFixture(amulet.Deployment):
         with open(os.path.join(self.charm_dir, 'metadata.yaml'), 'r') as s:
             self.charm_name = yaml.safe_load(s)['name']
         self.charm_cache.test_charm = None
-        self.charm_cache.fetch(self.charm_name, self.charm_dir, self.series)
+        self.charm_cache.fetch(self.charm_name, self.charm_dir,
+                               series=self.series)
 
         # Explicitly reset $JUJU_REPOSITORY to ensure amulet and
         # juju-deployer does not mess with the real one, per Bug #1393792

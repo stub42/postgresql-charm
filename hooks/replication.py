@@ -149,6 +149,28 @@ def clone_master():
         postgresql.drop_cluster()
         raise SystemExit(0)
 
+    ensure_ssl_certs()
+
+
+def ensure_ssl_certs():
+    if postgresql.has_version('9.2'):
+        hookenv.log('Nothing to do with PostgreSQL {}'
+                    ''.format(postgresql.version()))
+        return
+
+    # Ensure the SSL certificates exist in $DATA_DIR, where PostgreSQL
+    # expects to find them.
+    data_dir = postgresql.data_dir()
+    server_crt = os.path.join(data_dir, 'server.crt')
+    server_key = os.path.join(data_dir, 'server.key')
+    if not os.path.exists(server_crt):
+        hookenv.log('Linking snakeoil certificate')
+        os.symlink('/etc/ssl/certs/ssl-cert-snakeoil.pem', server_crt)
+    if not os.path.exists(server_key):
+        hookenv.log('Linking snakeoil key')
+        os.symlink('/etc/ssl/private/ssl-cert-snakeoil.key', server_key)
+    hookenv.log('SSL certificates exist', DEBUG)
+
 
 @master_only
 @replication_data_ready_action
