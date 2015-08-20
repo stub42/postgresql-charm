@@ -52,20 +52,20 @@ def skip_if_swift_is_unavailable(f):
     return f
 
 
-def skip_if_s3_is_unavailable():
+def skip_if_s3_is_unavailable(f):
     os_keys = set(['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'])
     for os_key in os_keys:
         if os_key not in os.environ:
             return unittest.skip('S3 is unavailable')
-    return lambda x: x
+    return f
 
 
-def skip_if_wabs_is_unavailable():
+def skip_if_wabs_is_unavailable(f):
     os_keys = set(['WABS_ACCOUNT_NAME', 'WABS_ACCESS_KEY'])
     for os_key in os_keys:
         if os_key not in os.environ:
             return unittest.skip('WABS is unavailable')
-    return lambda x: x
+    return f
 
 
 class PGBaseTestCase(object):

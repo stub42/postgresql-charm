@@ -45,10 +45,11 @@ _sp=$(_empty) $(_empty)
 TESTFILES=$(filter-out %/test_integration.py,$(wildcard tests/test_*.py))
 PACKAGES=$(subst $(_sp),$(_co),$(notdir $(basename $(wildcard hooks/*.py))))
 
-ifeq ($(HOST_SERIES),trusty)
 NOSE := nosetests3 -sv
+ifeq ($(HOST_SERIES),trusty)
+TIMING_NOSE := nosetests3 -sv
 else
-NOSE := nosetests3 -sv --with-timer
+TIMING_NOSE := nosetests3 -sv --with-timer
 endif
 
 unittest:
@@ -64,7 +65,7 @@ coverage:
 		(gnome-open coverage/index.html; false)
 
 integration:
-	${NOSE} tests/test_integration.py
+	${TIMING_NOSE} tests/test_integration.py
 	@echo OK: Integration tests pass `date`
 
 sync:
@@ -77,5 +78,5 @@ sync:
 
 # These targets are to separate the test output in the Charm CI system
 test_integration.py%:
-	${NOSE} tests/$@
-	@echo OK: % tests pass `date`
+	${TIMING_NOSE} tests/$@
+	@echo OK: $@ tests pass `date`
