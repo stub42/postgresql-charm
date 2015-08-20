@@ -1,0 +1,19 @@
+bootstrap: true
+reset: false
+tests: ""
+virtualenv: false
+# sources: []
+# packages: []
+makefile:
+    - testdeps
+    - lint
+    - unittest
+    - test_integration.py:PG91Tests
+    - test_integration.py:PG91MultiTests
+    - test_integration.py:PG92Tests
+    - test_integration.py:PG92MultiTests
+    - test_integration.py:PG93Tests
+    - test_integration.py:PG93MultiTests
+    - test_integration.py:PG94Tests
+    - test_integration.py:PG94MultiTests
+    - test_integration.py:UpgradedCharmTests

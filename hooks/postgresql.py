@@ -31,7 +31,7 @@ from charmhelpers import context
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG, WARNING
 
-import coordinator
+from coordinator import coordinator
 import helpers
 import wal_e
 
