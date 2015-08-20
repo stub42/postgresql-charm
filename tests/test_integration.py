@@ -267,6 +267,76 @@ class PGBaseTestCase(object):
                 cur.execute('SELECT * FROM pg_stat_activity')
                 cur.fetchone()
 
+    def test_admin_addresses(self):
+        port = 5432  # Hardcoded for now.
+
+        # Determine the IP address that the units will see.
+        status = self.deployment.get_status()
+        unit_info = list(status['services']['postgresql']['units'].values())[0]
+        unit_ip = unit_info['public-address']
+        port = int(unit_info['open-ports'][0].split('/')[0])
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect((unit_ip, port))
+        my_ip = s.getsockname()[0]
+        del s
+
+        # We also need to set a password.
+        pw = str(uuid.uuid1())
+        con = self.connect(self.master, admin=True)
+        con.autocommit = True
+        cur = con.cursor()
+        cur.execute("ALTER USER postgres ENCRYPTED PASSWORD %s", (pw,))
+
+        unit_infos = status['services']['postgresql']['units']
+        conn_strs = {}
+        for unit, unit_info in unit_infos.items():
+            unit_ip = unit_info['public-address']
+            port = int(unit_info['open-ports'][0].split('/')[0])
+            # Direct connection string to the unit's database.
+            conn_str = ' '.join(['dbname=postgres',
+                                 'user=postgres',
+                                 "password='{}'".format(pw),
+                                 'host={}'.format(unit_ip),
+                                 'port={}'.format(port)])
+            conn_strs[unit] = conn_str
+
+        for unit, conn_str in conn_strs.items():
+            with self.subTest(unit=unit):
+                # Direct database connections should fail at the moment.
+                with self.assertRaises(psycopg2.OperationalError):
+                    psycopg2.connect(conn_str)
+
+        # Connections should work after setting the admin-addresses.
+        subprocess.check_call(['juju', 'set', 'postgresql',
+                               'admin_addresses={}'.format(my_ip)],
+                              universal_newlines=True)
+        self.deployment.wait()
+
+        for unit, conn_str in conn_strs.items():
+            with self.subTest(unit=unit):
+                con = psycopg2.connect(conn_str)
+                cur = con.cursor()
+                cur.execute('SELECT 1')
+                self.assertEquals(1, cur.fetchone()[0])
+
+    def test_explicit_database(self):
+        relid = subprocess.check_output(['juju', 'run', '--unit', 'client/0',
+                                        'relation-ids db'],
+                                        stderr=subprocess.DEVNULL,
+                                        universal_newlines=True).strip()
+        subprocess.check_call(['juju', 'run', '--unit', 'client/0',
+                               'relation-set -r {} database=explicit'
+                               ''.format(relid)],
+                              universal_newlines=True)
+        self.deployment.wait()
+
+        for unit in self.units:
+            with self.subTest(unit=unit):
+                con = self.connect(unit, database='explicit')
+                cur = con.cursor()
+                cur.execute('SELECT 1')
+                self.assertEqual(cur.fetchone()[0], 1)
+
 
 class PGMultiBaseTestCase(PGBaseTestCase):
     num_units = 2
