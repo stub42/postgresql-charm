@@ -34,6 +34,9 @@ SERVICE_DEFINITION = [
                      service.ensure_package_status,
                      service.update_kernel_settings,
                      service.appoint_master,
+
+                     service.wait_for_peers,  # Exit if there are no peers.
+
                      nagios.ensure_nagios_credentials,
                      replication.ensure_replication_credentials,
                      replication.publish_replication_details,

@@ -27,7 +27,8 @@ from charmhelpers import fetch
 from charmhelpers.payload import execd
 
 from coordinator import coordinator
-from decorators import data_ready_action, leader_only, not_leader, requirement
+from decorators import (data_ready_action, requirement,
+                        leader_only, not_leader, not_master)
 import helpers
 import postgresql
 import replication
@@ -82,6 +83,22 @@ def preinstall():
         except SystemExit:
             helpers.block('execd_preinstall failed')
             raise SystemExit(0)
+
+
+@not_master
+@data_ready_action
+def wait_for_peers():
+    """Terminate the hook there are no peers and we are not the master.
+
+    If this is the master and there are no peers, then we are standalone.
+
+    Stopping here with such an incomplete state makes following hooks
+    simpler, as they do not need to cope with many pathalogical states
+    such as those that occur during service teardown.
+    """
+    if context.Relations().peer is None and not postgresql.is_master():
+        helpers.status_set('waiting', 'Waiting to join the peer relation')
+        raise SystemExit(0)
 
 
 @not_leader
@@ -229,8 +246,10 @@ def appoint_master():
     elif rel is None:
         # We cannot tell if this is a new unit being brought online
         # that happens to be the leader, or if the service is being
-        # destroyed.
-        hookenv.log('No peer relation. Leaving master unchanged.')
+        # destroyed. In any case, terminate and wait for a better state.
+        helpers.status_set('waiting',
+                           'Waiting to join peer relation to appoint master')
+        raise SystemExit(0)
     elif master not in rel:
         hookenv.log('Master {} is gone'.format(master), WARNING)
 
