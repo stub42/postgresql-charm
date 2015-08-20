@@ -87,7 +87,7 @@ def db_relation_mirror(rel):
                    'schema_user', 'schema_password', 'extensions']
     master_info = rel.peers.get(master)
     if master_info is None:
-        hookenv.log('Waiting for {} to join {}'.format(rel))
+        hookenv.log('Waiting for {} to join {}'.format(master, rel))
         return
     hookenv.log('Mirroring {} database credentials from {}'.format(rel,
                                                                    master))

@@ -51,3 +51,12 @@ def upgrade_charm():
     # config-changed.
     if os.path.exists('/etc/cron.d/postgresql'):
         os.unlink('/etc/cron.d/postgresql')
+
+    # config.changed('recovery_conf') is used to detect changes requiring
+    # a restart.
+    recovery_conf_path = postgresql.recovery_conf_path()
+    if os.path.exists(recovery_conf_path):
+        with open(recovery_conf_path, 'r') as f:
+            config['recovery_conf'] = f.read()
+    else:
+        config['recovery_conf'] = None

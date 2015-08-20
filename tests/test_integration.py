@@ -320,7 +320,7 @@ class PGMultiBaseTestCase(PGBaseTestCase):
 
         # The swift command line tool uses the same environment variables
         # as this test suite.
-        self.addCleanup(subprocess.check_call,
+        self.addCleanup(subprocess.call,
                         ['swift', 'delete', container],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.STDOUT,

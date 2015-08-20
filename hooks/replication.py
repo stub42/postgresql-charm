@@ -41,38 +41,33 @@ def replication_username():
 def replication_data_ready_action(func):
     '''A replication specific data_ready action wrapper.
 
-    Action skipped when the manual_replication config option is True.
+    Action skipped when the manual_replication config option is True
+    or if we are not ready to deal with replication.
     '''
     @wraps(func)
     def wrapper(service_name):
-        config = hookenv.config()
-        if config['manual_replication']:
+        if hookenv.config()['manual_replication']:
             hookenv.log('Manual replication - skipping')
             return
-        return func()
-    return wrapper
 
-
-@replication_data_ready_action
-def wait_for_master():
-    '''Wait until the master has authorized us.
-
-    If not, the unit is put into 'waiting' state and the hook exits.
-    '''
-    master = postgresql.master()
-    local = hookenv.local_unit()
-    if master == local:
-        return
-
-    peer_rel = context.Relations().peer
-    if peer_rel and master and master in peer_rel:
-        relinfo = peer_rel[master]
-        allowed = relinfo.get('allowed-units', '').split()
-        if local in allowed:
+        peer_rel = context.Relations().peer
+        if peer_rel is None:
+            hookenv.log('Not yet joined peer relation - skipping')
             return
 
-    helpers.status_set('waiting', 'Waiting for master')
-    raise SystemExit(0)
+        if 'following' in peer_rel.local:
+            # Master was available, replication working or in failover.
+            return func()
+
+        master = postgresql.master()
+        if master in peer_rel or master == hookenv.local_unit():
+            # Master is available.
+            return func()
+
+        hookenv.log('Not yet joined peer relation with {} - skipping'
+                    ''.format(postgresql.master()))
+        return
+    return wrapper
 
 
 @leader_only
@@ -103,20 +98,54 @@ def publish_replication_details():
         peer.local['allowed-units'] = ' '.join(sorted(peer.keys()))
 
 
+def following():
+    peer_rel = context.Relations().peer
+    if peer_rel:
+        return peer_rel.local.get('following')
+    return None
+
+
+def needs_clone():
+    if postgresql.is_master():
+        return False
+    peer_rel = context.Relations().peer
+    if peer_rel is None or not peer_rel.local.get('following'):
+        return True
+
+
+def wait_for_master_auth():
+    '''Wait until the master has authorized us.
+
+    If not, the unit is put into 'waiting' state and the hook exits.
+    '''
+    master = postgresql.master()
+    master_relinfo = context.Relations().peer[master]
+    allowed = master_relinfo.get('allowed-units', '').split()
+    if hookenv.local_unit() in allowed:
+        return
+    helpers.status_set('waiting',
+                       'Waiting for master {} to authorize'.format(master))
+    raise SystemExit(0)
+
+
 @not_master
 @replication_data_ready_action
 def clone_master():
+    if not needs_clone():
+        hookenv.log('Does not need cloning')
+        return
+
     master = postgresql.master()
     peer_rel = context.Relations().peer
     local_relinfo = peer_rel.local
     master_relinfo = peer_rel[master]
 
-    if 'following' in local_relinfo:
-        hookenv.log('Already cloned {}'.format(local_relinfo['following']),
-                    DEBUG)
-        return
-
     assert not postgresql.is_running()
+
+    # If this unit joined during failover, then we might not have yet
+    # joined the peer relation. Wait until the master is available before
+    # attempting to clone it.
+    wait_for_master_auth()  # Terminates if the master is not yet available.
 
     data_dir = postgresql.data_dir()
     if os.path.exists(data_dir):
@@ -178,6 +207,8 @@ def promote_master():
     if postgresql.is_secondary():
         hookenv.log("I've been promoted to master", WARNING)
         postgresql.promote()
+        rels = context.Relations()
+        del rels.peer.local['following']
     else:
         hookenv.log("I'm already master and remaining so.", DEBUG)
 
@@ -191,11 +222,30 @@ def update_recovery_conf():
     master = postgresql.master()
     path = postgresql.recovery_conf_path()
 
-    master_relinfo = context.Relations().peer[master]
+    peer_rel = context.Relations().peer
+    master_relinfo = peer_rel.get(master)
+    if master_relinfo is None:
+        # This pathalogical case should only happen when a new unit
+        # is added during failover. The new master may be appointed by
+        # the leader before this unit has joined the peer relation with
+        # the new master.
+        hookenv.log('Waiting for new master {} to join peer relation'
+                    ''.format(master))
+        return
+
+    following = peer_rel.local.get('following')
     leader = context.Leader()
     config = hookenv.config()
 
-    hookenv.log('Following master {}'.format(master))
+    if master != following:
+        hookenv.log('Following new master {} (was {})'.format(master,
+                                                              following))
+    else:
+        # Even though the master is unchanged, we still regenerate
+        # recovery.conf in case connection details such as IP addresses
+        # have changed.
+        hookenv.log('Continuing to follow {}'.format(master))
+
     data = dict(streaming_replication=config['streaming_replication'],
                 host=master_relinfo['host'],
                 port=master_relinfo['port'],
@@ -239,7 +289,7 @@ def elect_master():
         try:
             con = postgresql.connect(user=replication_username(), unit=unit)
             offsets.append((postgresql.wal_received_offset(con), unit))
-        except psycopg2.Error as x:
+        except (psycopg2.Error, postgresql.InvalidConnection) as x:
             hookenv.log('Unable to query replication state of {}: {}'
                         ''.format(unit, x), WARNING)
             # TODO: Signal re-cloning required. Or autodetect
@@ -247,6 +297,9 @@ def elect_master():
 
     offsets.sort()
     if not offsets:
+        # This should only happen if we failover before replication has
+        # been setup, like a test suite destroying units without waiting
+        # for the initial deployment to complete.
         helpers.status_set('blocked', 'No candidates for master found!')
         raise SystemExit(0)
     elected_master = offsets[0][1]

@@ -97,9 +97,7 @@ def wait_for_leader():
 
     This will no longer be required if Bug #1484930 can be addressed.
     """
-    required_keys = ['nagios_password']
-    if not hookenv.config()['manual_replication']:
-        required_keys.append('replication_password')
+    required_keys = ['master', 'nagios_password']
 
     leader = context.Leader()
     for key in required_keys:
@@ -226,10 +224,13 @@ def appoint_master():
     if master is None:
         hookenv.log('Appointing myself master')
         leader['master'] = hookenv.local_unit()
-    elif not rel:
-        hookenv.log('No peer relation. Leaving master unchanged.')
     elif master == local_unit:
         hookenv.log('I will remain master')
+    elif rel is None:
+        # We cannot tell if this is a new unit being brought online
+        # that happens to be the leader, or if the service is being
+        # destroyed.
+        hookenv.log('No peer relation. Leaving master unchanged.')
     elif master not in rel:
         hookenv.log('Master {} is gone'.format(master), WARNING)
 
@@ -246,7 +247,9 @@ def appoint_master():
         # progress. Once Bug #1417874 is addressed, the departing master
         # can cut off replication to all units simultaneously and we
         # can skip this step and allow failover to occur as soon as the
-        # leader learns that the master is gone.
+        # leader learns that the master is gone. pg_rewind and repmgr may
+        # also offer alternatives, repairing the diverged timeline rather
+        # than avoiding it.
         ready_for_election = True
         for unit, relinfo in rel.items():
             if master in relinfo.get('allowed-units', '').split():
@@ -693,7 +696,7 @@ def update_pgpass():
                                                '.pgpass'))
         content = ('# Managed by Juju\n'
                    '*:*:*:{}:{}'.format(replication.replication_username(),
-                                        leader['replication_password']))
+                                        leader.get('replication_password')))
         helpers.write(path, content, mode=0o600, user=account, group=account)
 
 
@@ -703,11 +706,17 @@ def request_restart():
         hookenv.log('Restart already requested')
         return
 
-    # There is no reason to wait for permission from the leader before
-    # restarting a stopped server.
     if not postgresql.is_running():
-        hookenv.log('PostgreSQL is not running. No need to request restart.')
-        return
+        if replication.needs_clone():
+            # The unit needs to be cloned. Grab the restart lock
+            # to ensure the unit we are cloning isn't restarted
+            # during the cloning process.
+            coordinator.acquire('restart')
+            return
+        else:
+            # For all other cases there is no need to wait for
+            # permission to restart a stopped service.
+            return
 
     # Detect if PostgreSQL settings have changed that require a restart.
     config = hookenv.config()
@@ -739,7 +748,12 @@ def request_restart():
 @data_ready_action
 def wait_for_restart():
     if coordinator.requested('restart') and not coordinator.granted('restart'):
-        helpers.status_set('waiting', 'Waiting for permission to restart')
+        if replication.needs_clone():
+            msg = ('Waiting for permission to clone {}'
+                   ''.format(postgresql.master()))
+        else:
+            msg = 'Waiting for permission to restart'
+        helpers.status_set('waiting', msg)
         raise SystemExit(0)
 
 

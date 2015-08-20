@@ -54,12 +54,19 @@ def has_version(ver):
     return StrictVersion(version()) >= StrictVersion(ver)
 
 
+class InvalidConnection(Exception):
+    '''Raised when we attempt to connect to a unit not yet ready.'''
+
+
 def connect(user='postgres', database='postgres', unit=None):
     if unit is None or unit == hookenv.local_unit():
         host = None
         port_ = port()
     else:
         relinfo = context.Relations().peer[unit]
+        if 'host' not in relinfo or 'port' not in relinfo:
+            raise InvalidConnection('{} has not published connection details'
+                                    ''.format(unit))
         host = relinfo['host']
         port_ = relinfo['port']
     return psycopg2.connect(user=user, database=database,

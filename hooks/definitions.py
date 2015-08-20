@@ -33,16 +33,13 @@ SERVICE_DEFINITION = [
                      service.install_packages,
                      service.ensure_package_status,
                      service.update_kernel_settings,
-                     replication.ensure_replication_credentials,
-                     nagios.ensure_nagios_credentials,
-                     replication.publish_replication_details,
                      service.appoint_master,
+                     nagios.ensure_nagios_credentials,
+                     replication.ensure_replication_credentials,
+                     replication.publish_replication_details,
 
                      # Exit if required leader settings are not set.
                      service.wait_for_leader,
-
-                     # Exit if the master is not yet available.
-                     replication.wait_for_master,
 
                      service.ensure_cluster,
                      service.update_pgpass,
@@ -58,7 +55,7 @@ SERVICE_DEFINITION = [
 
                      replication.promote_master,
                      storage.remount,
-                     replication.clone_master,
+                     replication.clone_master,  # Exit if cannot clone yet.
                      replication.update_recovery_conf,
                      service.restart_or_reload,
 
