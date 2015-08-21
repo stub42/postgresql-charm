@@ -250,8 +250,7 @@ class TestPostgresql(unittest.TestCase):
 
     def test_pgidentifier(self):
         a = postgresql.pgidentifier('magic')
-        self.assertIsInstance(a, psycopg2.extensions.AsIs)
-        self.assertEqual(str(a), '"magic"')
+        self.assertEqual(a, postgresql.AsIs('"magic"'))
 
     @patch('subprocess.check_call')
     @patch.object(hookenv, 'config')
@@ -308,7 +307,7 @@ class TestPostgresql(unittest.TestCase):
             call('CREATE DATABASE %s', (ANY,))])
         # The database name in that last call was correctly quoted.
         quoted_dbname = cur.execute.call_args[0][1][0]
-        self.assertIsInstance(quoted_dbname, psycopg2.extensions.AsIs)
+        self.assertIsInstance(quoted_dbname, postgresql.AsIs)
         self.assertEqual(str(quoted_dbname), '"hello"')
 
     @patch('postgresql.pgidentifier')
@@ -368,19 +367,12 @@ class TestPostgresql(unittest.TestCase):
         postgresql.grant_database_privileges(con, 'a_Role', 'a_DB', privs)
 
         cur.execute.assert_has_calls([
-            call("GRANT %s ON DATABASE %s TO %s", (ANY, ANY, ANY)),
-            call("GRANT %s ON DATABASE %s TO %s", (ANY, ANY, ANY))])
-
-        for i in range(2):
-            with self.subTest(i=i):
-                priv = privs[i]
-                params = cur.execute.call_args_list[i][0][1]
-                self.assertIsInstance(params[0], psycopg2.extensions.AsIs)
-                self.assertIsInstance(params[1], psycopg2.extensions.AsIs)
-                self.assertIsInstance(params[2], psycopg2.extensions.AsIs)
-                self.assertEqual(str(params[0]), priv)  # Unquoted
-                self.assertEqual(str(params[1]), '"a_DB"')  # Quoted
-                self.assertEqual(str(params[2]), '"a_Role"')  # Quoted
+            call("GRANT %s ON DATABASE %s TO %s",
+                 (postgresql.AsIs('privA'),  # Unquoted. Its a keyword.
+                  postgresql.AsIs('"a_DB"'), postgresql.AsIs('"a_Role"'))),
+            call("GRANT %s ON DATABASE %s TO %s",
+                 (postgresql.AsIs('privB'),
+                  postgresql.AsIs('"a_DB"'), postgresql.AsIs('"a_Role"')))])
 
     @patch.object(hookenv, 'log')
     @patch('postgresql.ensure_role')

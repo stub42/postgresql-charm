@@ -327,6 +327,7 @@ class PGBaseTestCase(object):
         subprocess.check_call(['juju', 'run', '--unit', 'client/0',
                                'relation-set -r {} database=explicit'
                                ''.format(relid)],
+                              stderr=subprocess.DEVNULL,
                               universal_newlines=True)
         self.deployment.wait()
 

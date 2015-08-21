@@ -17,6 +17,7 @@
 from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
 from distutils.version import StrictVersion
+import functools
 import itertools
 import json
 import os.path
@@ -25,7 +26,7 @@ import subprocess
 from textwrap import dedent
 
 import psycopg2
-from psycopg2.extensions import AsIs
+import psycopg2.extensions
 
 from charmhelpers import context
 from charmhelpers.core import hookenv
@@ -34,6 +35,33 @@ from charmhelpers.core.hookenv import DEBUG, WARNING
 from coordinator import coordinator
 import helpers
 import wal_e
+
+
+@functools.total_ordering
+class AsIs(psycopg2.extensions.ISQLQuote):
+    '''An extension of psycopg2.extensions.AsIs
+   
+    The comparison operators make it usable in unittests and
+    stable no matter the psycopg2 version.
+    '''
+    def getquoted(self):
+        return str(self._wrapped).encode('UTF8')
+
+    def __conform__(self, protocol):
+        if protocol is psycopg2.extensions.ISQLQuote:
+            return self
+
+    def __eq__(self, other):
+        return self._wrapped == other
+
+    def __lt__(self, other):
+        return self._wrapped < other
+
+    def __str__(self):
+        return str(self._wrapped)
+
+    def __repr__(self):
+        return "{}({!r})".format(self.__class__.__name__, self._wrapped)
 
 
 def version():
