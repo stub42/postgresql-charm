@@ -268,8 +268,6 @@ class PGBaseTestCase(object):
                 cur.fetchone()
 
     def test_admin_addresses(self):
-        port = 5432  # Hardcoded for now.
-
         # Determine the IP address that the units will see.
         status = self.deployment.get_status()
         unit_info = list(status['services']['postgresql']['units'].values())[0]
