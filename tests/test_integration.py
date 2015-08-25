@@ -493,7 +493,8 @@ class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
         cls.deployment.repackage_charm()
         repo_path = os.path.join(os.environ['JUJU_REPOSITORY'], SERIES,
                                  'postgresql')
-        shutil.rmtree(repo_path)
+        if os.path.exists(repo_path):
+            shutil.rmtree(repo_path)
         shutil.copytree(cls.deployment.charm_dir, repo_path)
 
         # Upgrade.
@@ -501,6 +502,33 @@ class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
                               stdout=subprocess.DEVNULL,
                               universal_newlines=True)
         cls.deployment.wait()
+
+    def test_username(self):
+        # We change the generated usernames to make disaster recovery
+        # easier. Old usernames based on the relation id and perhaps
+        # with a random component are GRANTed to the new usernames
+        # so that database permissions are not lost.
+        for admin, expected_username in [(False, 'juju_client'),
+                                         (True, 'jujuadmin_client')]:
+            with self.subTest(admin=admin):
+                con = self.connect(admin=admin)
+                cur = con.cursor()
+                cur.execute('show session_authorization')
+                username = cur.fetchone()[0]
+                self.assertEqual(username, expected_username)
+                cur.execute('''
+                            select count(*)
+                            from
+                                pg_user as role, pg_user as member,
+                                pg_auth_members
+                            where role.usesysid = pg_auth_members.roleid
+                            and member.usesysid = pg_auth_members.member
+                            and member.usename = %s
+                            ''', (username,))
+                # The new username has been granted permissions of both
+                # the old user and the old schema user (if there was an
+                # old schema user)
+                self.assertGreaterEqual(cur.fetchone()[0], 1)
 
 
 def setUpModule():

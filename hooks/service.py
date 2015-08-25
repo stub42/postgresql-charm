@@ -55,8 +55,8 @@ def valid_config():
                                'Invalid value for {} ({!r})'
                                .format(key, config[key]))
 
-    unchangeable_config = ['locale', 'encoding', 'version', 'pgdg',
-                           'manual_replication']
+    unchangeable_config = ['locale', 'encoding', 'pgdg', 'manual_replication',
+                           'version']
     if config._prev_dict is not None:
         for name in unchangeable_config:
             if config.changed(name):
@@ -64,8 +64,9 @@ def valid_config():
                 valid = False
                 helpers.status_set('blocked',
                                    'Cannot change {!r} after install '
-                                   '(was {!r}).'.format(name,
-                                                        config.previous(name)))
+                                   '(from {!r} to {!r}).'
+                                   ''.format(name, config.previous(name),
+                                             config.get('name')))
     return valid
 
 

@@ -40,7 +40,7 @@ import wal_e
 @functools.total_ordering
 class AsIs(psycopg2.extensions.ISQLQuote):
     '''An extension of psycopg2.extensions.AsIs
-   
+
     The comparison operators make it usable in unittests and
     stable no matter the psycopg2 version.
     '''
@@ -68,14 +68,19 @@ def version():
     '''PostgreSQL version. major.minor, as a string.'''
     # We use the charm configuration here, as multiple versions
     # of PostgreSQL may be installed.
-    version = hookenv.config().get('version')
+    config = hookenv.config()
+    version = config.get('version')
     if version:
         return version
 
     # If the version wasn't set, we are using the default version for
     # the distro release.
     version_map = dict(precise='9.1', trusty='9.3')
-    return version_map[helpers.distro_codename()]
+    # We persist the default version, so we know it will remain
+    # the same even if the default version selection changes because
+    # of charm changes or an OS upgrade.
+    config['version'] = version_map[helpers.distro_codename()]
+    return config['version']
 
 
 def has_version(ver):

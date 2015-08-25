@@ -21,8 +21,6 @@ from textwrap import dedent
 import unittest
 from unittest.mock import ANY, call, MagicMock, patch, sentinel
 
-import psycopg2.extensions
-
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, 'hooks'))
 
 from charmhelpers import context
