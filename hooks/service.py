@@ -55,8 +55,7 @@ def valid_config():
                                'Invalid value for {} ({!r})'
                                .format(key, config[key]))
 
-    unchangeable_config = ['locale', 'encoding', 'pgdg', 'manual_replication',
-                           'version']
+    unchangeable_config = ['locale', 'encoding', 'pgdg', 'manual_replication']
     if config._prev_dict is not None:
         for name in unchangeable_config:
             if config.changed(name):
@@ -67,6 +66,17 @@ def valid_config():
                                    '(from {!r} to {!r}).'
                                    ''.format(name, config.previous(name),
                                              config.get('name')))
+        if config.changed('version') and (config.previous('version')
+                                          != postgresql.version()):
+            valid = False
+            helpers.status_set('blocked',
+                               'Cannot change version after install '
+                               '(from {!r} to {!r}).'
+                               ''.format(config.previous('version'),
+                                         config['version']))
+            config['version'] = config.previous('version')
+            valid = False
+
     return valid
 
 

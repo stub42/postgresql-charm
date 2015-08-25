@@ -76,11 +76,7 @@ def version():
     # If the version wasn't set, we are using the default version for
     # the distro release.
     version_map = dict(precise='9.1', trusty='9.3')
-    # We persist the default version, so we know it will remain
-    # the same even if the default version selection changes because
-    # of charm changes or an OS upgrade.
-    config['version'] = version_map[helpers.distro_codename()]
-    return config['version']
+    return version_map[helpers.distro_codename()]
 
 
 def has_version(ver):
