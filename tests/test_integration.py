@@ -17,6 +17,7 @@
 from contextlib import suppress
 from datetime import datetime
 import os.path
+import re
 import shutil
 import signal
 import socket
@@ -268,45 +269,48 @@ class PGBaseTestCase(object):
                 cur.fetchone()
 
     def test_admin_addresses(self):
-        # Determine the IP address that the units will see.
-        status = self.deployment.get_status()
-        unit_info = list(status['services']['postgresql']['units'].values())[0]
-        unit_ip = unit_info['public-address']
-        port = int(unit_info['open-ports'][0].split('/')[0])
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect((unit_ip, port))
-        my_ip = s.getsockname()[0]
-        del s
-
-        # We also need to set a password.
+        # admin_addresses grants password authenticated access, so we need
+        # to set a password on the postgres user.
         pw = str(uuid.uuid1())
         con = self.connect(self.master, admin=True)
         con.autocommit = True
         cur = con.cursor()
         cur.execute("ALTER USER postgres ENCRYPTED PASSWORD %s", (pw,))
 
+        status = self.deployment.get_status()
         unit_infos = status['services']['postgresql']['units']
+
+        # Calculate our libpq direct connection strings.
         conn_strs = {}
         for unit, unit_info in unit_infos.items():
-            unit_ip = unit_info['public-address']
-            port = int(unit_info['open-ports'][0].split('/')[0])
-            # Direct connection string to the unit's database.
-            conn_str = ' '.join(['dbname=postgres',
-                                 'user=postgres',
-                                 "password='{}'".format(pw),
-                                 'host={}'.format(unit_ip),
-                                 'port={}'.format(port)])
-            conn_strs[unit] = conn_str
+            with self.subTest(unit=unit):
+                unit_ip = unit_info['public-address']
+                port = int(unit_info['open-ports'][0].split('/')[0])
+                conn_str = ' '.join(['dbname=postgres',
+                                     'user=postgres',
+                                     "password='{}'".format(pw),
+                                     'host={}'.format(unit_ip),
+                                     'port={}'.format(port)])
+                conn_strs[unit] = conn_str
 
+        # Confirm that we cannot connect at the moment. This also
+        # helpfully gives the IP address PostgreSQL sees the connection
+        # coming from in the error message, which we will use since I
+        # can't find any other reliable cross cloud method of obtaining it.
+        reject_pattern = r'pg_hba.conf rejects connection for host "([\d.]+)"'
+        reject_re = re.compile(reject_pattern)
+        my_ips = set()
         for unit, conn_str in conn_strs.items():
             with self.subTest(unit=unit):
-                # Direct database connections should fail at the moment.
-                with self.assertRaises(psycopg2.OperationalError):
+                with self.assertRaisesRegex(psycopg2.OperationalError,
+                                            reject_re) as x:
                     psycopg2.connect(conn_str)
+                m = reject_re.search(str(x.exception))
+                my_ips.add(m.group(1))
 
         # Connections should work after setting the admin-addresses.
         subprocess.check_call(['juju', 'set', 'postgresql',
-                               'admin_addresses={}'.format(my_ip)],
+                               'admin_addresses={}'.format(','.join(my_ips))],
                               universal_newlines=True)
         self.deployment.wait()
 

@@ -28,9 +28,8 @@ import yaml
 class AmuletFixture(amulet.Deployment):
     def __init__(self, series, charm_dir=None):
         self.charm_dir = charm_dir  # If None, reset by repackage_charm()
-        # We use a wrapper around juju-deployer so we can fix how it is
-        # invoked. In particular, turn off all the noise so we can
-        # actually read our test output.
+        # We use a wrapper around juju-deployer so we can adjust how it is
+        # invoked. In particular, only make noise on failure.
         juju_deployer = os.path.abspath(os.path.join(
             os.path.dirname(__file__), os.pardir, 'lib',
             'juju-deployer-wrapper.py'))
