@@ -81,6 +81,8 @@ class PGBaseTestCase(object):
     nagios_subordinate = False
     storage_subordinate = False
 
+    keep = set()
+
     @classmethod
     def setUpClass(cls, postgresql_charm_dir=None):
         super(PGBaseTestCase, cls).setUpClass()
@@ -96,6 +98,7 @@ class PGBaseTestCase(object):
         # Add the helper charm. We need this to act as a proxy,
         # so connections come from a unit the PostgreSQL charm recognizes.
         deployment.add('client', CLIENT_CHARMDIR)
+        cls.keep.add('client')
 
         # Add and configure the PostgreSQL units.
         deployment.add('postgresql', postgresql_charm_dir,
@@ -124,7 +127,7 @@ class PGBaseTestCase(object):
             deployment.relate('postgresql:data', 'storage:data')
 
         try:
-            cls.deployment.deploy()
+            cls.deployment.deploy(keep=cls.keep)
         except Exception:
             with suppress(Exception):
                 cls.deployment.tearDown()
@@ -133,7 +136,7 @@ class PGBaseTestCase(object):
     @classmethod
     def tearDownClass(cls):
         if cls.deployment is not None:
-            cls.deployment.tearDown()
+            cls.deployment.tearDown(keep=cls.keep)
         super(PGBaseTestCase, cls).setUpClass()
 
     def _get_config(self):

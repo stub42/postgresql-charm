@@ -73,12 +73,17 @@ class AmuletFixture(amulet.Deployment):
         else:
             os.environ['JUJU_REPOSITORY'] = self.org_repo
 
-    def deploy(self, timeout=None):
+    def deploy(self, timeout=None, keep=None):
         '''Deploying or updating the configured system.
 
         Invokes amulet.Deployer.setup with a nicer name and standard
         timeout handling.
         '''
+        # First, ensure any existing environment is completely
+        # torn down. juju-deployer seems to forget to deploy
+        # services if there is an existing service in the environment
+        # in the process of being destroyed.
+        self.reset_environment(keep=keep)
         if timeout is None:
             timeout = int(os.environ.get('AMULET_TIMEOUT', 900))
 
