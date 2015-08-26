@@ -92,7 +92,7 @@ class PGBaseTestCase(object):
         # Amulet does not let us add services after the initial deploy.
         deployment = AmuletFixture(series=SERIES)
         deployment.charm_dir = postgresql_charm_dir
-        deployment.setUp()
+        deployment.setUp(keep=cls.keep)
         cls.deployment = deployment
 
         # Add the helper charm. We need this to act as a proxy,

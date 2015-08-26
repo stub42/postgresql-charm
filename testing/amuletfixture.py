@@ -36,10 +36,13 @@ class AmuletFixture(amulet.Deployment):
         super(AmuletFixture, self).__init__(series=series,
                                             juju_deployer=juju_deployer)
 
-    def setUp(self):
+    def setUp(self, keep=None):
         self._temp_dirs = []
 
-        self.reset_environment(force=True)
+        if keep:
+            self.reset_environment(keep=keep)
+        else:
+            self.reset_environment(force=True)
 
         # Repackage our charm to a temporary directory, allowing us
         # to strip our virtualenv symlinks that would otherwise cause
@@ -137,8 +140,6 @@ class AmuletFixture(amulet.Deployment):
         while True:
             status = self.get_status()
             service_items = status.get('services', {}).items()
-            if not service_items:
-                break
 
             for service_name, service in service_items:
                 if service_name in keep:
@@ -155,6 +156,12 @@ class AmuletFixture(amulet.Deployment):
                 for unit_name, unit in service.get('units', {}).items():
                     if unit.get('agent-state', None) == 'error':
                         fails[unit_name] = unit
+
+            services = set(k for k, v in service_items
+                           if k not in keep)
+            if not services:
+                break
+
             time.sleep(1)
 
         harvest_machines = []
