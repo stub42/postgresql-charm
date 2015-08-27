@@ -126,6 +126,18 @@ class PGBaseTestCase(object):
             deployment.add('storage', 'lp:~stub/charms/trusty/storage/trunk')
             deployment.relate('postgresql:data', 'storage:data')
 
+        # Per Bug #1489237, wait until juju-deployer can no longer see
+        # the ghost of serivices we want to redeploy.
+        for service in ['postgresql', 'nagios', 'storage']:
+            while True:
+                cmd = ['juju-deployer', '-f', service]
+                rv = subprocess.call(cmd, stderr=subprocess.STDOUT,
+                                     stdout=subprocess.DEVNULL,
+                                     universal_newlines=True)
+                if rv == 1:
+                    break  # Its gone according to juju-deployer.
+                time.sleep(1)
+
         try:
             cls.deployment.deploy(keep=cls.keep)
         except Exception:
