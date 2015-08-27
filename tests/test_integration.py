@@ -137,6 +137,10 @@ class PGBaseTestCase(object):
                 if rv == 1:
                     break  # Its gone according to juju-deployer.
                 time.sleep(1)
+        # But also per Bug #1489237, that waiting isn't enough so I'm
+        # just going to have to sleep for a bit for things to clear before
+        # attempting the deploy.
+        time.sleep(10)
 
         try:
             cls.deployment.deploy(keep=cls.keep)
