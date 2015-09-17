@@ -113,7 +113,7 @@ class AmuletFixture(amulet.Deployment):
 
     def wait(self, timeout=None):
         '''Wait until the environment has reached a stable state.'''
-        cmd = ['juju', 'wait']
+        cmd = ['juju', 'wait', '-q']
         if timeout:
             cmd = ['timeout', str(timeout)] + cmd
         try:
