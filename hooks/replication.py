@@ -120,8 +120,18 @@ def wait_for_master_auth():
     '''
     # Check if the master has listed this unit as allowed.
     master = postgresql.master()
-    master_relinfo = context.Relations().peer[master]
+    master_relinfo = context.Relations().peer.get(master)
+    if not master_relinfo:
+        helpers.status_set('waiting',
+                           'Waiting for master {} to join peer relation'
+                           ''.format(master))
+        raise SystemExit(0)
+
     allowed = master_relinfo.get('allowed-units', '').split()
+    if hookenv.local_unit() not in allowed:
+        helpers.status_set('waiting',
+                           'Waiting for master {} to authorize'.format(master))
+        raise SystemExit(0)
 
     # If we are running upgrade-charm, this standby might be running the
     # upgrade-charm hook before the master, and the connection details
@@ -129,13 +139,11 @@ def wait_for_master_auth():
     # siblings trigger peer relation hooks and whatnot. So we need to
     # handle this case here. If the master has not yet published its
     # connection details, it is the equivalent of not allowed.
-    master_creds_available = ('host' in master_relinfo)
-
-    if hookenv.local_unit() in allowed and master_creds_available:
-        return
-    helpers.status_set('waiting',
-                       'Waiting for master {} to authorize'.format(master))
-    raise SystemExit(0)
+    if 'host' not in master_relinfo:
+        helpers.status_set('waiting',
+                           'Waiting for master {} to publish '
+                           'connection details'.format(master))
+        raise SystemExit(0)
 
 
 @not_master
@@ -234,14 +242,11 @@ def update_recovery_conf():
 
     peer_rel = context.Relations().peer
     master_relinfo = peer_rel.get(master)
-    if master_relinfo is None:
-        # This pathalogical case should only happen when a new unit
-        # is added during failover. The new master may be appointed by
-        # the leader before this unit has joined the peer relation with
-        # the new master.
-        hookenv.log('Waiting for new master {} to join peer relation'
-                    ''.format(master))
-        return
+
+    # A new unit may have been added during failover, or update-charm
+    # may not have been run on the master and no master credentials
+    # are available. Wait until this is fixed.
+    wait_for_master_auth()  # Terminates if the master is not yet available.
 
     following = peer_rel.local.get('following')
     leader = context.Leader()
