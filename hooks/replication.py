@@ -118,10 +118,20 @@ def wait_for_master_auth():
 
     If not, the unit is put into 'waiting' state and the hook exits.
     '''
+    # Check if the master has listed this unit as allowed.
     master = postgresql.master()
     master_relinfo = context.Relations().peer[master]
     allowed = master_relinfo.get('allowed-units', '').split()
-    if hookenv.local_unit() in allowed:
+
+    # If we are running upgrade-charm, this standby might be running the
+    # upgrade-charm hook before the master, and the connection details
+    # not yet available. It may remain this way for several hooks, while
+    # siblings trigger peer relation hooks and whatnot. So we need to
+    # handle this case here. If the master has not yet published its
+    # connection details, it is the equivalent of not allowed.
+    master_creds_available = ('host' in master_relinfo)
+
+    if hookenv.local_unit() in allowed and master_creds_available:
         return
     helpers.status_set('waiting',
                        'Waiting for master {} to authorize'.format(master))
