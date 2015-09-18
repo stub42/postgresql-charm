@@ -800,6 +800,11 @@ def restart_or_reload():
     else:
         postgresql.reload_config()
 
+    while postgresql.is_primary() and postgresql.is_in_recovery():
+        helpers.status_set('maintenance', 'Startup recovery')
+
+    helpers.status_set('maintenance', 'Started')
+
 
 @data_ready_action
 def reload_config():
