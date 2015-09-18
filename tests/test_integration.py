@@ -523,7 +523,17 @@ class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
         # Upgrade.
         subprocess.check_call(['juju', 'upgrade-charm', 'postgresql'],
                               stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL,
                               universal_newlines=True)
+
+        # Sleep. upgrade-charm first needs to distribute the updated
+        # charm to the units before the hooks get invoked, and this takes
+        # some time. During this period, the system looks completely idle
+        # and 'juju wait' will consider the environment quiescent.
+        time.sleep(30)
+
+        # Now wait for the upgrade and fallout to finish, having hopefully
+        # left enough time for the upgrade to actually start.
         cls.deployment.wait()
 
     def test_username(self):
