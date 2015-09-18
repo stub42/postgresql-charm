@@ -179,7 +179,7 @@ class PGBaseTestCase(object):
     def master(self):
         status = self.deployment.get_status()
         for unit, info in status['services']['postgresql']['units'].items():
-            status_message = info['workload-status']['message']
+            status_message = info['workload-status'].get('message')
             if status_message == 'Live master':
                 return unit
         self.fail("There is no master")
