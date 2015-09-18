@@ -17,6 +17,7 @@ import math
 import os.path
 import re
 import subprocess
+import time
 
 import yaml
 
@@ -802,6 +803,7 @@ def restart_or_reload():
 
     while postgresql.is_primary() and postgresql.is_in_recovery():
         helpers.status_set('maintenance', 'Startup recovery')
+        time.sleep(2)
 
     helpers.status_set('maintenance', 'Started')
 
