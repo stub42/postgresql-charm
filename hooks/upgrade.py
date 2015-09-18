@@ -93,6 +93,12 @@ def upgrade_charm():
                 client_rel.local['schema_user'] = new_username
                 client_rel.local['schema_password'] = password
 
+    # Admin relations used to get 'all' published as the database name,
+    # which was bogus.
+    for client_rel in rels['db-admin'].values():
+        if client_rel.local.get('database') == 'all':
+            client_rel.local['database'] = client_rel.service
+
 
 def migrate_user(old_username, new_username, password, superuser=False):
     if postgresql.is_primary():
