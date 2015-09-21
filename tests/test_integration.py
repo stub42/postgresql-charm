@@ -393,6 +393,12 @@ class PGMultiBaseTestCase(PGBaseTestCase):
     def test_failover(self):
         self.deployment.destroy_unit(self.master)
         self.deployment.add_unit('postgresql')
+
+        # It can take some time after destroying the leader for a new
+        # leader to be appointed. We need to wait enough time for the
+        # hooks to kick in.
+        time.sleep(60)
+
         self.deployment.wait()
         self._replication_test()
 
