@@ -189,7 +189,7 @@ class PGBaseTestCase(object):
         status = self.deployment.get_status()
         units = status['services']['postgresql']['units']
         return set([unit for unit, info in units.items()
-                    if info['workload-status']['message'] == 'Live master'])
+                    if info['workload-status']['message'] == 'Live secondary'])
 
     @property
     def secondary(self):
@@ -397,7 +397,11 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         # It can take some time after destroying the leader for a new
         # leader to be appointed. We need to wait enough time for the
         # hooks to kick in.
-        time.sleep(60)
+        timeout = time.time() + 600
+        while time.time() < timeout:
+            if self.master is not None:
+                break
+            time.sleep(5)
 
         self.deployment.wait()
         self._replication_test()
