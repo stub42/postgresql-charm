@@ -397,13 +397,14 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         # It can take some time after destroying the leader for a new
         # leader to be appointed. We need to wait enough time for the
         # hooks to kick in.
+        self.deployment.wait()
         timeout = time.time() + 600
         while time.time() < timeout:
             if self.master is not None:
                 break
             time.sleep(5)
-
         self.deployment.wait()
+
         self._replication_test()
 
     @skip_if_swift_is_unavailable
