@@ -182,7 +182,7 @@ class PGBaseTestCase(object):
             status_message = info['workload-status'].get('message')
             if status_message == 'Live master':
                 return unit
-        self.fail("There is no master")
+        return None
 
     @property
     def secondaries(self):

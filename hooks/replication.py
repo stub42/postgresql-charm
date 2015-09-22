@@ -26,7 +26,7 @@ from charmhelpers.core import host, hookenv, templating
 from charmhelpers.core.hookenv import DEBUG, ERROR, WARNING
 
 from coordinator import coordinator
-from decorators import leader_only, master_only, not_master
+from decorators import leader_only, master_only, not_master, data_ready_action
 import helpers
 import postgresql
 import wal_e
@@ -89,7 +89,10 @@ def ensure_replication_user():
     con.commit()
 
 
-@replication_data_ready_action
+# NOT replication_data_ready_action. Connection details always need
+# to be published so they are always available during failover, even
+# if there is no master around.
+@data_ready_action
 def publish_replication_details():
     peer = context.Relations().peer
     if peer is not None:
@@ -243,10 +246,10 @@ def update_recovery_conf():
     peer_rel = context.Relations().peer
     master_relinfo = peer_rel.get(master)
 
-    # A new unit may have been added during failover, or update-charm
-    # may not have been run on the master and no master credentials
-    # are available. Wait until this is fixed.
-    wait_for_master_auth()  # Terminates if the master is not yet available.
+    if not (master_relinfo and 'host' in master_relinfo):
+        hookenv.log('Master {} has no published connection details'
+                    ''.format(master))
+        return
 
     following = peer_rel.local.get('following')
     leader = context.Leader()
