@@ -222,6 +222,8 @@ class PGBaseTestCase(object):
             postgres_sentry = self.deployment.sentry[unit]
             relinfo = postgres_sentry.relation(rel_name, to_rel)
 
+        self.assertIn('database', relinfo, 'Client relation not setup')
+
         if database is None:
             database = relinfo['database']
 
