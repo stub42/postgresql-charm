@@ -182,7 +182,7 @@ class PGBaseTestCase(object):
             status_message = info['workload-status'].get('message')
             if status_message == 'Live master':
                 return unit
-        return None
+        self.fail('There is no master')
 
     @property
     def secondaries(self):
@@ -400,11 +400,7 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         # leader to be appointed. We need to wait enough time for the
         # hooks to kick in.
         self.deployment.wait()
-        timeout = time.time() + 600
-        while time.time() < timeout:
-            if self.master is not None:
-                break
-            time.sleep(5)
+        time.sleep(40)
         self.deployment.wait()
 
         self._replication_test()
