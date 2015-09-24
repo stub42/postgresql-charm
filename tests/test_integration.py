@@ -400,7 +400,15 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         # leader to be appointed. We need to wait enough time for the
         # hooks to kick in.
         self.deployment.wait()
-        time.sleep(40)
+        timeout = time.time() + 300
+        while True:
+            try:
+                self.master
+                break
+            except AssertionError:
+                if timeout < time.time():
+                    raise
+                time.sleep(3)
         self.deployment.wait()
 
         self._replication_test()
