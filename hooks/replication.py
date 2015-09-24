@@ -18,7 +18,6 @@ from functools import wraps
 import os.path
 import shutil
 import subprocess
-import time
 
 import psycopg2
 
@@ -228,12 +227,9 @@ def ensure_ssl_certs():
 def promote_master():
     if postgresql.is_secondary():
         hookenv.status_set('maintenance', 'Promoting to master')
-        hookenv.log("I've been promoted to master", WARNING)
         postgresql.promote()
         rels = context.Relations()
         del rels.peer.local['following']
-        while postgresql.is_in_recovery():
-            time.sleep(2)
     else:
         hookenv.log("I'm already master and remaining so.", DEBUG)
 
