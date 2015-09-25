@@ -1,6 +1,9 @@
 destination: hooks/charmhelpers
 branch: lp:~stub/charm-helpers/integration
 include:
+    - context
     - coordinator
     - core
     - fetch
+    - payload
+    - contrib.charmsupport.nrpe

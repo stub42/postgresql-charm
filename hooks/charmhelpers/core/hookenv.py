@@ -21,6 +21,7 @@
 #  Charm Helpers Developers <juju@lists.ubuntu.com>
 
 from __future__ import print_function
+import copy
 from distutils.version import LooseVersion
 from functools import wraps
 import glob
@@ -263,7 +264,7 @@ class Config(dict):
         self.path = path or self.path
         with open(self.path) as f:
             self._prev_dict = json.load(f)
-        for k, v in self._prev_dict.items():
+        for k, v in copy.deepcopy(self._prev_dict).items():
             if k not in self:
                 self[k] = v
 
@@ -465,6 +466,19 @@ def relation_types():
         if section:
             rel_types.extend(section.keys())
     return rel_types
+
+
+@cached
+def peer_relation_id():
+    '''Get a peer relation id if a peer relation has been joined, else None.'''
+    md = metadata()
+    section = md.get('peers')
+    if section:
+        for key in section:
+            relids = relation_ids(key)
+            if relids:
+                return relids[0]
+    return None
 
 
 @cached
@@ -691,6 +705,7 @@ def status_get():
 
 def translate_exc(from_exc, to_exc):
     def inner_translate_exc1(f):
+        @wraps(f)
         def inner_translate_exc2(*args, **kwargs):
             try:
                 return f(*args, **kwargs)
@@ -761,6 +776,7 @@ def atstart(callback, *args, **kwargs):
 
     This is useful for modules and classes to perform initialization
     and inject behavior. In particular:
+
         - Run common code before all of your hooks, such as logging
           the hook name or interesting relation data.
         - Defer object or module initialization that requires a hook

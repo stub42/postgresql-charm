@@ -63,6 +63,36 @@ def service_reload(service_name, restart_on_failure=False):
     return service_result
 
 
+def service_pause(service_name, init_dir=None):
+    """Pause a system service.
+
+    Stop it, and prevent it from starting again at boot."""
+    if init_dir is None:
+        init_dir = "/etc/init"
+    stopped = service_stop(service_name)
+    # XXX: Support systemd too
+    override_path = os.path.join(
+        init_dir, '{}.conf.override'.format(service_name))
+    with open(override_path, 'w') as fh:
+        fh.write("manual\n")
+    return stopped
+
+
+def service_resume(service_name, init_dir=None):
+    """Resume a system service.
+
+    Reenable starting again at boot. Start the service"""
+    # XXX: Support systemd too
+    if init_dir is None:
+        init_dir = "/etc/init"
+    override_path = os.path.join(
+        init_dir, '{}.conf.override'.format(service_name))
+    if os.path.exists(override_path):
+        os.unlink(override_path)
+    started = service_start(service_name)
+    return started
+
+
 def service(action, service_name):
     """Control a system service"""
     cmd = ['service', service_name, action]
@@ -140,11 +170,7 @@ def add_group(group_name, system_group=False):
 
 def add_user_to_group(username, group):
     """Add a user to a group"""
-    cmd = [
-        'gpasswd', '-a',
-        username,
-        group
-    ]
+    cmd = ['gpasswd', '-a', username, group]
     log("Adding user {} to group {}".format(username, group))
     subprocess.check_call(cmd)
 
@@ -466,3 +492,19 @@ def chownr(path, owner, group, follow_links=True):
 
 def lchownr(path, owner, group):
     chownr(path, owner, group, follow_links=False)
+
+
+def get_total_ram():
+    '''The total amount of system RAM in bytes.
+
+    This is what is reported by the OS, and may be overcommitted when
+    there are multiple containers hosted on the same machine.
+    '''
+    with open('/proc/meminfo', 'r') as f:
+        for line in f.readlines():
+            if line:
+                key, value, unit = line.split()
+                if key == 'MemTotal:':
+                    assert unit == 'kB', 'Unknown unit'
+                    return int(value) * 1024  # Classic, not KiB.
+        raise NotImplementedError()
