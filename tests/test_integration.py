@@ -399,17 +399,17 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         # It can take some time after destroying the leader for a new
         # leader to be appointed. We need to wait enough time for the
         # hooks to kick in.
+        time.sleep(10)
         self.deployment.wait()
         timeout = time.time() + 300
-        while True:
+        while timeout < time.time():
             try:
                 self.master
                 break
             except AssertionError:
-                if timeout < time.time():
-                    raise
                 time.sleep(3)
         self.deployment.wait()
+        self.master  # Asserts there is a master db
 
         self._replication_test()
 
