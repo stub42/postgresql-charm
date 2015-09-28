@@ -399,7 +399,7 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         # It can take some time after destroying the leader for a new
         # leader to be appointed. We need to wait enough time for the
         # hooks to kick in.
-        time.sleep(10)
+        time.sleep(60)
         self.deployment.wait()
         timeout = time.time() + 300
         while timeout < time.time():
