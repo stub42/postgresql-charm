@@ -402,7 +402,7 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         time.sleep(60)
         self.deployment.wait()
         timeout = time.time() + 300
-        while timeout < time.time():
+        while timeout > time.time():
             try:
                 self.master
                 break
