@@ -437,8 +437,8 @@ def is_running():
             return False  # PostgreSQL not running, PG 9.2+
         elif x.returncode == 4 and has_version('9.4'):
             return False  # $DATA_DIR inaccessible, PG 9.4+
-        elif x.returncode == 1 and (not has_version('9.2')
-                                    and not os.path.exists(pid_path())):
+        elif x.returncode == 1 and (not has_version('9.2') and
+                                    not os.path.exists(pid_path())):
             return False  # Use pid file existance for old PG versions.
         raise  # Unexpected failure.
 

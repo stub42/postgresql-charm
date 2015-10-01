@@ -122,8 +122,8 @@ def deprecated_config_in_use():
     options = config_yaml()['options']
     config = hookenv.config()
     deprecated = [key for key in options
-                  if ('DEPRECATED' in options[key]['description']
-                      and config[key] != options[key]['default'])]
+                  if ('DEPRECATED' in options[key]['description'] and
+                      config[key] != options[key]['default'])]
     return set(deprecated)
 
 

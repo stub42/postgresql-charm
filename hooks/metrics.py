@@ -31,9 +31,8 @@ def write_metrics_cronjob():
     # need the following two configs to be valid
     metrics_target = config['metrics_target'].strip()
     metrics_sample_interval = config['metrics_sample_interval']
-    if (not metrics_target
-            or ':' not in metrics_target
-            or not metrics_sample_interval):
+    if (not metrics_target or
+            ':' not in metrics_target or not metrics_sample_interval):
         hookenv.log("Required config not found or invalid "
                     "(metrics_target, metrics_sample_interval), "
                     "disabling statsd metrics", DEBUG)

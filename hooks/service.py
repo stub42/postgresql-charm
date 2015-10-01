@@ -67,8 +67,8 @@ def valid_config():
                                    '(from {!r} to {!r}).'
                                    ''.format(name, config.previous(name),
                                              config.get('name')))
-        if config.changed('version') and (config.previous('version')
-                                          != postgresql.version()):
+        if config.changed('version') and (config.previous('version') !=
+                                          postgresql.version()):
             valid = False
             helpers.status_set('blocked',
                                'Cannot change version after install '
@@ -140,10 +140,10 @@ def wait_for_leader():
 def configure_sources():
     config = hookenv.config()
 
-    if not (config.changed('install_sources')
-            or config.changed('install_keys')
-            or config.changed('pgdg')
-            or config.changed('wal_e_storage_uri')):
+    if not (config.changed('install_sources') or
+            config.changed('install_keys') or
+            config.changed('pgdg') or
+            config.changed('wal_e_storage_uri')):
         hookenv.log('Sources unchanged')
         return
 
@@ -591,8 +591,8 @@ def ensure_viable_postgresql_conf(opts):
 
     # Having two config options for the one setting is confusing. Perhaps
     # we should deprecate this.
-    if num_standbys and (int(config['replicated_wal_keep_segments'])
-                         > int(opts.get('wal_keep_segments', 0))):
+    if num_standbys and (int(config['replicated_wal_keep_segments']) >
+                         int(opts.get('wal_keep_segments', 0))):
         force(wal_keep_segments=config['replicated_wal_keep_segments'])
 
     # Log shipping with WAL-E.
