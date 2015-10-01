@@ -478,7 +478,7 @@ class PG92Tests(PGBaseTestCase, unittest.TestCase):
     test_config = dict(version='9.2', pgdg=True)
 
 
-class PG92MultiTests(PGBaseTestCase, unittest.TestCase):
+class PG92MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     test_config = dict(version='9.2', pgdg=True)
 
 
