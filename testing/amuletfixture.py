@@ -22,6 +22,8 @@ import tempfile
 import time
 
 import amulet
+import amulet.helpers
+import amulet.sentry
 import yaml
 
 
@@ -99,6 +101,29 @@ class AmuletFixture(amulet.Deployment):
         for temp_dir in self._temp_dirs:
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def add_unit(self, service, units=1, target=None, timeout=None):
+        # Work around Bug #1510000
+        if not isinstance(units, int) or units < 1:
+            raise ValueError('Only positive integers can be used for units')
+        if target is not None and units != 1:
+            raise ValueError(
+                "Can't deploy more than one unit when specifying a target.")
+        if service not in self.services:
+            raise ValueError('Service needs to be added before you can scale')
+
+        self.services[service]['num_units'] = \
+            self.services[service].get('num_units', 1) + units
+
+        if self.deployed:
+            args = ['add-unit', service, '-n', str(units)]
+            if target is not None:
+                args.extend(["--to", target])
+            amulet.helpers.juju(args)
+            if timeout is None:
+                timeout = int(os.environ.get('AMULET_TIMEOUT', 900))
+            self.sentry = amulet.sentry.Talisman(self.services,
+                                                 timeout=timeout)
 
     def get_status(self):
         try:
