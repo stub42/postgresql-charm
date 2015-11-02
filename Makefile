@@ -21,12 +21,12 @@ ifeq ($(HOST_SERIES),trusty)
 	sudo apt-get install -y \
 	    python3-psycopg2 python3-nose python3-flake8 amulet \
 	    python3-jinja2 python3-yaml juju-wait bzr python3-amulet \
-	    python-swiftclient
+	    python-swiftclient moreutils
 else
 	sudo apt-get install -y \
 	    python3-psycopg2 python3-nose python3-flake8 amulet \
 	    python3-jinja2 python3-yaml juju-wait bzr python3-amulet \
-	    python3-nose-cov python3-nose-timer python-swiftclient
+	    python3-nose-cov python3-nose-timer python-swiftclient moreutils
 endif
 
 lint:
