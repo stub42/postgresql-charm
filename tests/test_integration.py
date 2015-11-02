@@ -237,8 +237,9 @@ class PGBaseTestCase(object):
         # The new process group is to ensure we can reap all the ssh
         # tunnels, as simply killing the 'juju ssh' process doesn't seem
         # to be enough.
+        client_unit = self.deployment.sentry['client'][0].info['unit_name']
         tunnel_cmd = [
-            'juju', 'ssh', 'client/0', '-q', '-N', '-L',
+            'juju', 'ssh', client_unit, '-q', '-N', '-L',
             '{}:{}:{}'.format(local_port, relinfo['host'], relinfo['port'])]
         tunnel_proc = subprocess.Popen(
             tunnel_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -343,11 +344,12 @@ class PGBaseTestCase(object):
                 self.assertEquals(1, cur.fetchone()[0])
 
     def test_explicit_database(self):
-        relid = subprocess.check_output(['juju', 'run', '--unit', 'client/0',
-                                        'relation-ids db'],
+        client_unit = self.deployment.sentry['client'][0].info['unit_name']
+        relid = subprocess.check_output(['juju', 'run', '--unit',
+                                        client_unit, 'relation-ids db'],
                                         stderr=subprocess.DEVNULL,
                                         universal_newlines=True).strip()
-        subprocess.check_call(['juju', 'run', '--unit', 'client/0',
+        subprocess.check_call(['juju', 'run', '--unit', client_unit,
                                'relation-set -r {} database=explicit'
                                ''.format(relid)],
                               stderr=subprocess.DEVNULL,
