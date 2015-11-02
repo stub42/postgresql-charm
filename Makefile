@@ -65,7 +65,7 @@ coverage:
 		(gnome-open coverage/index.html; false)
 
 integration:
-	${TIMING_NOSE} tests/test_integration.py
+	${TIMING_NOSE} tests/test_integration.py 2>&1 | ts
 	@echo OK: Integration tests pass `date`
 
 sync:
@@ -78,5 +78,5 @@ sync:
 
 # These targets are to separate the test output in the Charm CI system
 test_integration.py%:
-	${TIMING_NOSE} tests/$@
+	${TIMING_NOSE} tests/$@ 2>&1 | ts
 	@echo OK: $@ tests pass `date`
