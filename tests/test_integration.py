@@ -392,6 +392,7 @@ class PGMultiBaseTestCase(PGBaseTestCase):
     def test_replication(self):
         self._replication_test()
 
+    @unittest.skip('Bug #1511659')
     def test_failover(self):
         # Destroy the master in a stable environment.
         self.deployment.add_unit('postgresql')
@@ -415,7 +416,7 @@ class PGMultiBaseTestCase(PGBaseTestCase):
 
         self._replication_test()
 
-    @unittest.skip("Race fail - new master not appointed")
+    @unittest.skip('Bug #1511659')
     def test_failover_harsh(self):
         # Destroy the master at the same time as adding a new unit.
         self.deployment.destroy_unit(self.master)
