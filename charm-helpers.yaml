@@ -1,4 +1,4 @@
-destination: hooks/charmhelpers
+destination: lib/charmhelpers
 branch: lp:~stub/charm-helpers/integration
 include:
     - context
