@@ -16,8 +16,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from charmhelpers import fetch
-from charmhelpers.core import hookenv
+import os.path
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, 'lib'))
+
+from charmhelpers import fetch  # NOQA: flake8
+from charmhelpers.core import hookenv  # NOQA: flake8
+from charms.reactive import main  # NOQA: flake8
 
 
 def bootstrap():
@@ -37,21 +44,13 @@ def block_on_bad_juju():
         raise SystemExit(1)
 
 
-def upgrade_charm():
-    block_on_bad_juju()
-    # This needs to be imported after bootstrap() or required Python
-    # packages may not have been installed.
-    import upgrade
-    upgrade.upgrade_charm()
-
-
 def default_hook():
-    block_on_bad_juju()
-    # This needs to be imported after bootstrap() or required Python
-    # packages may not have been installed.
-    import definitions
-
     hookenv.log('*** Start {!r} hook'.format(hookenv.hook_name()))
-    sm = definitions.get_service_manager()
-    sm.manage()
+    block_on_bad_juju()
+    bootstrap()
+    main()
     hookenv.log('*** End {!r} hook'.format(hookenv.hook_name()))
+
+
+if __name__ == '__main__':
+    default_hook()
