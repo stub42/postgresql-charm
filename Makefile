@@ -50,8 +50,8 @@ lint:
 	@echo "Lint check (flake8)"
 	@flake8 -v \
             --ignore=E402 \
-	    --exclude=hooks/charmhelpers,__pycache__ \
-	    hooks actions testing tests
+	    --exclude=lib/charmhelpers,lib/pypi,__pycache__ \
+	    hooks actions testing tests reactive lib
 
 _co=,
 _empty=
@@ -85,24 +85,23 @@ integration:
 
 sync: sync-charmhelpers sync-pypi
 
+# Embed from a branch, as we often will need patches applied.
 sync-charmhelpers:
-	# Embed charm helpers from a branch, as history shows we are
-	# rarely running an unmodified release.
 	@bzr cat \
 	    lp:charm-helpers/tools/charm_helpers_sync/charm_helpers_sync.py \
 		> .charm_helpers_sync.py
 	rm -rf lib/charmhelpers
 	@python .charm_helpers_sync.py -c charm-helpers.yaml
 	@rm .charm_helpers_sync.py
-	git add lib/charmhelpers
+	git add -A lib/charmhelpers
 
 	
+# Embed pure python pypi dependencies.
 sync-pypi:
-	# Embed required Python libraries not available as debs.
 	rm -rf lib/pypi
 	mkdir lib/pypi
 	pip3 install --no-compile --no-deps -t lib/pypi charms.reactive
-	git add lib/pypi
+	git add -A lib/pypi
 
 
 # These targets are to separate the test output in the Charm CI system

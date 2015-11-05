@@ -18,26 +18,24 @@ import os.path
 
 from charmhelpers import context
 from charmhelpers.core import hookenv, host
+from charms import reactive
+from charms.reactive import hook
 
-import helpers
-import postgresql
+from reactive import leadership
+from reactive import workloadstatus
+from reactive.postgresql import postgresql
+from reactive.postgresql import replication
 
 
+@hook('upgrade-charm')
 def upgrade_charm():
-    helpers.status_set('maintenance', 'Upgrading charm')
-
-    config = hookenv.config()
-
-    # We can no longer run preinstall 'only in the install hook',
-    # because the first hook may now be a leader hook or a storage hook.
-    # Set the new flag so it doesn't run.
-    config['preinstall_done'] = True
+    workloadstatus.status_set('maintenance', 'Upgrading charm')
 
     rels = context.Relations()
 
     # The master is now appointed by the leader.
     if hookenv.is_leader():
-        master = postgresql.master()
+        master = replication.get_master()
         if not master:
             master = hookenv.local_unit()
             if rels.peer:
@@ -46,24 +44,12 @@ def upgrade_charm():
                         master = peer_relinfo.unit
                         break
             hookenv.log('Discovered {} is the master'.format(master))
-            hookenv.leader_set(master=master)
+            leadership.leader_set(master=master)
 
-    # The name of this crontab has changed. It will get regenerated in
-    # config-changed.
+    # The name of this crontab has changed. It will get regenerated.
     if os.path.exists('/etc/cron.d/postgresql'):
         hookenv.log('Removing old crontab')
         os.unlink('/etc/cron.d/postgresql')
-
-    # config.changed('recovery_conf') is used to detect changes requiring
-    # a restart.
-    recovery_conf_path = postgresql.recovery_conf_path()
-    if os.path.exists(recovery_conf_path):
-        hookenv.log('Caching recovery.conf for change detection')
-        with open(recovery_conf_path, 'r') as f:
-            config['recovery_conf'] = f.read()
-    else:
-        hookenv.log('No recovery.conf')
-        config['recovery_conf'] = None
 
     # Older generated usernames where generated from the relation id,
     # and really old ones contained random components. This made it
@@ -98,6 +84,14 @@ def upgrade_charm():
     for client_rel in rels['db-admin'].values():
         if client_rel.local.get('database') == 'all':
             client_rel.local['database'] = client_rel.service
+
+    # Reconfigure PostgreSQL and republish client relations.
+    reactive.remove_state('postgresql.cluster.configured')
+    reactive.remove_state('postgresql.client.published')
+
+    # Set the postgresql.replication.cloned flag, so we don't rebuild
+    # standbys when upgrading the charm from a pre-reactive version.
+    reactive.set_state('postgresql.replication.cloned')
 
 
 def migrate_user(old_username, new_username, password, superuser=False):

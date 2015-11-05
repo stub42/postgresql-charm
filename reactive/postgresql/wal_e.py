@@ -20,15 +20,34 @@ from urllib.parse import urlparse
 
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import ERROR
+from charms import reactive
+from charms.reactive import only_once, when, when_not
 
-from decorators import data_ready_action, leader_only
-import helpers
-import postgresql
+from everyhook import everyhook
+
+from reactive import apt
+
+from reactive.postgresql import helpers
+from reactive.postgresql import postgresql
 
 
-def wal_e_enabled():
-    config = hookenv.config()
-    return bool(config['wal_e_storage_uri'])
+@everyhook
+def main():
+    storage_uri = hookenv.config()['wal_e_storage_uri'].strip()
+    reactive.helpers.toggle_state('postgresql.wal_e.enabled',
+                                  bool(storage_uri))
+    reactive.helpers.toggle_state('postgresql.wal_e.swift',
+                                  storage_uri.startswith('swift:'))
+
+
+@when('postgresql.wal_e.enabled')
+@when_not('apt.installed.wal_e')
+def install():
+    # WAL-E is currently only available from a PPA. This charm and this
+    # PPA are maintained by the same person.
+    hookenv.log('Adding ppa:stub/pgcharm for wal-e packages')
+    apt.add_source('ppa:stub/pgcharm')
+    apt.queue_install(['daemontools', 'wal-e'])
 
 
 def wal_e_env_dir():
@@ -36,12 +55,12 @@ def wal_e_env_dir():
     return os.path.join(postgresql.config_dir(), 'wal-e.env')
 
 
-@data_ready_action
+@when('postgresql.cluster.created')
 def update_wal_e_env_dir():
     '''Regenerate the envdir(1) environment used to drive WAL-E.
 
     We do this even if wal-e is not enabled to ensure we destroy
-    any secrets perhaps left around from when it was enabled.
+    any secrets potentially left around from when it was enabled.
     '''
     config = hookenv.config()
     env = dict(
@@ -123,7 +142,9 @@ def wal_e_prune_command():
             ''.format(wal_e_env_dir(), config['wal_e_backup_retention']))
 
 
-@leader_only
+@when('postgresql.wal_e.swift')
+@when('leadership.is_leader')
+@only_once
 def ensure_swift_container(container):
     cmd = ['envdir', wal_e_env_dir(), 'swift', 'post', container]
     subprocess.check_call(cmd, universal_newlines=True)

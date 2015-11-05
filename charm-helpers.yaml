@@ -1,6 +1,8 @@
 destination: lib/charmhelpers
-branch: lp:~stub/charm-helpers/integration
+branch: lp:charm-helpers
+# branch: lp:~stub/charm-helpers/integration
 include:
+    - cli
     - context
     - coordinator
     - core

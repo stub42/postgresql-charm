@@ -26,7 +26,14 @@ sys.path.insert(3, os.path.join(ROOT, 'lib', 'pypi'))
 
 from charmhelpers import fetch  # NOQA: flake8
 from charmhelpers.core import hookenv  # NOQA: flake8
+from charmhelpers.core.hookenv import WARNING  # NOQA: flake8
 from charms.reactive import main  # NOQA: flake8
+
+# Work around https://github.com/juju-solutions/charms.reactive/issues/33
+import reactive.apt  # NOQA: flake8
+import reactive.workloadstatus  # NOQA: flake8
+import preflight  # NOQA: flake8
+import everyhook  # NOQA: flake8
 
 
 def bootstrap():
@@ -37,21 +44,21 @@ def bootstrap():
         packages = ['python3-psycopg2', 'python3-jinja2']
         fetch.apt_install(packages, fatal=True)
         import psycopg2  # NOQA: flake8
-
-
-def block_on_bad_juju():
-    if not hookenv.has_juju_version('1.24'):
-        hookenv.status_set('blocked', 'Requires Juju 1.24 or higher')
-        # Error state, since we don't have 1.24 to give a nice blocked state.
-        raise SystemExit(1)
+        import jinja2  # NOQA: flake8
 
 
 def default_hook():
     hookenv.log('*** Start {!r} hook'.format(hookenv.hook_name()))
-    block_on_bad_juju()
     bootstrap()
-    main()
-    hookenv.log('*** End {!r} hook'.format(hookenv.hook_name()))
+
+    # Kick off the charms.reactive reactor.
+    try:
+        main()
+        hookenv.log('*** {!r} hook completed'.format(hookenv.hook_name()))
+    except SystemExit as x:
+        hookenv.log('*** {!r} hook aborted code {}'.format(hookenv.hook_name(),
+                                                           x.code), WARNING)
+        raise
 
 
 if __name__ == '__main__':

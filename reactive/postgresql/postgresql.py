@@ -32,9 +32,8 @@ from charmhelpers import context
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG, WARNING
 
-from coordinator import coordinator
-import helpers
-import wal_e
+from reactive.postgresql import helpers
+from reactive import workloadstatus
 
 
 @functools.total_ordering
@@ -219,26 +218,6 @@ def is_secondary():
     Hot standbys are read only replicas.
     '''
     return os.path.exists(recovery_conf_path())
-
-
-def is_master():
-    '''True if the unit is the master.
-
-    The master unit is responsible for creating objects in the database.
-    The service has at most one master, and may have no master during
-    transitional states like failover. If recently promoted, the master
-    may not yet be a primary.
-    '''
-    return master() == hookenv.local_unit()
-
-
-def master():
-    '''Return the master unit.
-
-    May return None if there we are in a transitional state and there
-    is currently no master.
-    '''
-    return hookenv.leader_get('master')
 
 
 def quote_identifier(identifier):
@@ -465,7 +444,7 @@ def start():
     except subprocess.CalledProcessError as x:
         if x.returncode == 2:
             return  # The server is already running.
-        helpers.status_set('blocked', 'PostgreSQL failed to start')
+        workloadstatus.status_set('blocked', 'PostgreSQL failed to start')
         raise SystemExit(0)
 
 
@@ -493,7 +472,7 @@ def stop():
     except subprocess.CalledProcessError as x:
         if x.returncode == 2:
             return  # The server was not running.
-        helpers.status_set('blocked', 'Unable to shutdown PostgreSQL')
+        workloadstatus.status_set('blocked', 'Unable to shutdown PostgreSQL')
         raise SystemExit(0)
 
 
@@ -552,8 +531,8 @@ def parse_config(unparsed_config, fatal=True):
                 x.lineno = lineno
                 x.text = line
                 raise x
-            helpers.status_set('blocked', '{} line {}: {}'.format(x, lineno,
-                                                                  line))
+            workloadstatus.status_set('blocked',
+                                      '{} line {}: {}'.format(x, lineno, line))
             raise SystemExit(0)
     return parsed
 
@@ -672,21 +651,21 @@ def wal_location_to_bytes(wal_location):
     return int(logid, 16) * 16 * 1024 * 1024 * 255 + int(offset, 16)
 
 
-def promote():
-    assert is_secondary(), 'Cannot promote primary'
-    assert is_running(), 'Attempting to promote a stopped server'
-
-    # TODO: If we publish the history files to the peer relation,
-    # we can do a timeline switch with all PG versions.
-    if has_version('9.3') or wal_e.wal_e_enabled():
-        rc = subprocess.call(['sudo', '-u', 'postgres', '-H',
-                              pg_ctl_path(), 'promote', '-D', data_dir()],
-                             universal_newlines=True)
-        if rc != 0:
-            helpers.status_set('blocked', 'Failed to promote to primary')
-            raise SystemExit(0)
-    else:
-        # Removing recovery.conf will promote the unit to master without
-        # a timeline switch when PostgreSQL is restarted.
-        os.unlink(recovery_conf_path())
-        coordinator.acquire('restart')
+# def promote():
+#     assert is_secondary(), 'Cannot promote primary'
+#     assert is_running(), 'Attempting to promote a stopped server'
+#
+#     # TODO: If we publish the history files to the peer relation,
+#     # we can do a timeline switch with all PG versions.
+#     if has_version('9.3') or wal_e.wal_e_enabled():
+#         rc = subprocess.call(['sudo', '-u', 'postgres', '-H',
+#                               pg_ctl_path(), 'promote', '-D', data_dir()],
+#                              universal_newlines=True)
+#         if rc != 0:
+#             helpers.status_set('blocked', 'Failed to promote to primary')
+#             raise SystemExit(0)
+#     else:
+#         # Removing recovery.conf will promote the unit to master without
+#         # a timeline switch when PostgreSQL is restarted.
+#         os.unlink(recovery_conf_path())
+#         coordinator.acquire('restart')

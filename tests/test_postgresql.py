@@ -21,17 +21,22 @@ from textwrap import dedent
 import unittest
 from unittest.mock import ANY, call, MagicMock, patch, sentinel
 
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, 'hooks'))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.insert(1, ROOT)
+sys.path.insert(2, os.path.join(ROOT, 'lib'))
+sys.path.insert(3, os.path.join(ROOT, 'lib', 'pypi'))
 
 from charmhelpers import context
 from charmhelpers.core import hookenv
 
-import postgresql
+from reactive import workloadstatus
+from reactive.postgresql import helpers
+from reactive.postgresql import postgresql
 
 
 class TestPostgresql(unittest.TestCase):
     @patch.object(hookenv, 'config')
-    @patch('helpers.distro_codename')
+    @patch.object(helpers, 'distro_codename')
     def test_version(self, codename, config):
         # Explicit version in config.
         config.return_value = {'version': sentinel.version}
@@ -51,7 +56,7 @@ class TestPostgresql(unittest.TestCase):
         with self.assertRaises(KeyError):
             postgresql.version()
 
-    @patch('postgresql.version')
+    @patch.object(postgresql, 'version')
     def test_has_version(self, version):
         version.return_value = '9.4'
         self.assertTrue(postgresql.has_version('9.1'))
@@ -60,7 +65,7 @@ class TestPostgresql(unittest.TestCase):
 
     @patch.object(hookenv, 'local_unit')
     @patch.object(context, 'Relations')
-    @patch('postgresql.port')
+    @patch.object(postgresql, 'port')
     @patch('psycopg2.connect')
     def test_connect(self, psycopg2_connect, port, rels, local_unit):
         psycopg2_connect.return_value = sentinel.connection
@@ -112,7 +117,7 @@ class TestPostgresql(unittest.TestCase):
         self.assertEqual(postgresql.username('hello', False, True),
                          'jujurepl_hello')
 
-    @patch('postgresql.postgresql_conf_path')
+    @patch.object(postgresql, 'postgresql_conf_path')
     def test_port(self, pgconf_path):
         # Pull the configured port from postgresql.conf.
         with tempfile.NamedTemporaryFile('w') as pgconf:
@@ -133,7 +138,7 @@ class TestPostgresql(unittest.TestCase):
             pgconf_path.return_value = pgconf.name
             self.assertEqual(postgresql.port(), 5432)  # Fallback to default.
 
-    @patch('postgresql.version')
+    @patch.object(postgresql, 'version')
     def test_packages(self, version):
         version.return_value = '9.9'
         expected = set(['postgresql-9.9', 'postgresql-common',
@@ -142,7 +147,7 @@ class TestPostgresql(unittest.TestCase):
         self.assertSetEqual(postgresql.packages(), expected)
 
     @patch('os.makedirs')
-    @patch('postgresql.postgresql_conf_path')
+    @patch.object(postgresql, 'postgresql_conf_path')
     def test_inhibit_default_cluster_creation(self, pgconf_path, makedirs):
         # If the postgresql.conf file already exists for the default
         # cluster, package installation will not recreate the default
@@ -166,7 +171,7 @@ class TestPostgresql(unittest.TestCase):
             makedirs.assert_called_once_with(os.path.dirname(f.name),
                                              mode=0o755, exist_ok=True)
 
-    @patch('postgresql.version')
+    @patch.object(postgresql, 'version')
     def test_simple_paths(self, version):
         # We have a pile of trivial helpers to get directory and file
         # paths. We use these for consistency and ease of mocking.
@@ -188,7 +193,7 @@ class TestPostgresql(unittest.TestCase):
         self.assertEqual(postgresql.postgres_path(),
                          '/usr/lib/postgresql/9.9/bin/postgres')
 
-    @patch('postgresql.connect')
+    @patch.object(postgresql, 'connect')
     def test_is_in_recovery(self, connect):
         connect().cursor().fetchone.return_value = [sentinel.flag]
         connect().cursor.reset_mock()
@@ -201,14 +206,14 @@ class TestPostgresql(unittest.TestCase):
         connect().cursor().execute.assert_called_once_with(
             'SELECT pg_is_in_recovery()')
 
-    @patch('postgresql.is_secondary')
+    @patch.object(postgresql, 'is_secondary')
     def test_is_primary(self, is_secondary):
         is_secondary.return_value = True
         self.assertFalse(postgresql.is_primary())
         is_secondary.return_value = False
         self.assertTrue(postgresql.is_primary())
 
-    @patch('postgresql.recovery_conf_path')
+    @patch.object(postgresql, 'recovery_conf_path')
     def test_is_secondary(self, recovery_path):
         # if recovery.conf exists, we are a secondary.
         with tempfile.NamedTemporaryFile() as f:
@@ -217,7 +222,7 @@ class TestPostgresql(unittest.TestCase):
         self.assertFalse(postgresql.is_secondary())
 
     @patch.object(hookenv, 'local_unit')
-    @patch('postgresql.master')
+    @patch.object(postgresql, 'master')
     def is_master(self, master, local_unit):
         master.return_value = sentinel.master
         local_unit.return_value = sentinel.other
@@ -252,7 +257,7 @@ class TestPostgresql(unittest.TestCase):
 
     @patch('subprocess.check_call')
     @patch.object(hookenv, 'config')
-    @patch('postgresql.version')
+    @patch.object(postgresql, 'version')
     def test_create_cluster(self, version, config, check_call):
         version.return_value = '9.9'
         config.return_value = {'locale': sentinel.locale,
@@ -278,14 +283,14 @@ class TestPostgresql(unittest.TestCase):
                                            universal_newlines=True)
 
     @patch('subprocess.check_call')
-    @patch('postgresql.version')
+    @patch.object(postgresql, 'version')
     def test_drop_cluster(self, version, check_call):
         version.return_value = '9.9'
         postgresql.drop_cluster()
         check_call.assert_called_once_with(['pg_dropcluster', '9.9', 'main'],
                                            universal_newlines=True)
 
-    @patch('postgresql.connect')
+    @patch.object(postgresql, 'connect')
     def test_ensure_database(self, connect):
         cur = connect().cursor()
 
@@ -308,8 +313,8 @@ class TestPostgresql(unittest.TestCase):
         self.assertIsInstance(quoted_dbname, postgresql.AsIs)
         self.assertEqual(str(quoted_dbname), '"hello"')
 
-    @patch('postgresql.pgidentifier')
-    @patch('postgresql.role_exists')
+    @patch.object(postgresql, 'pgidentifier')
+    @patch.object(postgresql, 'role_exists')
     def test_ensure_user(self, role_exists, pgidentifier):
         con = MagicMock()
         cur = con.cursor()
@@ -373,8 +378,8 @@ class TestPostgresql(unittest.TestCase):
                   postgresql.AsIs('"a_DB"'), postgresql.AsIs('"a_Role"')))])
 
     @patch.object(hookenv, 'log')
-    @patch('postgresql.ensure_role')
-    @patch('postgresql.pgidentifier')
+    @patch.object(postgresql, 'ensure_role')
+    @patch.object(postgresql, 'pgidentifier')
     def test_grant_user_roles(self, pgidentifier, ensure_role, log):
         pgidentifier.side_effect = lambda d: 'q_{}'.format(d)
 
@@ -405,7 +410,7 @@ class TestPostgresql(unittest.TestCase):
             call(role_query, ('fred',)),
             call('GRANT %s TO %s', ('q_roleC', 'q_fred'))])
 
-    @patch('postgresql.pgidentifier')
+    @patch.object(postgresql, 'pgidentifier')
     def test_ensure_role(self, pgidentifier):
         con = MagicMock()
         cur = con.cursor()
@@ -425,7 +430,7 @@ class TestPostgresql(unittest.TestCase):
                                     ('q_roleA',))
 
     @patch.object(hookenv, 'log')
-    @patch('postgresql.pgidentifier')
+    @patch.object(postgresql, 'pgidentifier')
     def test_ensure_extensions(self, pgidentifier, log):
         con = MagicMock()
         cur = con.cursor()
@@ -452,9 +457,9 @@ class TestPostgresql(unittest.TestCase):
             with self.subTest(addr=addr):
                 self.assertEqual(postgresql.addr_to_range(addr), addr_range)
 
-    @patch('postgresql.version')
-    @patch('postgresql.data_dir')
-    @patch('postgresql.pg_ctl_path')
+    @patch.object(postgresql, 'version')
+    @patch.object(postgresql, 'data_dir')
+    @patch.object(postgresql, 'pg_ctl_path')
     @patch('subprocess.check_call')
     def test_is_running(self, check_call, pg_ctl_path, data_dir, version):
         version.return_value = '9.2'
@@ -493,10 +498,10 @@ class TestPostgresql(unittest.TestCase):
             postgresql.is_running()
         self.assertEqual(x.exception.returncode, 42)
 
-    @patch('postgresql.pid_path')
-    @patch('postgresql.version')
-    @patch('postgresql.data_dir')
-    @patch('postgresql.pg_ctl_path')
+    @patch.object(postgresql, 'pid_path')
+    @patch.object(postgresql, 'version')
+    @patch.object(postgresql, 'data_dir')
+    @patch.object(postgresql, 'pg_ctl_path')
     @patch('subprocess.check_call')
     def test_is_running_91(self, check_call, pg_ctl_path, data_dir, version,
                            pid_path):
@@ -530,9 +535,9 @@ class TestPostgresql(unittest.TestCase):
             postgresql.is_running()
         self.assertEqual(x.exception.returncode, 42)
 
-    @patch('helpers.status_set')
+    @patch.object(workloadstatus, 'status_set')
     @patch('subprocess.check_call')
-    @patch('postgresql.version')
+    @patch.object(postgresql, 'version')
     def test_start(self, version, check_call, status_set):
         version.return_value = '9.9'
 
@@ -565,9 +570,9 @@ class TestPostgresql(unittest.TestCase):
         self.assertEqual(x.exception.code, 0)  # Terminated without error
 
     @patch.object(hookenv, 'log')
-    @patch('helpers.status_set')
+    @patch.object(workloadstatus, 'status_set')
     @patch('subprocess.check_call')
-    @patch('postgresql.version')
+    @patch.object(postgresql, 'version')
     def test_stop(self, version, check_call, status_set, log):
         version.return_value = '9.9'
 
@@ -613,7 +618,7 @@ class TestPostgresql(unittest.TestCase):
         self.assertEqual(x.exception.code, 0)  # Exit cleanly
 
     @patch('subprocess.check_call')
-    @patch('postgresql.version')
+    @patch.object(postgresql, 'version')
     def test_reload_config(self, version, check_call):
         version.return_value = '9.9'
         postgresql.reload_config()

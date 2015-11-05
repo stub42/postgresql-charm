@@ -14,20 +14,66 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from charmhelpers import context
 from charmhelpers.core import hookenv, host
+from charms import reactive
+from charms.reactive import not_unless, when, when_not
 
-from decorators import relation_handler, master_only
-import helpers
-import postgresql
+from reactive.postgresql import replication
+from reactive.postgresql import postgresql
+
+from everyhook import everyhook
 
 
-@relation_handler('db', 'db-admin', 'master')
-def publish_db_relations(rel):
-    if postgresql.is_master():
-        db_relation_master(rel)
-    else:
-        db_relation_mirror(rel)
-    db_relation_common(rel)
+# @hook('{interface:pgsql}-relation-changed',
+#       'replication-relation-changed',
+#       'leader-settings-changed',
+#       'leader-elected',
+#       'config-changed',
+#       'upgrade-charm')
+@everyhook
+def publish_client_relations():
+    reactive.remove_state('postgresql.client.published')
+
+
+CLIENT_RELNAMES = frozenset(['db', 'db-admin', 'master'])
+
+
+@when('postgresql.replication.is_master')
+@when('postgresql.cluster.is_running')
+@when_not('postgresql.client.published')
+def master_provides():
+    '''The master publishes client connection details.
+
+    Note that this may not be happening in the -relation-changed
+    hook, as this unit may not have been the master when the relation
+    was joined.
+    '''
+    rels = context.Relations()
+    for relname in CLIENT_RELNAMES:
+        for rel in rels[relname].values():
+            db_relation_master(rel)
+            db_relation_common(rel)
+            ensure_db_relation_resources(rel)
+    reactive.set_state('postgresql.client.published')
+
+
+@when('postgresql.replication.master.authorized')
+@when('postgresql.cluster.is_running')
+@when_not('postgresql.client.published')
+def mirror_master():
+    '''A standby mirrors client connection details from the master.
+
+    The master pings its peers using the peer relation to ensure a hook
+    is invoked and this handler called after the credentials have been
+    published.
+    '''
+    rels = context.Relations()
+    for relname in CLIENT_RELNAMES:
+        for rel in rels[relname].values():
+            db_relation_mirror(rel)
+            db_relation_common(rel)
+    reactive.set_state('postgresql.client.published')
 
 
 def _credential_types(rel):
@@ -36,6 +82,7 @@ def _credential_types(rel):
     return (superuser, replication)
 
 
+@not_unless('postgresql.replication.is_master')
 def db_relation_master(rel):
     '''The master generates credentials and negotiates resources.'''
     master = rel.local
@@ -82,7 +129,7 @@ def db_relation_master(rel):
 
 def db_relation_mirror(rel):
     '''Non-masters mirror relation information from the master.'''
-    master = postgresql.master()
+    master = replication.get_master()
     master_keys = ['database', 'user', 'password', 'roles',
                    'schema_user', 'schema_password', 'extensions']
     master_info = rel.peers.get(master)
@@ -107,12 +154,16 @@ def db_relation_common(rel):
     # Calculate the state of this unit. 'standalone' will disappear
     # in a future version of this interface, as this state was
     # only needed to deal with race conditions now solved by
-    # Juju leadership.
+    # Juju leadership. We check for is_primary() rather than
+    # the postgresql.replication.is_master reactive state to
+    # publish the correct state when we are using manual replication
+    # (there might be multiple independent masters, possibly useful for
+    # sharding, or perhaps this is a multi master BDR setup).
     if postgresql.is_primary():
-        if hookenv.is_leader() and len(helpers.peers()) == 0:
-            local['state'] = 'standalone'
-        else:
+        if reactive.helpers.is_state('postgresql.replication.has_peers'):
             local['state'] = 'master'
+        else:
+            local['state'] = 'standalone'
     else:
         local['state'] = 'hot standby'
 
@@ -132,8 +183,6 @@ def db_relation_common(rel):
     local['allowed-units'] = ' '.join(rel.keys())
 
 
-@master_only
-@relation_handler('db', 'db-admin', 'master')
 def ensure_db_relation_resources(rel):
     '''Create the database resources needed for the relation.'''
 

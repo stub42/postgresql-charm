@@ -22,134 +22,71 @@ import time
 import yaml
 
 from charmhelpers import context
-from charmhelpers.core import hookenv, host, sysctl, templating
+from charmhelpers.core import hookenv, host, sysctl, templating, unitdata
 from charmhelpers.core.hookenv import DEBUG, WARNING
-from charmhelpers import fetch
-from charmhelpers.payload import execd
+from charms import reactive
+from charms.reactive import not_unless, only_once, when, when_not
+from charms.reactive.decorators import when_file_changed
 
-from coordinator import coordinator
-from decorators import (data_ready_action, requirement,
-                        leader_only, not_leader, not_master)
-import helpers
-import nagios
-import postgresql
-import replication
-import wal_e
+from reactive import apt
+from reactive import coordinator
+from reactive.workloadstatus import status_set
+
+from reactive.postgresql import helpers
+from reactive.postgresql import postgresql
+from reactive.postgresql import replication
+from reactive.postgresql import wal_e
+
+from everyhook import everyhook
 
 
-@requirement
-def valid_config():
-    """
-    Sanity check charm configuration, blocking the unit if we have
-    bogus bogus config values or config changes the charm does not
-    yet (or cannot) support.
-    """
-    valid = True
+@everyhook
+def main():
+    generate_locale()
+    configure_sources()
+
+    # Don't trust this state from the last hook. Daemons may have
+    # crashed and servers rebooted since then.
+    if reactive.is_state('postgresql.cluster.created'):
+        reactive.toggle_state('postgresql.cluster.is_running',
+                              postgresql.is_running())
+
+    # Reconfigure PostgreSQL.
+    reactive.remove_state('postgresql.cluster.configured')
+
+
+def emit_deprecated_option_warnings():
+    deprecated = sorted(helpers.deprecated_config_in_use())
+    if deprecated:
+        hookenv.log('Deprecated configuration settings in use: {}'
+                    ', '.join(deprecated), WARNING)
+
+
+# emit_deprecated_option_warnings is called at the end of the hook
+# so that the warnings to appear clearly at the end of the logs.
+hookenv.atexit(emit_deprecated_option_warnings)
+
+
+@only_once
+def generate_locale():
+    '''Ensure that the requested database locale is available.
+
+    The locale cannot be changed post deployment, as this would involve
+    completely destroying and recreding the database.
+    '''
     config = hookenv.config()
-
-    enums = dict(version=set(['', '9.1', '9.2', '9.3', '9.4']),
-                 package_status=set(['install', 'hold']))
-    for key, vals in enums.items():
-        config[key] = config[key].lower()  # Rewrite to lower case.
-        if config[key] not in vals:
-            valid = False
-            helpers.status_set('blocked',
-                               'Invalid value for {} ({!r})'
-                               .format(key, config[key]))
-
-    unchangeable_config = ['locale', 'encoding', 'pgdg', 'manual_replication']
-    if config._prev_dict is not None:
-        for name in unchangeable_config:
-            if config.changed(name):
-                config[name] = config.previous(name)
-                valid = False
-                helpers.status_set('blocked',
-                                   'Cannot change {!r} after install '
-                                   '(from {!r} to {!r}).'
-                                   ''.format(name, config.previous(name),
-                                             config.get('name')))
-        if config.changed('version') and (config.previous('version') !=
-                                          postgresql.version()):
-            valid = False
-            helpers.status_set('blocked',
-                               'Cannot change version after install '
-                               '(from {!r} to {!r}).'
-                               ''.format(config.previous('version'),
-                                         config['version']))
-            config['version'] = config.previous('version')
-            valid = False
-
-    return valid
+    if config['locale'] != 'C':
+        status_set('maintenance',
+                   'Generating {} locale'.format(config['locale']))
+        subprocess.check_call(['locale-gen',
+                               '{}.{}'.format(hookenv.config('locale'),
+                                              hookenv.config('encoding'))],
+                              universal_newlines=True)
 
 
-@data_ready_action
-def preinstall():
-    '''Invoke charmhelpers.payload.execd.execd_run for site customization.'''
-    # Only run the preinstall hooks once, in the first hook. This is
-    # either the leader-elected hook or the install hook.
-    config = hookenv.config()
-    if not config.get('preinstall_done'):
-        helpers.status_set('maintenance', 'Running preinstallation hooks')
-        try:
-            execd.execd_run('charm-pre-install', die_on_error=True)
-            config['preinstall_done'] = True
-        except SystemExit:
-            helpers.block('execd_preinstall failed')
-            raise SystemExit(0)
-
-
-@not_master
-@data_ready_action
-def wait_for_peers():
-    """Terminate the hook there are no peers and we are not the master.
-
-    If this is the master and there are no peers, then we are standalone.
-
-    Stopping here with such an incomplete state makes following hooks
-    simpler, as they do not need to cope with many pathalogical states
-    such as those that occur during service teardown.
-    """
-    if context.Relations().peer is None and not postgresql.is_master():
-        helpers.status_set('waiting', 'Waiting to join the peer relation')
-        raise SystemExit(0)
-
-
-@not_leader
-@data_ready_action
-def wait_for_leader():
-    """Terminate the hook if required leadership settings do not exist.
-
-    This should only happen on upgrade-charm if new required leadership
-    settings have been added. We can't ensure the new leadership settings
-    are added in the upgrade-charm hook because we cannot ensure that
-    the leader's upgrade-charm hook is run before non-leader config-changed
-    hooks are run.
-
-    This will no longer be required if Bug #1484930 can be addressed.
-    """
-    required_keys = ['master', 'nagios_password']
-
-    leader = context.Leader()
-    for key in required_keys:
-        if key not in leader:
-            hookenv.status_set('waiting',
-                               'Waiting for leader to set {}'.format(key))
-            raise SystemExit(0)
-
-
-@data_ready_action
 def configure_sources():
+    '''Add the apt sources necessary for the configuration options selected.'''
     config = hookenv.config()
-
-    if not (config.changed('install_sources') or
-            config.changed('install_keys') or
-            config.changed('pgdg') or
-            config.changed('wal_e_storage_uri')):
-        hookenv.log('Sources unchanged')
-        return
-
-    helpers.status_set(hookenv.status_get(),
-                       'Configuring software sources')
 
     # Shortcut for the PGDG archive.
     if config['pgdg'] and config.changed('pgdg'):
@@ -159,146 +96,60 @@ def configure_sources():
         pgdg_key_path = os.path.join(hookenv.charm_dir(), 'lib', 'pgdg.key')
         with open(pgdg_key_path, 'r') as f:
             hookenv.log('Adding PGDG archive')
-            fetch.add_source(pgdg_src, f.read())
-
-    # WAL-E is currently only available from a PPA. This charm and this
-    # PPA are maintained by the same person.
-    if config['wal_e_storage_uri'] and config.changed('wal_e_storage_uri'):
-        hookenv.log('Adding ppa:stub/pgcharm for wal-e packages')
-        fetch.add_source('ppa:stub/pgcharm')
-
-    # Standard charm-helpers, using install_sources and install_keys
-    # provided by the operator. Called at the end so all previously
-    # added sources share the apt update.
-    fetch.configure_sources(update=True)
+            apt.add_source(pgdg_src, f.read())
 
 
-@data_ready_action
-def ensure_locale():
-    '''Ensure that the requested database locale is available.'''
+@when_not('apt.installed.postgresql-common')
+@when_not('postgresql.cluster.inhibited')
+def inhibit_default_cluster_creation():
+    '''Stop the PostgreSQL packages from creating the default cluster.
+
+    We can't use the default cluster as it is likely created with an
+    incorrect locale and without options such as data checksumming.
+    '''
+    path = postgresql.postgresql_conf_path()
+    if os.path.exists(path):
+        status_set('blocked', 'postgresql.conf already exists')
+    else:
+        hookenv.log('Inhibiting')
+        os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
+        with open(path, 'w') as f:
+            f.write('# Inhibited')
+        reactive.set_state('postgresql.cluster.inhibited')
+        hookenv.log('Inhibited == {}'
+                    .format(reactive.is_state('postgresql.cluster.inhibited')))
+
+
+@when('apt.installed.postgresql-common', 'postgresql.cluster.inhibited')
+def uninhibit_default_cluster_creation():
+    '''Undo inhibit_default_cluster_creation() so manual creation works.'''
+    hookenv.log('Removing inhibitions')
+    path = postgresql.postgresql_conf_path()
+    with open(path, 'r') as f:
+        assert f.read() == '# Inhibited', 'Default cluster inhibition failed'
+    os.unlink(postgresql.postgresql_conf_path())
+    reactive.remove_state('postgresql.cluster.inhibited')
+
+
+@when('postgresql.cluster.inhibited')
+def install_postgresql_packages():
+    hookenv.log('Inhibited == {}'
+                .format(reactive.is_state('postgresql.cluster.inhibited')))
+    apt.queue_install(postgresql.packages())
+    install_extra_packages()
+
+
+@when('apt.installed.postgresql-common')
+def install_extra_packages():
     config = hookenv.config()
-    if hookenv.hook_name() == 'install' and config['locale'] != 'C':
-        helpers.status_set('maintenance',
-                           'Generating {} locale'.format(config['locale']))
-        subprocess.check_call(['locale-gen',
-                               '{}.{}'.format(hookenv.config('locale'),
-                                              hookenv.config('encoding'))],
-                              universal_newlines=True)
-
-
-@data_ready_action
-def install_packages():
     packages = set(['rsync'])
-    packages.update(postgresql.packages())
-    packages.update(helpers.extra_packages())
-
-    config = hookenv.config()
-    config['packages_installed'] = sorted(packages)
-    if config.changed('packages_installed'):
-        filtered_packages = fetch.filter_installed_packages(packages)
-        helpers.status_set(hookenv.status_get(), 'Installing packages')
-        try:
-            with postgresql.inhibit_default_cluster_creation():
-                fetch.apt_install(filtered_packages, fatal=True)
-        except subprocess.CalledProcessError:
-            helpers.status_set('blocked',
-                               'Unable to install packages {!r}'
-                               .format(filtered_packages))
-            raise SystemExit(0)
+    packages.update(set(config['extra_packages'].split()))
+    packages.update(set(config['extra-packages'].split()))  # Deprecated.
+    apt.queue_install(packages)
 
 
-@data_ready_action
-def ensure_package_status():
-    packages = postgresql.packages()
-    packages.update(helpers.extra_packages())
-
-    config = hookenv.config()
-    config['packages_marked'] = sorted(packages)
-    if config.changed('packages_marked') or config.changed('package_status'):
-        if config['package_status'] == 'hold':
-            helpers.status_set('Holding charm packages')
-            mark = 'hold'
-        else:
-            helpers.status_set('Removing hold on charm packages')
-            mark = 'unhold'
-        fetch.apt_mark(packages, mark, fatal=True)
-
-
-@data_ready_action
-def emit_deprecated_option_warnings():
-    deprecated = sorted(helpers.deprecated_config_in_use())
-    if deprecated:
-        hookenv.log('Deprecated configuration settings in use: {}'
-                    ', '.join(deprecated), WARNING)
-
-
-@data_ready_action
-def ensure_cluster():
-    if not os.path.exists(postgresql.postgresql_conf_path()):
-        data_dir = postgresql.data_dir()
-        assert not os.path.exists(data_dir)
-        postgresql.create_cluster()
-
-
-@leader_only
-@data_ready_action
-def appoint_master():
-    leader = context.Leader()
-    master = postgresql.master()
-    rel = context.Relations().peer
-    local_unit = hookenv.local_unit()
-
-    # TODO: Manual replication mode still needs a master. Detect and pick
-    # the first primary.
-
-    if master is None:
-        hookenv.log('Appointing myself master')
-        leader['master'] = hookenv.local_unit()
-    elif master == local_unit:
-        hookenv.log('I will remain master')
-    elif rel is None:
-        # We cannot tell if this is a new unit being brought online
-        # that happens to be the leader, or if the service is being
-        # destroyed. In any case, terminate and wait for a better state.
-        helpers.status_set('waiting',
-                           'Waiting to join peer relation to appoint master')
-        raise SystemExit(0)
-    elif master not in rel:
-        hookenv.log('Master {} is gone'.format(master), WARNING)
-
-        # Per Bug #1417874, the master doesn't know it is dying until it
-        # is too late, and standbys learn about their master dying at
-        # different times. We need to wait until all remaining units
-        # are aware that the master is gone, which we can see by looking
-        # at which units they have authorized. If we fail to do this step,
-        # then we risk appointing a new master while some units are still
-        # replicating data from the ex-master and we will end up with
-        # diverging timelines. Unfortunately, this means failover will
-        # not complete until hooks can be run on all remaining units,
-        # which could be several hours if maintenance operations are in
-        # progress. Once Bug #1417874 is addressed, the departing master
-        # can cut off replication to all units simultaneously and we
-        # can skip this step and allow failover to occur as soon as the
-        # leader learns that the master is gone. pg_rewind and repmgr may
-        # also offer alternatives, repairing the diverged timeline rather
-        # than avoiding it.
-        ready_for_election = True
-        for unit, relinfo in rel.items():
-            if master in relinfo.get('allowed-units', '').split():
-                hookenv.log('Waiting for {} to stop replicating ex-master'
-                            ''.format(unit))
-                ready_for_election = False
-        if ready_for_election:
-            new_master = replication.elect_master()
-            hookenv.log('Failing over to new master {}'.format(new_master),
-                        WARNING)
-            leader['master'] = new_master
-        else:
-            helpers.status_set('Coordinating failover')
-            raise SystemExit(0)
-
-
-@data_ready_action
+@when('apt.installed.postgresql-common')
+@only_once
 def update_kernel_settings():
     lots_and_lots = pow(1024, 4)  # 1 TB
     sysctl_settings = {'kernel.shmmax': lots_and_lots,
@@ -307,7 +158,44 @@ def update_kernel_settings():
                   '/etc/sysctl.d/50-postgresql.conf')
 
 
-@data_ready_action
+@when('apt.installed.postgresql-common')
+@when_not('postgresql.cluster.inhibited')
+@when_not('postgresql.cluster.created')
+def create_cluster():
+    '''Sets the postgresql.cluster.created state.'''
+    assert not os.path.exists(postgresql.postgresql_conf_path()), \
+        'inhibit_default_cluster_creation() failed'
+    assert not os.path.exists(postgresql.data_dir())
+    postgresql.create_cluster()
+    reactive.set_state('postgresql.cluster.created')
+
+
+@when_not('leadership.is_leader')
+@when_not('leadership.set.nagios_password')
+@when_not('workloadstatus.blocked')
+def wait_for_leader():
+    # We might be running a hook before the leader's install or upgrade-charm
+    # hook, so required leadership settings may not be set yet. This state
+    # will be hit for example when we upgrade a charm from a release
+    # before the nagios password became a leadership setting.
+    status_set('waiting', 'Waiting for leader to lead')
+
+
+@when('postgresql.cluster.created')
+@when('postgresql.replication.has_master')
+@when_not('postgresql.cluster.configured')
+def configure_cluster():
+    '''Configure the cluster.'''
+    update_pg_ident_conf()
+    update_pg_hba_conf()
+    try:
+        update_postgresql_conf()
+        reactive.set_state('postgresql.cluster.configured')
+    except InvalidPgConfSetting as x:
+        status_set('blocked',
+                   'Invalid postgresql.conf setting {}: {}'.format(*x.args))
+
+
 def update_pg_ident_conf():
     '''Add the charm's required entry to pg_ident.conf'''
     entries = set([('root', 'postgres'),
@@ -322,7 +210,6 @@ def update_pg_ident_conf():
                 f.write('\njuju_charm {} {}'.format(sysuser, pguser))
 
 
-@data_ready_action
 def update_pg_hba_conf():
 
     # grab the needed current state
@@ -453,6 +340,64 @@ def generate_pg_hba_conf(pg_hba, config, rels):
     rules.append((end_mark,))
     pg_hba += '\n' + '\n'.join(' '.join(rule) for rule in rules)
     return pg_hba
+
+
+@when_file_changed(postgresql.pg_ident_conf_path(),
+                   postgresql.pg_hba_conf_path())
+@when('postgresql.cluster.is_running')
+def reload_on_auth_change():
+    reactive.set_state('postgresql.cluster.needs_reload')
+
+
+@when('postgresql.cluster.needs_reload')
+@when_not('postgresql.cluster.needs_restart')
+@not_unless('postgresql.cluster.is_running')
+def reload_config():
+    postgresql.reload_config()
+    reactive.remove_state('postgresql.cluster.needs_reload')
+
+
+@when('postgresql.cluster.needs_restart')
+def request_restart():
+    coordinator.acquire('restart')
+
+
+@when('postgresql.cluster.needs_restart')
+@when('coordinator.granted.restart')
+@when('postgresql.cluster.is_running')
+def stop():
+    status_set('maintenance', 'Stopping PostgreSQL')
+    postgresql.stop()
+    reactive.remove_state('postgresql.cluster.is_running')
+    reactive.remove_state('postgresql.cluster.needs_reload')
+
+
+@when_not('postgresql.cluster.is_running')
+@when('postgresql.cluster.configured')
+@when('postgresql.replication.has_master')
+@when('postgresql.replication.cloned')
+def start():
+    status_set('maintenance', 'Starting PostgreSQL')
+    postgresql.start()
+
+    while postgresql.is_primary() and postgresql.is_in_recovery():
+        status_set('maintenance', 'Startup recovery')
+        time.sleep(1)
+
+    store = unitdata.kv()
+
+    open_ports(store.get('postgresql.cluster.pgconf.live.port'),
+               store.get('postgresql.cluster.pgconf.current.port') or 5432)
+
+    # Update the 'live' config now we know it is in effect. This
+    # is used to detect future config changes that require a restart.
+    settings = store.getrange('postgresql.cluster.pgconf.current.')
+    store.unsetrange(prefix='postgresql.cluster.pgconf.live.')
+    store.update(settings, prefix='postgresql.cluster.pgconf.live.')
+
+    reactive.set_state('postgresql.cluster.is_running')
+    reactive.remove_state('postgresql.cluster.needs_restart')
+    reactive.remove_state('postgresql.cluster.needs_reload')
 
 
 def assemble_postgresql_conf():
@@ -624,6 +569,10 @@ def ensure_viable_postgresql_conf(opts):
               syslog_ident=hookenv.local_unit().replace('/', '_'))
 
 
+class InvalidPgConfSetting(ValueError):
+    pass
+
+
 def validate_postgresql_conf(conf):
     '''Block the unit and exit the hook if there is invalid configuration.
 
@@ -682,15 +631,11 @@ def validate_postgresql_conf(conf):
                 raise ValueError('{} above maximum {}'.format(v, r.maxvalue))
 
         except ValueError as x:
-            helpers.status_set('blocked',
-                               'Invalid postgresql.conf setting {}: {}'
-                               ''.format(k, x))
-            raise SystemExit(0)
+            raise InvalidPgConfSetting(k, x)
 
 
-@data_ready_action
 def update_postgresql_conf():
-    settings = assemble_postgresql_conf()  # Terminates on invalid config.
+    settings = assemble_postgresql_conf()
     path = postgresql.postgresql_conf_path()
 
     with open(path, 'r') as f:
@@ -710,11 +655,12 @@ def update_postgresql_conf():
         pg_conf = re.sub(r'^\s*({}[\s=].*)$'.format(re.escape(k)),
                          r'# juju # \1', pg_conf, flags=re.M | re.I)
 
-    # Store the updated charm options, so later handlers can detect
-    # if important settings have changed and if PostgreSQL needs to
-    # be restarted.
-    config = hookenv.config()
-    config['postgresql_conf'] = settings
+    # Store the updated charm options. This is compared with the
+    # live config to detect if a restart is required.
+    store = unitdata.kv()
+    current_prefix = 'postgresql.cluster.pgconf.current.'
+    store.unsetrange(prefix=current_prefix)
+    store.update(settings, prefix=current_prefix)
 
     # Generate the charm config section, adding it to the end of the
     # config file.
@@ -732,7 +678,8 @@ def update_postgresql_conf():
     helpers.rewrite(path, pg_conf)
 
 
-@data_ready_action
+@when('leadership.changed.replication_password')
+@when('postgresql.cluster.created')
 def update_pgpass():
     leader = context.Leader()
     accounts = ['root', 'postgres']
@@ -745,12 +692,44 @@ def update_pgpass():
         helpers.write(path, content, mode=0o600, user=account, group=account)
 
 
-@data_ready_action
-def request_restart():
-    if coordinator.requested('restart'):
-        hookenv.log('Restart already requested')
+@when_file_changed(postgresql.postgresql_conf_path())
+@when('postgresql.cluster.is_running')
+@when_not('postgresql.cluster.needs_restart')
+def postgresql_conf_changed():
+    '''
+    After postgresql.conf has been changed, check it to see if
+    any changed options require a restart.
+
+    Sets the postgresql.cluster.needs_restart state.
+    Sets the postgresql.cluster.needs_reload state.
+    '''
+    store = unitdata.kv()
+    live = store.getrange('postgresql.cluster.pgconf.live.', strip=True)
+    current = store.getrange('postgresql.cluster.pgconf.current.', strip=True)
+
+    if not live or not current:
+        hookenv.log('PostgreSQL started without current config being saved. '
+                    'Was the server rebooted unexpectedly?', WARNING)
+        reactive.set_state('postgresql.cluster.needs_restart')
         return
 
+    con = postgresql.connect()
+    cur = con.cursor()
+    cur.execute("SELECT name FROM pg_settings WHERE context='postmaster'")
+    needs_restart = False
+    for row in cur.fetchall():
+        key = row[0]
+        old = live.get(key)
+        new = current.get(key)
+        if old != new:
+            hookenv.log('{} changed from {!r} to {!r}. '
+                        'Restart required.'.format(key, old, new))
+            needs_restart = True
+    reactive.toggle_state('postgresql.cluster.needs_restart', needs_restart)
+    reactive.toggle_state('postgresql.cluster.needs_reload', not needs_restart)
+
+
+def maybe_restart_now():
     if not postgresql.is_running():
         if replication.needs_clone():
             # The unit needs to be cloned. Grab the restart lock
@@ -763,103 +742,24 @@ def request_restart():
             # permission to restart a stopped service.
             return
 
-    # Detect if PostgreSQL settings have changed that require a restart.
-    config = hookenv.config()
-    if config.previous('postgresql_conf') is None:
-        # We special case the first reconfig, as at this point we have
-        # never even done a reload and the charm does not yet have access
-        # to connect to the database.
-        hookenv.log('First reconfig of postgresql.conf. Restart required.')
-        coordinator.acquire('restart')
-    elif config.changed('postgresql_conf'):
-        old_config = config.previous('postgresql_conf')
-        new_config = config['postgresql_conf']
-        con = postgresql.connect()
-        cur = con.cursor()
-        cur.execute("SELECT name FROM pg_settings WHERE context='postmaster'")
-        for row in cur.fetchall():
-            key = row[0]
-            old = old_config.get(key)
-            new = new_config.get(key)
-            if old != new:
-                hookenv.log('{} changed from {!r} to {!r}. '
-                            'Restart required.'.format(key, old, new))
-                # Request permission from the leader to restart. We cannot
-                # restart immediately or we risk interrupting operations
-                # like backups and replica rebuilds.
-                coordinator.acquire('restart')
 
-
-@data_ready_action
+@when('coordinator.requested.restart')
 def wait_for_restart():
     if coordinator.requested('restart') and not coordinator.granted('restart'):
         if replication.needs_clone():
             msg = ('Waiting for permission to clone {}'
-                   ''.format(postgresql.master()))
+                   .format(replication.master()))
         else:
             msg = 'Waiting for permission to restart'
-        helpers.status_set('waiting', msg)
-        raise SystemExit(0)
+        status_set('waiting', msg)
 
 
-@data_ready_action
-def restart_or_reload():
-    '''Restart if necessary and leader has given permission, or else reload.'''
-    if not postgresql.is_running():
-        helpers.status_set('maintenance', 'Starting PostgreSQL')
-        postgresql.start()
-    elif coordinator.granted('restart'):
-        helpers.status_set('maintenance', 'Restarting PostgreSQL')
-        postgresql.stop()
-        postgresql.start()
-    else:
-        postgresql.reload_config()
-
-    while postgresql.is_primary() and postgresql.is_in_recovery():
-        helpers.status_set('maintenance', 'Startup recovery')
-        time.sleep(2)
-
-    helpers.status_set('maintenance', 'Started')
+def open_ports(old_port, new_port):
+    if old_port and int(old_port) != int(new_port):
+        hookenv.close_port(int(old_port))
+    hookenv.open_port(int(new_port))
 
 
-@data_ready_action
-def reload_config():
-    '''Send a reload signal.'''
-    postgresql.reload_config()
-
-
-@data_ready_action
-def stop_postgresql():
-    if postgresql.is_running():
-        postgresql.stop()
-
-
-@data_ready_action
-def open_ports():
-    # We can't use the standard Services Framework method of opening
-    # our ports, as we don't know what they are when the ServiceManager
-    # is instantiated.
-    port = postgresql.port()
-    config = hookenv.config()
-    config['open_port'] = port
-
-    if config.changed('open_port'):
-        previous = config.previous('open_port')
-        if previous:
-            hookenv.close_port(previous)
-        hookenv.open_port(port)
-
-
-@data_ready_action
-def close_ports():
-    config = hookenv.config()
-    port = config.get('open_port')
-    if port is not None:
-        hookenv.close_port(config['open_port'])
-        config['open_port'] = None
-
-
-# @data_ready_action
 # def create_ssl_cert(cluster_dir):
 #     # PostgreSQL expects SSL certificates in the datadir.
 #     server_crt = os.path.join(cluster_dir, 'server.crt')
@@ -872,22 +772,27 @@ def close_ports():
 #                    server_key)
 
 
-@data_ready_action
+@when('postgresql.cluster.configured')
+@when('postgresql.cluster.is_running')
+@when('postgresql.replication.has_master')
+@when_not('postgresql.cluster.needs_restart')
+@when_not('postgresql.cluster.needs_reload')
 def set_active():
     if postgresql.is_running():
-        if postgresql.is_master():
+        if replication.is_master():
             msg = 'Live master'
         elif postgresql.is_primary():
             msg = 'Live primary'
         else:
             msg = 'Live secondary'
-        helpers.status_set('active', msg)
-    elif hookenv.status_get() == 'active':
-        helpers.status_set('blocked', 'PostgreSQL unexpectedly shut down')
-        raise SystemExit(0)
+        status_set('active', msg)
+    else:
+        # PostgreSQL crashed! Maybe bad configuration we failed to
+        # pick up, or maybe a full disk. The admin will need to diagnose.
+        status_set('blocked', 'PostgreSQL unexpectedly shut down')
 
 
-@data_ready_action
+@when('postgresql.cluster.created')
 def install_administrative_scripts():
     scripts_dir = helpers.scripts_dir()
     logs_dir = helpers.logs_dir()
@@ -922,16 +827,16 @@ def install_administrative_scripts():
         helpers.write(helpers.backups_log_path(), '', mode=0o644)
 
 
-@data_ready_action
+@when('postgresql.cluster.is_running')
 def update_postgresql_crontab():
     config = hookenv.config()
     data = dict(config)
 
     data['scripts_dir'] = helpers.scripts_dir()
-    data['is_master'] = postgresql.is_master()
+    data['is_master'] = replication.is_master()
     data['is_primary'] = postgresql.is_primary()
 
-    if wal_e.wal_e_enabled():
+    if config['wal_e_storage_uri']:
         data['wal_e_enabled'] = True
         data['wal_e_backup_command'] = wal_e.wal_e_backup_command()
         data['wal_e_prune_command'] = wal_e.wal_e_prune_command()
@@ -942,3 +847,11 @@ def update_postgresql_crontab():
     templating.render('postgres.cron.tmpl', destination, data,
                       owner='root', group='postgres',
                       perms=0o640)
+
+
+@when_not('postgresql.cluster.is_running')
+def remove_postgresql_crontab():
+    '''When PostgreSQL is not running, we don't want any cron jobs firing.'''
+    path = os.path.join(helpers.cron_dir(), 'juju-postgresql')
+    if os.path.exists(path):
+        os.unlink(path)

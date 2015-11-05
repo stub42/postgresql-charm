@@ -24,42 +24,11 @@ import yaml
 
 from charmhelpers import context
 from charmhelpers.core import hookenv, host
-from charmhelpers.core.hookenv import INFO, CRITICAL
-
-
-def status_set(status_or_msg, msg=None):
-    '''Set the unit status message, and log the change too.'''
-    if msg is None:
-        msg = status_or_msg
-        status = hookenv.status_get()
-    else:
-        status = status_or_msg
-
-    if status == 'blocked':
-        lvl = CRITICAL
-    else:
-        lvl = INFO
-    hookenv.log('{}: {}'.format(status, msg), lvl)
-    hookenv.status_set(status, msg)
 
 
 def distro_codename():
     """Return the distro release code name, eg. 'precise' or 'trusty'."""
     return host.lsb_release()['DISTRIB_CODENAME']
-
-
-def extra_packages():
-    config = hookenv.config()
-    packages = set()
-
-    packages.update(set(config['extra_packages'].split()))
-    packages.update(set(config['extra-packages'].split()))  # Deprecated.
-
-    if config['wal_e_storage_uri']:
-        packages.add('daemontools')
-        packages.add('wal-e')
-
-    return packages
 
 
 def peers():
