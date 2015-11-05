@@ -19,8 +19,10 @@
 import os.path
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, 'lib'))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.insert(1, ROOT)
+sys.path.insert(2, os.path.join(ROOT, 'lib'))
+sys.path.insert(3, os.path.join(ROOT, 'lib', 'pypi'))
 
 from charmhelpers import fetch  # NOQA: flake8
 from charmhelpers.core import hookenv  # NOQA: flake8

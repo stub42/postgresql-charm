@@ -83,12 +83,26 @@ integration:
 	${TIMING_NOSE} tests/test_integration.py 2>&1 | ts
 	@echo OK: Integration tests pass `date`
 
-sync:
+sync: sync-charmhelpers sync-pypi
+
+sync-charmhelpers:
+	# Embed charm helpers from a branch, as history shows we are
+	# rarely running an unmodified release.
 	@bzr cat \
 	    lp:charm-helpers/tools/charm_helpers_sync/charm_helpers_sync.py \
 		> .charm_helpers_sync.py
+	rm -rf lib/charmhelpers
 	@python .charm_helpers_sync.py -c charm-helpers.yaml
 	@rm .charm_helpers_sync.py
+	git add lib/charmhelpers
+
+	
+sync-pypi:
+	# Embed required Python libraries not available as debs.
+	rm -rf lib/pypi
+	mkdir lib/pypi
+	pip3 install --no-compile --no-deps -t lib/pypi charms.reactive
+	git add lib/pypi
 
 
 # These targets are to separate the test output in the Charm CI system
