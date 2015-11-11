@@ -25,17 +25,21 @@ if hooks_dir not in sys.path:
     sys.path.append(hooks_dir)
 
 from charmhelpers.core import hookenv
-import hooks
+
+import postgresql
 
 
 def replication_pause(params):
-    offset = hooks.postgresql_wal_received_offset()
-    if offset is None:
+    if not postgresql.is_secondary():
         hookenv.action_fail('Not a hot standby')
         return
+
+    offset = postgresql.wal_received_offset()
     hookenv.action_set(dict(offset=offset))
 
-    cur = hooks.db_cursor(autocommit=True)
+    con = postgresql.connect()
+    con.autocommit = True
+    cur = con.cursor()
     cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is True:
         hookenv.action_fail('Already paused')
@@ -45,19 +49,50 @@ def replication_pause(params):
 
 
 def replication_resume(params):
-    offset = hooks.postgresql_wal_received_offset()
-    if offset is None:
+    if not postgresql.is_secondary():
         hookenv.action_fail('Not a hot standby')
         return
+
+    offset = postgresql.wal_received_offset()
     hookenv.action_set(dict(offset=offset))
 
-    cur = hooks.db_cursor(autocommit=True)
+    con = postgresql.connect()
+    con.autocommit = True
+    cur = con.cursor()
     cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is False:
         hookenv.action_fail('Already resumed')
         return
     cur.execute('SELECT pg_xlog_replay_resume()')
     hookenv.action_set(dict(result='Resumed'))
+
+
+# Revisit this when actions are more mature. Per Bug #1483525, it seems
+# impossible to return filenames in our results.
+#
+# def backup(params):
+#     assert params['type'] == 'dump'
+#     script = os.path.join(helpers.scripts_dir(), 'pg_backup_job')
+#     cmd = ['sudo', '-u', 'postgres', '-H', script, str(params['retention'])]
+#     hookenv.action_set(dict(command=' '.join(cmd)))
+#
+#     try:
+#         subprocess.check_call(cmd)
+#     except subprocess.CalledProcessError as x:
+#         hookenv.action_fail(str(x))
+#         return
+#
+#     backups = {}
+#     for filename in os.listdir(backups_dir):
+#         path = os.path.join(backups_dir, filename)
+#         if not is.path.isfile(path):
+#             continue
+#         backups['{}.{}'.format(filename
+#         backups[filename] = dict(name=filename,
+#                                  size=os.path.getsize(path),
+#                                  path=path,
+#                                  scp_path='{}:{}'.format(unit, path))
+#     hookenv.action_set(dict(backups=backups))
 
 
 def main(argv):

@@ -1,13 +1,13 @@
 # Maintained by juju
 #
-{% if backup_schedule -%}
+{% if is_primary and backup_schedule -%}
+# Scheduled logical dump of the primary using pg_dump. We don't dump hot
+# standbys, as operations performed on the primary can cause queries on
+# the standby to be aborted.
 {{backup_schedule}} postgres {{scripts_dir}}/pg_backup_job {{backup_retention_count}}
 {% endif -%}
 
-{% if swiftwal_backup_schedule -%}
-{{swiftwal_backup_schedule}} postgres {{swiftwal_backup_command}} && {{swiftwal_prune_command}}
-{% endif -%}
-
-{% if wal_e_backup_schedule -%}
+{% if is_master and wal_e_enabled and wal_e_backup_schedule -%}
+# Scheduled filesystem backup of the primary using wal-e.
 {{wal_e_backup_schedule}} postgres {{wal_e_backup_command}} && {{wal_e_prune_command}}
 {% endif -%}

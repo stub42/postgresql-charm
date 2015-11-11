@@ -26,14 +26,8 @@ terabytes of data.
 
 # Usage
 
-This charm supports several deployment models:
-
- - A single service containing one unit. This provides a 'standalone'
-   environment.
-
- - A service containing multiple units. One unit will be a 'master', and every
-   other unit is a 'hot standby'. The charm sets up and maintains replication
-for you, using standard PostgreSQL streaming replication.
+This charm can deploy a single standalone PostgreSQL unit, or a service
+containing a single master unit and one or more replicas.
 
 To setup a single 'standalone' service::
 
@@ -42,21 +36,18 @@ To setup a single 'standalone' service::
 
 ## Scale Out Usage
 
-To replicate this 'standalone' database to a 'hot standby', turning the
-existing unit into a 'master'::
+To add a replica to an existing service::
 
     juju add-unit pg-a
 
-To deploy a new service containing a 'master' and two 'hot standbys'::
+To deploy a new service containing a master and two hot standby replicas::
 
-    juju deploy -n 2 postgresql pg-b
-    [ ... wait until units are stable ... ]
-    juju add-unit pg-b
+    juju deploy -n 3 postgresql pg-b
 
 You can remove units as normal. If the master unit is removed, failover occurs
-and the most up to date 'hot standby' is promoted to 'master'.  The
-'db-relation-changed' and 'db-admin-relation-changed' hooks are fired, letting
-clients adjust::
+and the most up to date hot standby is promoted to the master.  The
+'db-relation-changed' and 'db-admin-relation-changed' hooks are fired,
+letting clients adjust::
 
     juju remove-unit pg-b/0
 
@@ -73,12 +64,6 @@ installation listening on port 8080::
 
 
 ## Known Limitations and Issues
-
-⚠ Due to current [limitations][1] with juju, you cannot reliably
-create a service initially containing more than 2 units (eg. juju deploy
--n 3 postgresql). Instead, you must first create a service with 2 units.
-Once the environment is stable and all the hooks have finished running,
-you may add more units.
 
 ⚠ Do not attempt to relate client charms to a PostgreSQL service containing
   multiple units unless you know the charm supports a replicated service.
@@ -106,19 +91,22 @@ superuser.
   practice with your database permissions will make your life difficult
   when you need to recover after failure.
 
-_Always_ set the 'roles' relationship setting when joining a
-relationship. _Always_ grant permissions to database roles for _all_
-database objects your charm creates. _Never_ rely on access permissions
-given directly to a user, either explicitly or implicitly (such as being
-the user who created a table). Consider the users you are provided by
-the PostgreSQL charm as ephemeral. Any rights granted directly to them
-will be lost if relations are recreated, as the generated usernames will
-be different. _If you don't follow this advice, you will need to
-manually repair permissions on all your database objects after any of
-the available recovery mechanisms._
+PostgreSQL has comprehensive database security, including ownership
+and permissions on database objects. By default, any objects a client
+service creates will be owned by a user with the same name as the
+client service and inaccessible to other users. To share data, it
+is best to create new roles, grant the relevant permissions and object
+ownership to the new roles and finally grant these roles to the users
+your services can connect as. This also makes disaster recovery easier.
+If you restore a database into an indentical Juju environment, then
+the service names and usernames will be the same and database permissions
+will match. However, if you restore a database into an environment
+with different client service names then the usernames will not match
+and the new users not have access to your data.
 
 Learn about the SQL `GRANT` statement in the excellect [PostgreSQL
 reference guide][3].
+
 
 ### block-storage-broker
 
@@ -163,10 +151,9 @@ and recreated after the PITR recovery.
   will create it if necessary. If your charm sets this, then it must wait
   until a matching `database` value is presented on the PostgreSQL side of
   the relation (ie. `relation-get database` returns the value you set).
-- `roles`: Optional. A comma separated list of database roles to grant the
+- `roles`: Deprecated. A comma separated list of database roles to grant the
   database user. Typically these roles will have been granted permissions to
-  access the tables and other database objects.  Do not grant permissions
-  directly to juju generated database users, as the charm may revoke them.
+  access the tables and other database objects.
 - `extensions`: Optional. A comma separated list of required postgresql
   extensions.
 
@@ -210,28 +197,26 @@ and recreated after the PITR recovery.
 A PostgreSQL service may contain multiple units (a single master, and
 optionally one or more hot standbys). The client charm can tell which
 unit in a relation is the master and which are hot standbys by
-inspecting the 'state' property on the relation, and it needs to be
-aware of how many units are in the relation by using the 'relation-list'
-hook tool.
+inspecting the 'state' property on the relation.
 
-If there is a single PostgreSQL unit related, the state will be
-'standalone'. All database connections of course go to this unit.
+The 'standalone' state is deprecated, and when a unit advertises itself
+as 'standalone' you should treat it like a 'master'. The state only exists
+for backwards compatibility and will be removed soon.
 
-If there is more than one PostgreSQL unit related, the client charm
-must only use units with state set to 'master' or 'hot standby'.
-The unit with 'master' state can accept read and write connections. The
-units with 'hot standby' state can accept read-only connections, and
-any attempted writes will fail. Units with any other state must not be
-used and should be ignored ('standalone' units are new units joining the
-service that are not yet setup, and 'failover' state will occur when the
-master unit is being shutdown and a new master is being elected).
+Writes must go to the unit identifying itself as 'master' or 'standalone'.
+If you sent writes to a 'hot standby', they will fail.
+
+Reads may go to any unit. Ideally they should be load balanced over
+the 'hot standby' units. If you need to ensure consistency, you may
+need to read from the 'master'.
+
+Units in any other state, including no state, should not be used and
+connections to them will likely fail. These units may still be setting
+up, or performing a maintenance operation such as a failover.
 
 The client charm needs to watch for state changes in its
-relation-changed hook. New units may be added to a single unit service,
-and the client charm must stop using existing 'standalone' unit and wait
-for 'master' and 'hot standby' units to appear. Units may be removed,
-possibly causing a 'hot standby' unit to be promoted to a master, or
-even having the service revert to a single 'standalone' unit.
+relation-changed hook. During failover, one of the existing 'hot standby' 
+units will change into a 'master'.
 
 
 ## Example client hooks
@@ -249,7 +234,6 @@ Python::
     @hook
     def db_relation_joined():
         relation_set('database', config('database'))  # Explicit database name
-        relation_set('roles', 'reporting,standard')  # DB roles required
 
     @hook('db-relation-changed', 'db-relation-departed')
     def db_relation_changed():
@@ -271,9 +255,7 @@ Python::
             conn_str = conn_str_tmpl.format(**relation_get(unit=db_unit)
             remote_state = relation_get('state', db_unit)
 
-            if remote_state == 'standalone' and len(active_db_units) == 1:
-                master_conn_str = conn_str
-            elif relation_state == 'master':
+            if remote_state in ('master', 'standalone'):
                 master_conn_str = conn_str
             elif relation_state == 'hot standby':
                 slave_conn_strs.append(conn_str)
@@ -284,46 +266,17 @@ Python::
         hooks.execute(sys.argv)
 
 
-## Upgrade-charm hook notes
-
-The PostgreSQL charm has deprecated volume-map and volume-ephemeral-storage
-configuration options in favor of using the storage subordinate charm for
-general external storage management. If the installation being upgraded is
-using these deprecated options, there are a couple of manual steps necessary 
-to finish migration and continue using the current external volumes.
-Even though all data will remain intact, and PostgreSQL service will continue
-running, the upgrade-charm hook will intentionally fail and exit 1 as well to
-raise awareness of the manual procedure which will also be documented in the
-juju logs on the PostgreSQL units.
-
-The following steps must be additionally performed to continue using external
-volume maps for the PostgreSQL units once juju upgrade-charm is run from the
-command line:
-  1. cat > storage.cfg <<EOF
-     storage:
-       provider:block-storage-broker
-       root: /srv/data
-       volume_map: "{postgresql/0: your-vol-id, postgresql/1: your-2nd-vol-id}"
-     EOF
-  2. juju deploy --config storage.cfg storage
-  3. juju deploy block-storage-broker
-  4. juju add-relation block-storage-broker storage
-  5. juju resolved --retry postgresql/0   # for each postgresql unit running
-  6. juju add-relation postgresql storage
-
-
 # Point In Time Recovery
 
-The PostgreSQL charm has experimental support for log shipping and point
-in time recovery. This feature uses the wal-e[2] tool, and requires access
-to Amazon S3, Microsoft Azure Block Storage or Swift. This feature is
-flagged as experimental because it has only been tested with Swift, and
-not yet been tested under load. It also may require some API changes,
-particularly on how authentication credentials are accessed when a standard
-emerges. The charm can be configured to perform regular filesystem backups
-and ship WAL files to the object store. Hot standbys will make use of the
-archived WAL files, allowing them to resync after extended netsplits or
-even let you turn off streaming replication entirely.
+The PostgreSQL charm has support for log shipping and point in time
+recovery. This feature uses the wal-e[2] tool, which will be
+installed from the Launchpad PPA ppa:stub/pgcharm. This feature
+requires access to either Amazon S3, Microsoft Azure Block Storage or
+Swift. This feature is experimental because it has only been tested with
+Swift. The charm can be configured to perform regular filesystem backups
+and ship WAL files to the object store. Hot standbys will make use of
+the archived WAL files, allowing them to resync after extended netsplits
+or even let you turn off streaming replication entirely.
 
 With a base backup and the WAL archive you can perform point in time
 recovery, but this is still a manual process and the charm does not
@@ -336,8 +289,7 @@ units can be added and client services related to the new database
 service.
 
 To enable the experimental wal-e support with Swift, you will need to
-use Ubuntu 14.04 (Trusty), and set the service configuration settings
-similar to the following::
+and set the service configuration settings similar to the following::
 
     postgresql:
         wal_e_storage_uri: swift://mycontainer
