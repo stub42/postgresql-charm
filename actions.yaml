@@ -2,3 +2,14 @@ replication-pause:
     description: Pause replication replay on a hot standby unit.
 replication-resume:
     description: Resume replication replay on a hot standby unit.
+        
+# Revisit this when actions are more mature. Per Bug #1483525, it seems
+# impossible to return filenames in our results.
+# backup:
+#     description: Run backups
+#     params:
+#         type:
+#             type: string
+#             enum: [dump]
+#             description: Type of backup. Currently only 'dump' supported.
+#             default: dump

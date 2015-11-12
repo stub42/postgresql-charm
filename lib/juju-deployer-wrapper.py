@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-
+#
 # Copyright 2015 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
@@ -16,9 +16,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import bootstrap
+import subprocess
+import sys
 
-if __name__ == '__main__':
-    bootstrap.bootstrap()
-    bootstrap.upgrade_charm()
-    bootstrap.default_hook()
+args = list(sys.argv[1:])
+# # Strip the -W option, as its noise messes with test output.
+# if '-W' in args:
+#     args.remove('-W')
+cmd = ['juju-deployer'] + args
+try:
+    subprocess.check_output(cmd, stderr=subprocess.STDOUT,
+                            universal_newlines=True)
+except subprocess.CalledProcessError as x:
+    sys.stderr.write(x.output)
+    sys.exit(x.returncode)

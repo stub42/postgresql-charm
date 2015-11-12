@@ -1,0 +1,12 @@
+name: pgclient
+summary: A PostgreSQL service for testing.
+maintainer: stuart.bishop@canonical.com
+description: |
+    A PostgreSQL client service for testing.
+categories:
+    - databases
+requires:
+    db:
+        interface: pgsql
+    db-admin:
+        interface: pgsql

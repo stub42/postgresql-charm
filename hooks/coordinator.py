@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 # Copyright 2015 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
@@ -16,9 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import bootstrap
+from charmhelpers.coordinator import Serial
 
-if __name__ == '__main__':
-    bootstrap.bootstrap()
-    bootstrap.upgrade_charm()
-    bootstrap.default_hook()
+coordinator = Serial()
