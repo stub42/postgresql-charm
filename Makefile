@@ -3,6 +3,12 @@ TEST_TIMEOUT := 900
 SERIES := $(shell juju get-environment default-series)
 HOST_SERIES := $(shell lsb_release -sc)
 
+# /!\ Ensure that errors early in pipes cause failures, rather than
+# overridden by the last stage of the pipe. cf. 'test.py | ts'
+SHELL := /bin/bash
+export SHELLOPTS:=errexit:pipefail
+
+
 default:
 	@echo "One of:"
 	@echo "    make testdeps"
@@ -10,6 +16,15 @@ default:
 	@echo "    make unittest"
 	@echo "    make integration"
 	@echo "    make coverage (opens browser)"
+
+
+_fail_ex:
+	false | ts
+
+_success_ex:
+	true | ts
+
+
 
 test: testdeps lint unittest integration
 
