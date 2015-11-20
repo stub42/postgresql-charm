@@ -323,6 +323,22 @@ def update_pg_ident_conf():
 
 @data_ready_action
 def update_pg_hba_conf():
+
+    # grab the needed current state
+    config = hookenv.config()
+    rels = context.Relations()
+    path = postgresql.pg_hba_conf_path()
+    with open(path, 'r') as f:
+        pg_hba = f.read()
+
+    # generate the new state
+    pg_hba_content = generate_pg_hba_conf(pg_hba, config, rels)
+
+    # write out the new state
+    helpers.rewrite(path, pg_hba_content)
+
+
+def generate_pg_hba_conf(pg_hba, config, rels):
     '''Update the pg_hba.conf file (host based authentication).'''
     rules = []  # The ordered list, as tuples.
 
@@ -343,8 +359,6 @@ def update_pg_hba_conf():
     # The local unit needs access to its own database. Let every local
     # user connect to their matching PostgreSQL user, if it exists.
     add('local', 'all', 'all', 'peer')
-
-    rels = context.Relations()
 
     # Peers need replication access as the charm replication user.
     if rels.peer:
@@ -390,14 +404,14 @@ def update_pg_hba_conf():
     # as the relation gets its own user to avoid sharing credentials,
     # and logical replication connections will want to specify the
     # database name.
-    for rel in rels['master']:
+    for rel in rels['master'].values():
         for relinfo in rel.values():
             addr = postgresql.addr_to_range(relinfo['private-address'])
             add('host', 'replication',
                 postgresql.quote_identifier(rel.local['user']),
                 postgresql.quote_identifier(addr),
                 'md5', '# {}'.format(relinfo))
-            if 'database' is rel.local:
+            if 'database' in rel.local:
                 add('host',
                     postgresql.quote_identifier(rel.local['database']),
                     postgresql.quote_identifier(rel.local['user']),
@@ -405,24 +419,19 @@ def update_pg_hba_conf():
                     'md5', '# {}'.format(relinfo))
 
     # External administrative addresses, if specified by the operator.
-    config = hookenv.config()
     for addr in config['admin_addresses'].split(','):
         if addr:
-            add('host', 'all', 'all', postgresql.addr_to_range(addr),
+            add('host', 'all', 'all',
+                postgresql.quote_identifier(postgresql.addr_to_range(addr)),
                 'md5', '# admin_addresses config')
 
     # And anything-goes rules, if specified by the operator.
-    for line in config['extra_pg_auth'].splitlines():
-        add((line, '# extra_pg_auth config'))
+    for line in config['extra_pg_auth'].split(','):
+        add(line + '# extra_pg_auth config')
 
     # Deny everything else
     add('local', 'all', 'all', 'reject', '# Refuse by default')
     add('host', 'all', 'all', 'all', 'reject', '# Refuse by default')
-
-    # Load the existing file
-    path = postgresql.pg_hba_conf_path()
-    with open(path, 'r') as f:
-        pg_hba = f.read()
 
     # Strip out the existing juju managed section
     start_mark = '### BEGIN JUJU SETTINGS ###'
@@ -438,7 +447,7 @@ def update_pg_hba_conf():
     rules.insert(0, (start_mark,))
     rules.append((end_mark,))
     pg_hba += '\n' + '\n'.join(' '.join(rule) for rule in rules)
-    helpers.rewrite(path, pg_hba)
+    return pg_hba
 
 
 def assemble_postgresql_conf():
