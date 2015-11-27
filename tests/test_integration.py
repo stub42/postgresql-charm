@@ -203,7 +203,8 @@ class PGBaseTestCase(object):
         status = self.deployment.get_status()
         return set(status['services']['postgresql']['units'].keys())
 
-    def connect(self, unit=None, admin=False, database=None):
+    def connect(self, unit=None, admin=False, database=None,
+                user=None, password=None):
         '''
         A psycopg2 connection to a PostgreSQL unit via our client.
 
@@ -266,7 +267,8 @@ class PGBaseTestCase(object):
 
         return psycopg2.connect(
             port=local_port, host='localhost', database=database,
-            user=relinfo['user'], password=relinfo['password'])
+            user=user or relinfo['user'],
+            password=password or relinfo['password'])
 
     def test_db_relation(self):
         for unit in self.units:
@@ -287,7 +289,17 @@ class PGBaseTestCase(object):
                 # db-admin relations can connect to any database.
                 con = self.connect(unit, admin=True, database='postgres')
                 cur = con.cursor()
-                cur.execute('SELECT * FROM pg_stat_activity')
+                newuser = str(uuid.uuid1())
+                newpass = str(uuid.uuid1())
+                cur.execute("""CREATE USER "{}" SUPERUSER PASSWORD '{}'"""
+                            .format(newuser, newpass))
+                con.commit()
+
+                # db-admin relations can connect as any user to any database.
+                con = self.connect(unit, admin=True, database='postgres',
+                                   user=newuser, password=newpass)
+                cur = con.cursor()
+                cur.execute('select * from pg_stat_activity')
                 cur.fetchone()
 
     def test_admin_addresses(self):
