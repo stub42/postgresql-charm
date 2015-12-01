@@ -390,13 +390,15 @@ def generate_pg_hba_conf(pg_hba, config, rels):
                     postgresql.quote_identifier(addr),
                     'md5', '# {}'.format(relinfo))
 
-    # Admin clients need access to all databases as the relation users.
+    # Admin clients need access to all databases as any user, not just the
+    # relation user. Most clients will just use the user provided them,
+    # but proxies such as pgbouncer need to open connections as the accounts
+    # it creates.
     for rel in rels['db-admin'].values():
         if 'user' in rel.local:
             for relinfo in rel.values():
                 addr = postgresql.addr_to_range(relinfo['private-address'])
-                add('host', 'all',
-                    postgresql.quote_identifier(rel.local['user']),
+                add('host', 'all', 'all',
                     postgresql.quote_identifier(addr),
                     'md5', '# {}'.format(relinfo))
 

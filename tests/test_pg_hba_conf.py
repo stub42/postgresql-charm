@@ -82,7 +82,7 @@ class TestPgHbaConf(unittest.TestCase):
         rels = Relations()
         rels['db-admin'].add_unit('unit/1', local=({'user': 'user'}))
         content = generate_pg_hba_conf('', defaultdict(str), rels)
-        self.assertIn('host all "user" "1.2.3.4/32" md5', content)
+        self.assertIn('host all all "1.2.3.4/32" md5', content)
 
     def test_master_relation(self):
         rels = Relations()
