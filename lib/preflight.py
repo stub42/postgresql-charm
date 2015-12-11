@@ -27,11 +27,13 @@ def preflight(action):
     can also be used to validate the environment, blocking the unit
     and aborting the hook if something this layer is responsible for
     is broken (eg. a service configuration option set to an invalid
-    value).
+    value). We need abort before the main reactive loop, or we
+    risk failing to run handlers that rely on @when_file_changed,
+    reactive.helpers.data_changed or other state tied to
+    charmhelpers.core.unitdata transactions.
     '''
     _id = _short_action_id(action)
-    # hookenv.log('Registering preflight handler: {}'.format(_id))
     hookenv.atstart(hookenv.log,
-                    'Invoking preflight handler: {}'.format(_id))
+                    'preflight handler: {}'.format(_id))
     hookenv.atstart(action)
     return action
