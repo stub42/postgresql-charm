@@ -22,15 +22,6 @@ from reactive.postgresql import postgresql
 
 from preflight import preflight
 
-# def preflight():
-#     block_on_bad_juju()
-#     block_on_invalid_config()
-#     preinstall()
-
-
-# hookenv.atstart(hookenv.log, 'Running reactive.postgresql.preflight')
-# hookenv.atstart(preflight)
-
 
 @preflight
 def block_on_bad_juju():
@@ -46,6 +37,11 @@ def block_on_invalid_config():
     Sanity check charm configuration, blocking the unit if we have
     bogus bogus config values or config changes the charm does not
     yet (or cannot) support.
+
+    We need to do this before the main reactive loop (@preflight),
+    or we risk failing to run handlers that rely on @when_file_changed,
+    reactive.helpers.data_changed or similar state tied to
+    charmhelpers.core.unitdata transactions.
     """
     valid = True
     config = hookenv.config()
@@ -78,6 +74,19 @@ def block_on_invalid_config():
                        '(from {!r} to {!r}).'
                        .format(config.previous('version'), config['version']))
             config['version'] = config.previous('version')
+            valid = False
+
+    metrics_target = config['metrics_target'].strip()
+    if metrics_target:
+        if ':' not in metrics_target:
+            status_set('blocked',
+                       'Invalid metrics_target {}'.format(metrics_target))
+            valid = False
+        metrics_interval = config['metrics_sample_interval']
+        if not metrics_interval:
+            status_set('blocked',
+                       'metrics_sample_interval is required when '
+                       'metrics_target is set')
             valid = False
 
     if not valid:

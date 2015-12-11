@@ -21,7 +21,6 @@ from charmhelpers.core import hookenv, templating
 from charms import reactive
 from charms.reactive import hook, when
 
-from reactive import workloadstatus
 from reactive.postgresql import helpers
 
 
@@ -39,16 +38,9 @@ def write_metrics_cronjob():
     config = hookenv.config()
     path = os.path.join(helpers.cron_dir(), 'juju-postgresql-metrics')
 
-    # need the following two configs to be valid
+    # Validated in preflight.block_on_invalid_config()
     metrics_target = config['metrics_target'].strip()
     metrics_sample_interval = config['metrics_sample_interval']
-
-    if metrics_target and not (':' in metrics_target and
-                               metrics_sample_interval):
-        workloadstatus.status_set('blocked',
-                                  'Required config not found or invalid '
-                                  '(metrics_target, metrics_sample_interval)')
-        return
 
     reactive.remove_state('postgresql.metrics.needs_update')
 
