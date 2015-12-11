@@ -20,29 +20,47 @@ from charmhelpers import context
 from charmhelpers.contrib.charmsupport.nrpe import NRPE
 from charmhelpers.core import host
 
-from decorators import data_ready_action, leader_only, master_only
-import helpers
-import postgresql
+from charms import reactive
+from charms.reactive import hook, only_once, when, when_not
+
+from reactive import leadership
+from reactive.postgresql import helpers
+from reactive.postgresql import postgresql
+
+
+@hook('{interface:nrpe-external-master}-relation-changed',
+      '{interface:local-monitors}-relation-changed')
+def enable_nagios():
+    reactive.set_state('postgresql.nagios.enabled')
+
+
+@hook('config-changed',
+      '{interface:nrpe-external-master}-relation-changed',
+      '{interface:local-monitors}-relation-changed')
+def update_nagios():
+    reactive.set_state('postgresql.nagios.needs_update')
 
 
 def nagios_username():
     return '_juju_nagios'
 
 
-@leader_only
-@data_ready_action
+@when('postgresql.nagios.enabled')
+@when('leadership.is_leader')
+@when_not('leadership.set.nagios_password')
 def ensure_nagios_credentials():
-    leader = context.Leader()
-    if 'nagios_password' not in leader:
-        leader['nagios_password'] = host.pwgen()
+    leadership.leader_set(nagios_password=host.pwgen())
 
 
-@master_only
-@data_ready_action
+@when('postgresql.nagios.enabled')
+@when('postgresql.cluster.is_running')
+@when('postgresql.replication.is_master')
+@when('leadership.set.nagios_password')
+@only_once
 def ensure_nagios_user():
-    leader = context.Leader()
     con = postgresql.connect()
-    postgresql.ensure_user(con, nagios_username(), leader['nagios_password'])
+    postgresql.ensure_user(con, nagios_username(),
+                           leadership.leader_get('nagios_password'))
     con.commit()
 
 
@@ -50,7 +68,7 @@ def nagios_pgpass_path():
     return os.path.expanduser('~nagios/.pgpass')
 
 
-@data_ready_action
+@when('leadership.changed.nagios_password')
 def update_nagios_pgpass():
     if not os.path.isdir(os.path.expanduser('~nagios')):
         return  # Nagios user does not yet exist. Wait for subordinate.
@@ -61,7 +79,7 @@ def update_nagios_pgpass():
                   mode=0o600, user='nagios', group='nagios')
 
 
-@data_ready_action
+@when('postgresql.nagios.needs_update')
 def update_nrpe_config():
     update_nagios_pgpass()
     nrpe = NRPE()
@@ -82,3 +100,4 @@ def update_nrpe_config():
                    check_cmd=('check_file_age -w {} -c {} -f {}'
                               ''.format(warn_age, crit_age, backups_log)))
     nrpe.write()
+    reactive.remove_state('postgresql.nagios.needs_update')
