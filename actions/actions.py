@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # Copyright 2015 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
@@ -34,11 +34,12 @@ def replication_pause(params):
         hookenv.action_fail('Not a hot standby')
         return
 
-    offset = postgresql.wal_received_offset()
-    hookenv.action_set(dict(offset=offset))
-
     con = postgresql.connect()
     con.autocommit = True
+
+    offset = postgresql.wal_received_offset(con)
+    hookenv.action_set(dict(offset=offset))
+
     cur = con.cursor()
     cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is True:
@@ -53,11 +54,12 @@ def replication_resume(params):
         hookenv.action_fail('Not a hot standby')
         return
 
-    offset = postgresql.wal_received_offset()
-    hookenv.action_set(dict(offset=offset))
-
     con = postgresql.connect()
     con.autocommit = True
+
+    offset = postgresql.wal_received_offset(con)
+    hookenv.action_set(dict(offset=offset))
+
     cur = con.cursor()
     cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is False:
