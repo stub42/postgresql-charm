@@ -64,6 +64,7 @@ SERVICE_DEFINITION = [
 
                      replication.ensure_replication_user,
                      nagios.ensure_nagios_user,
+                     nagios.update_nrpe_config,
                      service.install_administrative_scripts,
                      service.update_postgresql_crontab,
 
