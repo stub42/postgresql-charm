@@ -279,21 +279,26 @@ class PGBaseTestCase(object):
                 cur.fetchone()
 
     def test_db_admin_relation(self):
+        # Create a user with a known password for subsequent tests.
+        # We can't use the 'postgres' user as we don't know the password.
+        con = self.connect(self.master, admin=True, database='postgres')
+        cur = con.cursor()
+        newuser = str(uuid.uuid1())
+        newpass = str(uuid.uuid1())
+        cur.execute("""CREATE USER "{}" SUPERUSER PASSWORD '{}'"""
+                    .format(newuser, newpass))
+        con.commit()
+
         for unit in self.units:
             with self.subTest(unit=unit):
                 con = self.connect(unit, admin=True)
-                con.autocommit = True
                 cur = con.cursor()
                 cur.execute('SELECT * FROM pg_stat_activity')
 
                 # db-admin relations can connect to any database.
                 con = self.connect(unit, admin=True, database='postgres')
                 cur = con.cursor()
-                newuser = str(uuid.uuid1())
-                newpass = str(uuid.uuid1())
-                cur.execute("""CREATE USER "{}" SUPERUSER PASSWORD '{}'"""
-                            .format(newuser, newpass))
-                con.commit()
+                cur.execute("select * from pg_stat_activity")
 
                 # db-admin relations can connect as any user to any database.
                 con = self.connect(unit, admin=True, database='postgres',
