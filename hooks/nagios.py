@@ -61,6 +61,7 @@ def update_nagios_pgpass():
 
 @data_ready_action
 def update_nrpe_config():
+    update_nagios_pgpass()
     nrpe = NRPE()
 
     user = nagios_username()

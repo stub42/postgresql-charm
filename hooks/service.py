@@ -357,7 +357,9 @@ def generate_pg_hba_conf(pg_hba, config, rels):
     add('local', 'all', 'postgres', 'peer', 'map=juju_charm')
 
     # The local unit needs access to its own database. Let every local
-    # user connect to their matching PostgreSQL user, if it exists.
+    # user connect to their matching PostgreSQL user, if it exists and nagios
+    # with a password.
+    add('local', 'all', '_juju_nagios', 'password')
     add('local', 'all', 'all', 'peer')
 
     # Peers need replication access as the charm replication user.
