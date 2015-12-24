@@ -52,6 +52,8 @@ def nagios_pgpass_path():
 
 @data_ready_action
 def update_nagios_pgpass():
+    if not os.path.isdir(os.path.expanduser('~nagios')):
+        return  # Nagios user does not yet exist. Wait for subordinate.
     leader = context.Leader()
     nagios_password = leader['nagios_password']
     content = '*:*:*:{}:{}'.format(nagios_username(), nagios_password)
@@ -61,6 +63,7 @@ def update_nagios_pgpass():
 
 @data_ready_action
 def update_nrpe_config():
+    update_nagios_pgpass()
     nrpe = NRPE()
 
     user = nagios_username()
