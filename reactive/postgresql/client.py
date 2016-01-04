@@ -52,9 +52,10 @@ def master_provides():
     rels = context.Relations()
     for relname in CLIENT_RELNAMES:
         for rel in rels[relname].values():
-            db_relation_master(rel)
-            db_relation_common(rel)
-            ensure_db_relation_resources(rel)
+            if len(rel):
+                db_relation_master(rel)
+                db_relation_common(rel)
+                ensure_db_relation_resources(rel)
     reactive.set_state('postgresql.client.published')
 
 

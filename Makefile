@@ -50,7 +50,7 @@ lint:
 	@echo "Lint check (flake8)"
 	@flake8 -v \
             --ignore=E402 \
-	    --exclude=lib/charmhelpers,lib/pypi,__pycache__ \
+	    --exclude=lib/charmhelpers,lib/pgclient/hooks/charmhelpers,lib/pypi,__pycache__ \
 	    hooks actions testing tests reactive lib
 
 _co=,
@@ -105,6 +105,7 @@ sync-pypi:
 
 
 # These targets are to separate the test output in the Charm CI system
+# eg. 'make test_integration.py:PG93Tests'
 test_integration.py%:
 	${TIMING_NOSE} tests/$@ 2>&1 | ts
 	@echo OK: $@ tests pass `date`

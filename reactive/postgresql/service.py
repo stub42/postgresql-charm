@@ -26,13 +26,13 @@ from charmhelpers.core import hookenv, host, sysctl, templating, unitdata
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charms import reactive
 from charms.reactive import not_unless, only_once, when, when_not
-from charms.reactive.decorators import when_file_changed
 
 from reactive import apt
 from reactive import coordinator
 from reactive.workloadstatus import status_set
 
 from reactive.postgresql import helpers
+from reactive.postgresql import nagios
 from reactive.postgresql import postgresql
 from reactive.postgresql import replication
 from reactive.postgresql import wal_e
@@ -108,7 +108,7 @@ def inhibit_default_cluster_creation():
     incorrect locale and without options such as data checksumming.
     '''
     path = postgresql.postgresql_conf_path()
-    if os.path.exists(path):
+    if os.path.exists(path) and open(path, 'r').read():
         status_set('blocked', 'postgresql.conf already exists')
     else:
         hookenv.log('Inhibiting')
@@ -188,9 +188,13 @@ def configure_cluster():
     '''Configure the cluster.'''
     update_pg_ident_conf()
     update_pg_hba_conf()
+
     try:
         update_postgresql_conf()
         reactive.set_state('postgresql.cluster.configured')
+        # Use @when_file_changed for this when Issue #44 is resolved.
+        if reactive.helpers.is_state('postgresql.cluster.is_running'):
+            postgresql_conf_changed()
     except InvalidPgConfSetting as x:
         status_set('blocked',
                    'Invalid postgresql.conf setting {}: {}'.format(*x.args))
@@ -209,9 +213,12 @@ def update_pg_ident_conf():
             with open(path, 'a') as f:
                 f.write('\njuju_charm {} {}'.format(sysuser, pguser))
 
+    # Use @when_file_changed for this when Issue #44 is resolved.
+    if reactive.helpers.any_file_changed([path]):
+        reactive.set_state('postgresql.cluster.needs_reload')
+
 
 def update_pg_hba_conf():
-
     # grab the needed current state
     config = hookenv.config()
     rels = context.Relations()
@@ -224,6 +231,10 @@ def update_pg_hba_conf():
 
     # write out the new state
     helpers.rewrite(path, pg_hba_content)
+
+    # Use @when_file_changed for this when Issue #44 is resolved.
+    if reactive.helpers.any_file_changed([path]):
+        reactive.set_state('postgresql.cluster.needs_reload')
 
 
 def generate_pg_hba_conf(pg_hba, config, rels):
@@ -342,11 +353,12 @@ def generate_pg_hba_conf(pg_hba, config, rels):
     return pg_hba
 
 
-@when_file_changed(postgresql.pg_ident_conf_path(),
-                   postgresql.pg_hba_conf_path())
-@when('postgresql.cluster.is_running')
-def reload_on_auth_change():
-    reactive.set_state('postgresql.cluster.needs_reload')
+# Use @when_file_changed for this when Issue #44 is resolved.
+# @when_file_changed(postgresql.pg_ident_conf_path,
+#                    postgresql.pg_hba_conf_path)
+# @when('postgresql.cluster.is_running')
+# def reload_on_auth_change():
+#     reactive.set_state('postgresql.cluster.needs_reload')
 
 
 @when('postgresql.cluster.needs_reload')
@@ -357,6 +369,7 @@ def reload_config():
     reactive.remove_state('postgresql.cluster.needs_reload')
 
 
+@when('postgresql.cluster.is_running')
 @when('postgresql.cluster.needs_restart')
 def request_restart():
     coordinator.acquire('restart')
@@ -692,9 +705,10 @@ def update_pgpass():
         helpers.write(path, content, mode=0o600, user=account, group=account)
 
 
-@when_file_changed(postgresql.postgresql_conf_path())
-@when('postgresql.cluster.is_running')
-@when_not('postgresql.cluster.needs_restart')
+# Use @when_file_changed for this when Issue #44 is resolved.
+# @when_file_changed(postgresql.postgresql_conf_path)
+# @when('postgresql.cluster.is_running')
+# @when_not('postgresql.cluster.needs_restart')
 def postgresql_conf_changed():
     '''
     After postgresql.conf has been changed, check it to see if

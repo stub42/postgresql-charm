@@ -25,7 +25,7 @@ from charmhelpers import context
 from charmhelpers.core import host, hookenv, templating
 from charmhelpers.core.hookenv import DEBUG, ERROR, WARNING
 from charms import reactive
-from charms.reactive import hook, not_unless, when, when_not, when_file_changed
+from charms.reactive import hook, not_unless, when, when_not
 
 from reactive.leadership import leader_get, leader_set
 from reactive.workloadstatus import status_set
@@ -327,6 +327,7 @@ def ensure_ssl_certs():
 
 
 @when('postgresql.replication.is_master')
+@when('postgresql.replication.had_peers')
 def promote_master():
     rels = context.Relations()
     if 'following' in rels.peer.local:
@@ -338,9 +339,11 @@ def promote_master():
         del rels.peer.local['following']
 
 
-@when_file_changed(postgresql.recovery_conf_path())
-def restart_on_master_change():
-    reactive.set_state('postgresql.cluster.needs_restart')
+# Use @when_file_changed for this when Issue #44 is resolved.
+# @when_file_changed(postgresql.recovery_conf_path)
+# @when('postgresql.cluster.is_running')
+# def restart_on_master_change():
+#     reactive.set_state('postgresql.cluster.needs_restart')
 
 
 @when('postgresql.replication.master.authorized')
@@ -383,6 +386,10 @@ def update_recovery_conf():
     templating.render('recovery.conf.tmpl', path, data,
                       owner='postgres', group='postgres',
                       perms=0o600)
+
+    # Use @when_file_changed for this when Issue #44 is resolved.
+    if reactive.helpers.any_file_changed([path]):
+        reactive.set_state('postgresql.cluster.needs_restart')
 
 
 @not_unless('leadership.is_leader')

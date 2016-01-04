@@ -1,3 +1,5 @@
 *~
 *.pyc
 .coverage
+bzrsync2.sh
+lib/pgclient/hooks/charmhelpers

@@ -25,7 +25,7 @@ from charms.reactive import hook, not_unless, when
 class SyslogProvides(reactive.relations.RelationBase):
 
     class states(reactive.relations.StateList):
-        available = reactive.State('{relation_name}.available')
+        available = reactive.bus.State('{relation_name}.available')
 
     @hook('{provides:syslog}-relation-changed')
     def changed(self):

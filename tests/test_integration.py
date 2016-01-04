@@ -31,15 +31,16 @@ import uuid
 import psycopg2
 import yaml
 
-HERE = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(os.path.abspath(os.path.join(HERE, os.pardir)))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.insert(1, ROOT)
+sys.path.insert(2, os.path.join(ROOT, 'lib'))
+sys.path.insert(3, os.path.join(ROOT, 'lib', 'pypi'))
 
 from testing.amuletfixture import AmuletFixture
 
 
 SERIES = os.environ.get('SERIES', 'trusty').strip()
-CLIENT_CHARMDIR = os.path.abspath(os.path.join(HERE, os.pardir,
-                                               'lib', 'pgclient'))
+CLIENT_CHARMDIR = os.path.abspath(os.path.join(ROOT, 'lib', 'pgclient'))
 assert os.path.isdir(CLIENT_CHARMDIR)
 
 
@@ -312,9 +313,9 @@ class PGBaseTestCase(object):
         # to set a password on the postgres user.
         pw = str(uuid.uuid1())
         con = self.connect(self.master, admin=True)
-        con.autocommit = True
         cur = con.cursor()
         cur.execute("ALTER USER postgres ENCRYPTED PASSWORD %s", (pw,))
+        con.commit()
 
         status = self.deployment.get_status()
         unit_infos = status['services']['postgresql']['units']
@@ -629,8 +630,8 @@ class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
 def setUpModule():
     # Mirror charmhelpers into our support charms, since charms
     # can't symlink out of their subtree.
-    main_charmhelpers = os.path.abspath(os.path.join(HERE, os.pardir,
-                                                     'hooks', 'charmhelpers'))
+    main_charmhelpers = os.path.abspath(os.path.join(ROOT, 'lib',
+                                                     'charmhelpers'))
     test_client_charmhelpers = os.path.join(CLIENT_CHARMDIR,
                                             'hooks', 'charmhelpers')
     if os.path.exists(test_client_charmhelpers):
