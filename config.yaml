@@ -124,11 +124,11 @@ options:
   backup_schedule:
     default: "13 4 * * *"
     type: string
-    description: Cron-formatted schedule for database backups.
+    description: Cron-formatted schedule for daily database backups.
   backup_retention_count:
     default: 7
     type: int
-    description: Number of recent backups to retain.
+    description: Number of daily backups to retain.
   nagios_context:
     default: "juju"
     type: string
