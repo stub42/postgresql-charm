@@ -1,6 +1,6 @@
 Metadata-Version: 2.0
 Name: charms.reactive
-Version: 0.3.6
+Version: 0.3.7
 Summary: Framework for writing reactive-style Juju Charms
 Home-page: https://github.com/juju-solutions/charms.reactive
 Author: Ubuntu Developers
