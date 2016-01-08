@@ -33,11 +33,15 @@ def acquire(lock):
     """
     Sets either the coordinator.granted.{lockname} or
     coordinator.requested.{lockname} state.
+
+    Returns True if the lock could be immediately granted.
     """
     if coordinator.acquire(lock):
         reactive.set_state('coordinator.granted.{}'.format(lock))
+        return True
     else:
         reactive.set_state('coordinator.requested.{}'.format(lock))
+        return False
 
 
 @preflight

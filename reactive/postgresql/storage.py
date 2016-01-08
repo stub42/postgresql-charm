@@ -20,18 +20,22 @@ import time
 
 from charmhelpers import context
 from charmhelpers.core import hookenv
-from charmhelpers.core.hookenv import DEBUG
+from charmhelpers.core.hookenv import DEBUG, WARNING
+from charms import reactive
+from charms.reactive import hook, when
 
-from coordinator import coordinator
-from decorators import data_ready_action
-import helpers
-import postgresql
+from reactive import coordinator
+from reactive.postgresql import helpers
+from reactive.postgresql import postgresql
+from reactive.postgresql import service
+from reactive.workloadstatus import status_set
+
 
 # Hard coded mount point for the block storage subordinate.
 external_volume_mount = "/srv/data"
 
 
-@data_ready_action
+@hook('{interface:block-storage}-relation-changed')
 def handle_storage_relation():
     # Remove this once Juju storage is no longer experiemental and
     # everyone has had a chance to upgrade.
@@ -39,14 +43,22 @@ def handle_storage_relation():
     if len(data_rels) > 1:
         helpers.status_set('blocked',
                            'Too many relations to the storage subordinate')
-        raise SystemExit(0)
+        return
     elif data_rels:
         relid, rel = list(data_rels.items())[0]
         rel['mountpoint'] = external_volume_mount
 
     if needs_remount():
+        reactive.set_state('postgresql.storage.needs_remount')
+        apt.queue_install(['rsync'])
         # Migrate any data when we can restart.
         coordinator.acquire('restart')
+
+
+@hook('{interface:block-storage}-relation-departed')
+def depart_storage_relation():
+    status_set('blocked',
+               'Unable to continue after departing block storage relation')
 
 
 def needs_remount():
@@ -55,22 +67,25 @@ def needs_remount():
     return mounted and not linked
 
 
-@data_ready_action
+@when('postgresql.storage.needs_remount')
+@when('coordinator.granted.restart')
+@when('apt.installed.rsync')
 def remount():
-    if not needs_remount():
-        return
-
-    if postgresql.is_running():
-        postgresql.stop()
+    if reactive.is_state('postgresql.cluster.is_running'):
+        service.stop()
 
     old_data_dir = postgresql.data_dir()
     new_data_dir = os.path.join(external_volume_mount, 'postgresql',
                                 postgresql.version(), 'main')
     backup_data_dir = '{}-{}'.format(old_data_dir, int(time.time()))
 
-    if not os.path.isdir(new_data_dir):
-        hookenv.log('Migrating data from {} to {}'.format(old_data_dir,
-                                                          new_data_dir))
+    if os.path.isdir(new_data_dir):
+        hookenv.log('Remounting existing database at {}'.format(new_data_dir),
+                    WARNING)
+    else:
+        status_set('maintenance',
+                   'Migrating data from {} to {}'.format(old_data_dir,
+                                                         new_data_dir))
         helpers.makedirs(new_data_dir, mode=0o770,
                          user='postgres', group='postgres')
         try:
@@ -79,10 +94,11 @@ def remount():
                          new_data_dir + '/']
             hookenv.log('Running {}'.format(' '.join(rsync_cmd)), DEBUG)
             subprocess.check_call(rsync_cmd)
-            os.replace(old_data_dir, backup_data_dir)
-            os.symlink(new_data_dir, old_data_dir)
         except subprocess.CalledProcessError:
-            helpers.status_set('blocked',
-                               'Failed to sync data from {} to {}'
-                               ''.format(old_data_dir, new_data_dir))
-            raise SystemExit(0)
+            status_set('blocked',
+                       'Failed to sync data from {} to {}'
+                       ''.format(old_data_dir, new_data_dir))
+
+    os.replace(old_data_dir, backup_data_dir)
+    os.symlink(new_data_dir, old_data_dir)
+    reactive.remove_state('postgresql.storage.needs_remount')

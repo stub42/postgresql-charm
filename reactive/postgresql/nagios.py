@@ -80,6 +80,7 @@ def update_nagios_pgpass():
 
 
 @when('postgresql.nagios.needs_update')
+@when('leadership.set.nagios_password')
 def update_nrpe_config():
     update_nagios_pgpass()
     nrpe = NRPE()

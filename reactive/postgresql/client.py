@@ -40,6 +40,7 @@ CLIENT_RELNAMES = frozenset(['db', 'db-admin', 'master'])
 
 
 @when('postgresql.replication.is_master')
+@when('postgresql.replication.is_primary')
 @when('postgresql.cluster.is_running')
 @when_not('postgresql.client.published')
 def master_provides():
@@ -184,6 +185,7 @@ def db_relation_common(rel):
     local['allowed-units'] = ' '.join(rel.keys())
 
 
+@not_unless('postgresql.replication.is_primary')
 def ensure_db_relation_resources(rel):
     '''Create the database resources needed for the relation.'''
 

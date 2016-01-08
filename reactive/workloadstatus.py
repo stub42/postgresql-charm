@@ -37,8 +37,10 @@ def status_set(state, message):
     """
     if state is None:
         state = hookenv.status_get()[0]
+        if state == 'unknown':
+            state = 'maintenance'  # Guess
     assert state in VALID_STATES, 'Invalid state {}'.format(state)
-    if state in ('error', 'blocked', 'unknown'):
+    if state in ('error', 'blocked'):
         lvl = WARNING
     else:
         lvl = INFO

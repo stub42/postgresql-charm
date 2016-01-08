@@ -21,9 +21,7 @@ from urllib.parse import urlparse
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import ERROR
 from charms import reactive
-from charms.reactive import only_once, when, when_not
-
-from everyhook import everyhook
+from charms.reactive import hook, when, when_not
 
 from reactive import apt
 
@@ -31,13 +29,13 @@ from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
 
 
-@everyhook
+@hook('config-changed')
 def main():
     storage_uri = hookenv.config()['wal_e_storage_uri'].strip()
-    reactive.helpers.toggle_state('postgresql.wal_e.enabled',
-                                  bool(storage_uri))
+    reactive.helpers.toggle_state('postgresql.wal_e.enabled', storage_uri)
     reactive.helpers.toggle_state('postgresql.wal_e.swift',
                                   storage_uri.startswith('swift:'))
+    reactive.remove_state('postgresql.wal_e.configured')
 
 
 @when('postgresql.wal_e.enabled')
@@ -56,6 +54,8 @@ def wal_e_env_dir():
 
 
 @when('postgresql.cluster.created')
+@when('apt.installed.daemontools')
+@when_not('postgresql.wal_e.configured')
 def update_wal_e_env_dir():
     '''Regenerate the envdir(1) environment used to drive WAL-E.
 
@@ -117,9 +117,19 @@ def update_wal_e_env_dir():
         helpers.write(os.path.join(wal_e_env_dir(), k), v.strip(),
                       mode=0o640, user='postgres', group='postgres')
 
-    # Now the environment is setup, create any remote resources we need.
-    if uri and parsed_uri.scheme == 'swift':
-        ensure_swift_container(parsed_uri.netloc)
+    reactive.set_state('postgresql.wal_e.configured')
+
+
+@when('postgresql.wal_e.swift')
+@when('postgresql.wal_e.configured')
+@when('apt.installed.daemontools')
+def ensure_swift_container():
+    uri = hookenv.config().get('wal_e_storage_uri', None).strip()
+    if reactive.helpers.data_changed('postgresql.wal_e.uri', uri):
+        container = urlparse(uri).netloc
+        hookenv.log('Creating Swift container {}'.format(container))
+        cmd = ['envdir', wal_e_env_dir(), 'swift', 'post', container]
+        subprocess.check_call(cmd, universal_newlines=True)
 
 
 def wal_e_archive_command():
@@ -140,11 +150,3 @@ def wal_e_prune_command():
     config = hookenv.config()
     return ('envdir {} wal-e delete --confirm retain {}'
             ''.format(wal_e_env_dir(), config['wal_e_backup_retention']))
-
-
-@when('postgresql.wal_e.swift')
-@when('leadership.is_leader')
-@only_once
-def ensure_swift_container(container):
-    cmd = ['envdir', wal_e_env_dir(), 'swift', 'post', container]
-    subprocess.check_call(cmd, universal_newlines=True)

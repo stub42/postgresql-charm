@@ -81,6 +81,20 @@ coverage:
 
 integration:
 	${TIMING_NOSE} tests/test_integration.py 2>&1 | ts
+
+# More overheads, but better progress reporting
+integration_breakup:
+	${NOSE} tests/test_integration.py:PG93Tests 2>&1 | ts
+	${NOSE} tests/test_integration.py:PG93MultiTests 2>&1 | ts
+	${NOSE} tests/test_integration.py:UpgradedCharmTests 2>&1 | ts
+	${NOSE} tests/test_integration.py:PG91Tests 2>&1 | ts
+	${NOSE} tests/test_integration.py:PG91MultiTests 2>&1 | ts
+	${NOSE} tests/test_integration.py:PG95Tests 2>&1 | ts
+	${NOSE} tests/test_integration.py:PG95MultiTests 2>&1 | ts
+	${NOSE} tests/test_integration.py:PG94Tests 2>&1 | ts
+	${NOSE} tests/test_integration.py:PG94MultiTests 2>&1 | ts
+	${NOSE} tests/test_integration.py:PG92Tests 2>&1 | ts
+	${NOSE} tests/test_integration.py:PG92MultiTests 2>&1 | ts
 	@echo OK: Integration tests pass `date`
 
 sync: sync-charmhelpers sync-pypi

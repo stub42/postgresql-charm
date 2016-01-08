@@ -89,6 +89,9 @@ def upgrade_charm():
     reactive.remove_state('postgresql.cluster.configured')
     reactive.remove_state('postgresql.client.published')
 
+    # Don't recreate the cluster.
+    reactive.set_state('postgresql.cluster.created')
+
     # Set the postgresql.replication.cloned flag, so we don't rebuild
     # standbys when upgrading the charm from a pre-reactive version.
     reactive.set_state('postgresql.replication.cloned')

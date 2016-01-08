@@ -25,7 +25,7 @@ from charmhelpers import context
 from charmhelpers.core import hookenv, host, sysctl, templating, unitdata
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charms import reactive
-from charms.reactive import not_unless, only_once, when, when_not
+from charms.reactive import only_once, when, when_not
 
 from reactive import apt
 from reactive import coordinator
@@ -53,6 +53,14 @@ def main():
 
     # Reconfigure PostgreSQL.
     reactive.remove_state('postgresql.cluster.configured')
+
+    log_states()
+
+
+def log_states():
+    '''Log active states to aid debugging'''
+    for state in sorted(reactive.helpers.get_states().keys()):
+        hookenv.log('Reactive state: {}'.format(state), DEBUG)
 
 
 def emit_deprecated_option_warnings():
@@ -142,7 +150,7 @@ def install_postgresql_packages():
 @when('apt.installed.postgresql-common')
 def install_extra_packages():
     config = hookenv.config()
-    packages = set(['rsync'])
+    packages = set()
     packages.update(set(config['extra_packages'].split()))
     packages.update(set(config['extra-packages'].split()))  # Deprecated.
     apt.queue_install(packages)
@@ -170,20 +178,10 @@ def create_cluster():
     reactive.set_state('postgresql.cluster.created')
 
 
-@when_not('leadership.is_leader')
-@when_not('leadership.set.nagios_password')
-@when_not('workloadstatus.blocked')
-def wait_for_leader():
-    # We might be running a hook before the leader's install or upgrade-charm
-    # hook, so required leadership settings may not be set yet. This state
-    # will be hit for example when we upgrade a charm from a release
-    # before the nagios password became a leadership setting.
-    status_set('waiting', 'Waiting for leader to lead')
-
-
 @when('postgresql.cluster.created')
 @when('postgresql.replication.has_master')
 @when_not('postgresql.cluster.configured')
+@when_not('postgresql.cluster.inhibited')
 def configure_cluster():
     '''Configure the cluster.'''
     update_pg_ident_conf()
@@ -192,6 +190,7 @@ def configure_cluster():
     try:
         update_postgresql_conf()
         reactive.set_state('postgresql.cluster.configured')
+        hookenv.log('PostgreSQL has been configured')
         # Use @when_file_changed for this when Issue #44 is resolved.
         if reactive.helpers.is_state('postgresql.cluster.is_running'):
             postgresql_conf_changed()
@@ -214,7 +213,9 @@ def update_pg_ident_conf():
                 f.write('\njuju_charm {} {}'.format(sysuser, pguser))
 
     # Use @when_file_changed for this when Issue #44 is resolved.
-    if reactive.helpers.any_file_changed([path]):
+    if (reactive.helpers.any_file_changed([path]) and
+            reactive.is_state('postgresql.cluster.is_running')):
+        hookenv.log('pg_ident.conf has changed. PostgreSQL needs reload.')
         reactive.set_state('postgresql.cluster.needs_reload')
 
 
@@ -233,7 +234,9 @@ def update_pg_hba_conf():
     helpers.rewrite(path, pg_hba_content)
 
     # Use @when_file_changed for this when Issue #44 is resolved.
-    if reactive.helpers.any_file_changed([path]):
+    if (reactive.helpers.any_file_changed([path]) and
+            reactive.is_state('postgresql.cluster.is_running')):
+        hookenv.log('pg_hba.conf has changed. PostgreSQL needs reload.')
         reactive.set_state('postgresql.cluster.needs_reload')
 
 
@@ -361,18 +364,24 @@ def generate_pg_hba_conf(pg_hba, config, rels):
 #     reactive.set_state('postgresql.cluster.needs_reload')
 
 
+@when('postgresql.cluster.is_running')
 @when('postgresql.cluster.needs_reload')
 @when_not('postgresql.cluster.needs_restart')
-@not_unless('postgresql.cluster.is_running')
 def reload_config():
+    hookenv.log('Reloading PostgreSQL configuration')
     postgresql.reload_config()
     reactive.remove_state('postgresql.cluster.needs_reload')
 
 
 @when('postgresql.cluster.is_running')
 @when('postgresql.cluster.needs_restart')
+@when_not('coordinator.granted.restart')
+@when_not('coordinator.requested.restart')
 def request_restart():
-    coordinator.acquire('restart')
+    if coordinator.acquire('restart'):
+        hookenv.log('Restart permission granted')
+    else:
+        hookenv.log('Restart permission requested')
 
 
 @when('postgresql.cluster.needs_restart')
@@ -382,7 +391,6 @@ def stop():
     status_set('maintenance', 'Stopping PostgreSQL')
     postgresql.stop()
     reactive.remove_state('postgresql.cluster.is_running')
-    reactive.remove_state('postgresql.cluster.needs_reload')
 
 
 @when_not('postgresql.cluster.is_running')
@@ -399,12 +407,12 @@ def start():
 
     store = unitdata.kv()
 
-    open_ports(store.get('postgresql.cluster.pgconf.live.port'),
+    open_ports(store.get('postgresql.cluster.pgconf.live.port') or 5432,
                store.get('postgresql.cluster.pgconf.current.port') or 5432)
 
     # Update the 'live' config now we know it is in effect. This
     # is used to detect future config changes that require a restart.
-    settings = store.getrange('postgresql.cluster.pgconf.current.')
+    settings = store.getrange('postgresql.cluster.pgconf.current.', strip=True)
     store.unsetrange(prefix='postgresql.cluster.pgconf.live.')
     store.update(settings, prefix='postgresql.cluster.pgconf.live.')
 
@@ -442,8 +450,8 @@ def postgresql_conf_defaults():
     raw = helpers.config_yaml()['options']['extra_pg_conf']['default']
     defaults = postgresql.parse_config(raw)
 
-    # And calculate some defaults, which could get out of sync.
-    # Settings with mandatory minimums like wal_senders is handled
+    # And recalculate some defaults, which could get out of sync.
+    # Settings with mandatory minimums like wal_senders are handled
     # later, in ensure_viable_postgresql_conf().
     ram = int(host.get_total_ram() / (1024 * 1024))  # Working in megabytes.
 
@@ -692,11 +700,11 @@ def update_postgresql_conf():
     helpers.rewrite(path, pg_conf)
 
 
-@when('leadership.changed.replication_password')
 @when('postgresql.cluster.created')
+@when('leadership.set.replication_password')
 def update_pgpass():
     leader = context.Leader()
-    accounts = ['root', 'postgres']
+    accounts = ['root', 'postgres', 'ubuntu']
     for account in accounts:
         path = os.path.expanduser(os.path.join('~{}'.format(account),
                                                '.pgpass'))
@@ -740,33 +748,18 @@ def postgresql_conf_changed():
             hookenv.log('{} changed from {!r} to {!r}. '
                         'Restart required.'.format(key, old, new))
             needs_restart = True
-    reactive.toggle_state('postgresql.cluster.needs_restart', needs_restart)
-    reactive.toggle_state('postgresql.cluster.needs_reload', not needs_restart)
+    if needs_restart:
+        reactive.set_state('postgresql.cluster.needs_restart')
+    else:
+        reactive.set_state('postgresql.cluster.needs_reload')
 
 
-def maybe_restart_now():
-    if not postgresql.is_running():
-        if replication.needs_clone():
-            # The unit needs to be cloned. Grab the restart lock
-            # to ensure the unit we are cloning isn't restarted
-            # during the cloning process.
-            coordinator.acquire('restart')
-            return
-        else:
-            # For all other cases there is no need to wait for
-            # permission to restart a stopped service.
-            return
-
-
+@when('postgresql.cluster.is_running')
 @when('coordinator.requested.restart')
+@when_not('coordinator.granted.restart')
+@when_not('workloadstatus.blocked')
 def wait_for_restart():
-    if coordinator.requested('restart') and not coordinator.granted('restart'):
-        if replication.needs_clone():
-            msg = ('Waiting for permission to clone {}'
-                   .format(replication.master()))
-        else:
-            msg = 'Waiting for permission to restart'
-        status_set('waiting', msg)
+    status_set('waiting', 'Waiting for permission to restart')
 
 
 def open_ports(old_port, new_port):

@@ -38,11 +38,6 @@ options:
     type: string
     description: >
         Space separated list of extra packages to install.
-  dumpfile_location:
-    default: "None"
-    type: string
-    description: >
-        Path to a dumpfile to load into DB when service is initiated.
   version:
     default: ""
     type: string
@@ -129,6 +124,11 @@ options:
     default: 7
     type: int
     description: Number of daily backups to retain.
+  backup_dir:
+    default: "/var/lib/postgresql/backups"
+    type: string
+    description: >
+        Directory to place backups in.
   nagios_context:
     default: "juju"
     type: string
@@ -609,10 +609,4 @@ options:
     type: float
     description: >
         DEPRECATED. Use extra_pg_conf. Random page cost
-  backup_dir:
-    default: "/var/lib/postgresql/backups"
-    type: string
-    description: >
-        DEPRECATED. Directory to place backups in. If you change this,
-        your backups will go to this path and not the 'backups' Juju
-        storage mount.
+

@@ -31,6 +31,8 @@ import psycopg2.extensions
 from charmhelpers import context
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG, WARNING
+from charms import reactive
+from charms.reactive import not_unless
 
 from reactive.postgresql import helpers
 from reactive import workloadstatus
@@ -287,6 +289,7 @@ def drop_cluster():
     subprocess.check_call(cmd, universal_newlines=True)
 
 
+@not_unless('postgresql.replication.is_primary')
 def ensure_database(database):
     '''Create the database if it doesn't already exist.
 
@@ -301,6 +304,7 @@ def ensure_database(database):
         cur.execute('CREATE DATABASE %s', (pgidentifier(database),))
 
 
+@not_unless('postgresql.replication.is_primary')
 def ensure_user(con, username, password, superuser=False, replication=False):
     if role_exists(con, username):
         cmd = ["ALTER ROLE"]
@@ -321,6 +325,7 @@ def role_exists(con, role):
     return cur.fetchone() is not None
 
 
+@not_unless('postgresql.replication.is_primary')
 def grant_database_privileges(con, role, database, privs):
     cur = con.cursor()
     for priv in privs:
@@ -328,6 +333,7 @@ def grant_database_privileges(con, role, database, privs):
                     (AsIs(priv), pgidentifier(database), pgidentifier(role)))
 
 
+@not_unless('postgresql.replication.is_primary')
 def grant_user_roles(con, username, roles):
     wanted_roles = set(roles)
 
@@ -366,6 +372,7 @@ def grant_user_roles(con, username, roles):
     #                     (pgidentifier(role), pgidentifier(username)))
 
 
+@not_unless('postgresql.replication.is_primary')
 def ensure_role(con, role):
     # Older PG versions don't have 'CREATE ROLE IF NOT EXISTS'
     cur = con.cursor()
@@ -376,6 +383,7 @@ def ensure_role(con, role):
                     (pgidentifier(role),))
 
 
+@not_unless('postgresql.replication.is_primary')
 def ensure_extensions(con, extensions):
     cur = con.cursor()
     cur.execute('SELECT extname FROM pg_extension')
@@ -651,21 +659,29 @@ def wal_location_to_bytes(wal_location):
     return int(logid, 16) * 16 * 1024 * 1024 * 255 + int(offset, 16)
 
 
-# def promote():
-#     assert is_secondary(), 'Cannot promote primary'
-#     assert is_running(), 'Attempting to promote a stopped server'
-#
-#     # TODO: If we publish the history files to the peer relation,
-#     # we can do a timeline switch with all PG versions.
-#     if has_version('9.3') or wal_e.wal_e_enabled():
-#         rc = subprocess.call(['sudo', '-u', 'postgres', '-H',
-#                               pg_ctl_path(), 'promote', '-D', data_dir()],
-#                              universal_newlines=True)
-#         if rc != 0:
-#             helpers.status_set('blocked', 'Failed to promote to primary')
-#             raise SystemExit(0)
-#     else:
-#         # Removing recovery.conf will promote the unit to master without
-#         # a timeline switch when PostgreSQL is restarted.
-#         os.unlink(recovery_conf_path())
-#         coordinator.acquire('restart')
+def promote():
+    assert is_secondary(), 'Cannot promote primary'
+    assert is_running(), 'Attempting to promote a stopped server'
+
+    wal_e_enabled = reactive.is_state('postgresql.wal_e.enabled')
+
+    if wal_e_enabled or has_version('9.3'):
+        # If we have PostgreSQL 9.3 or WAL archiving enabled, promote
+        # and do a timeline switch. We have to assume WAL-E is configured
+        # properly and is working.
+        rc = subprocess.call(['sudo', '-u', 'postgres', '-H',
+                              pg_ctl_path(), 'promote', '-D', data_dir()],
+                             universal_newlines=True)
+        if rc != 0:
+            helpers.status_set('blocked', 'Failed to promote to primary')
+            raise SystemExit(0)
+    else:
+        # Removing recovery.conf will promote the unit to master without
+        # a timeline switch when PostgreSQL is restarted.
+        os.unlink(recovery_conf_path())
+        # Restart now. No need to request permission, as this unit was
+        # previously a secondary and not being used by anything. This
+        # also ensures the unit is a functioning primary before returning,
+        # like the newer 'promote' code path above.
+        stop()
+        start()

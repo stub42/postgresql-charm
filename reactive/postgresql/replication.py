@@ -22,11 +22,12 @@ import time
 import psycopg2
 
 from charmhelpers import context
-from charmhelpers.core import host, hookenv, templating
+from charmhelpers.core import host, hookenv, templating, unitdata
 from charmhelpers.core.hookenv import DEBUG, ERROR, WARNING
 from charms import reactive
-from charms.reactive import hook, not_unless, when, when_not
+from charms.reactive import not_unless, when, when_not
 
+from everyhook import everyhook
 from reactive.leadership import leader_get, leader_set
 from reactive.workloadstatus import status_set
 from reactive.postgresql import helpers
@@ -34,10 +35,18 @@ from reactive.postgresql import postgresql
 from reactive.postgresql import wal_e
 
 
-@hook
-def set_replication_state():
+@everyhook
+def replication_states():
+    '''Update the replication state every hook, or risk failures
+       when leadership or peer relation settings are visible before
+       the leadership or peer relation hooks are fired.
     '''
-    Called for every hook. Set the following states appropriately:
+    update_replication_states()
+
+
+def update_replication_states():
+    '''
+    Set the following states appropriately:
 
         postgresql.replication.has_peers
 
@@ -45,7 +54,8 @@ def set_replication_state():
 
         postgresql.replication.had_peers
 
-            This unit once had peers, but may not any more.
+            This unit once had peers, but may not any more. The peer
+            relation exists.
 
         postgresql.replication.master.peered
 
@@ -68,40 +78,68 @@ def set_replication_state():
         postgresql.replication.cloned
 
             This unit is on the master's timeline. It has been cloned from
-            the master, or is the master.
+            the master, or is the master. Undefined with manual replication.
+
+        postgresql.replication.manual
+
+            Manual replication mode has been selected and the charm
+            must not do any replication setup or maintenance.
+
+        postgresql.replication.is_primary
+
+            The unit is writable. It is either the master or manual
+            replication mode is in effect.
     '''
-    peer_relid = hookenv.peer_relation_id()
-    peers = hookenv.related_units(peer_relid)
-    reactive.toggle_state('postgresql.replication.has_peers', bool(peers))
+    peers = context.Relations().peer
+    reactive.toggle_state('postgresql.replication.has_peers', peers)
     if peers:
         reactive.set_state('postgresql.replication.had_peers')
 
-    master = leader_get('master')
+    reactive.toggle_state('postgresql.replication.manual',
+                          hookenv.config()['manual_replication'])
+
+    master = get_master()  # None if postgresql.replication.manual state.
     reactive.toggle_state('postgresql.replication.is_master',
                           master == hookenv.local_unit())
     reactive.toggle_state('postgresql.replication.master.peered',
-                          master in peers)
+                          peers and master in peers)
     reactive.toggle_state('postgresql.replication.master.authorized',
-                          master in peers and _authorized_by(master))
+                          peers and master in peers and authorized_by(master))
     ready = (reactive.is_state('postgresql.replication.is_master') or
              reactive.is_state('postgresql.replication.master.authorized'))
     reactive.toggle_state('postgresql.replication.has_master', ready)
 
+    reactive.toggle_state('postgresql.replication.is_primary',
+                          postgresql.is_primary())
 
-def _authorized_by(unit):
-    # Ensure that this unit is listed as authorized by unit, and the
-    # given unit has provided connection details. The check for
+    if reactive.is_state('postgresql.replication.is_primary'):
+        if reactive.is_state('postgresql.replication.is_master'):
+            # If the unit is a primary and the master, it is on the master
+            # timeline by definition and gets the 'cloned' state.
+            reactive.set_state('postgresql.replication.cloned')
+        else:
+            # If the unit is a primary and not the master, it is on a
+            # divered timeline and needs to lose the 'cloned' state.
+            reactive.remove_state('postgresql.replication.cloned')
+
+
+def authorized_by(unit):
+    # Ensure that this unit is listed as authorized by the given unit,
+    # and the given unit has provided connection details. The check for
     # connection details is needed in case we are upgrading from an
     # older charm and the remote unit has not yet run its upgrade-charm
     # hook and provided the necessary information.
     peer = context.Relations().peer
-    authorized = set(peer[unit].get('allowed-units').split())
-    return 'host' in peer[unit] and unit in authorized
+    if peer is None or unit not in peer:
+        return False
+    authorized = set(peer[unit].get('allowed-units', '').split())
+    return 'host' in peer[unit] and hookenv.local_unit() in authorized
 
 
 @when_not('leadership.is_leader')
 @when_not('postgresql.replication.had_peers')
 @when_not('workloadstatus.blocked')
+@when_not('postgresql.replication.manual')
 def wait_for_peers():
     """Wait if there are no peers and we are not the master."""
     status_set('waiting', 'Waiting for peers')
@@ -109,16 +147,25 @@ def wait_for_peers():
 
 @when('leadership.set.master')
 @when('postgresql.replication.has_peers')
-@when_not('leadership.replication.has_master')
+@when_not('postgresql.replication.has_master')
 @when_not('workloadstatus.blocked')
+@when_not('postgresql.replication.manual')
 def wait_for_master():
     """Master appointed but not available to this unit."""
-    status_set('waiting', 'Waiting for master')
+    status_set('waiting', 'Waiting for master {}'.format(get_master()))
 
 
 def get_master():
     '''Return the appointed master unit.'''
+    if reactive.is_state('manual_replication'):
+        return None
     return leader_get('master')
+
+
+@not_unless('leadership.is_leader')
+def set_master(master):
+    leader_set(master=master)
+    update_replication_states()
 
 
 def is_master():
@@ -127,28 +174,28 @@ def is_master():
 
 @when('leadership.is_leader')
 @when_not('leadership.set.master')
+@when_not('postgresql.replication.manual')
 def initial_deployment_appoint_master():
     '''I am the leader and nobody is declared master. Declare myself master.'''
-    standalone_unit_appoint_master()
+    set_master(hookenv.local_unit())
 
 
 @when('leadership.is_leader')
 @when('postgresql.replication.had_peers')
 @when_not('postgresql.replication.has_peers')
 @when_not('postgresql.replication.is_master')
+@when_not('postgresql.replication.manual')
 def standalone_unit_appoint_master():
     '''I am the leader and have no peers. Declare myself master.'''
-    leader_set(master=hookenv.local_unit())
-    reactive.set_state('postgresql.replication.is_master')
-    reactive.set_state('postgresql.replication.has_master')
-    reactive.set_state('postgresql.replication.cloned')
+    set_master(hookenv.local_unit())
 
 
 @when('leadership.is_leader')
 @when('postgresql.replication.has_peers')
 @when_not('postgresql.replication.is_master')
 @when_not('postgresql.replication.master.peered')
-def appoint_master():
+@when_not('postgresql.replication.manual')
+def failover():
     '''The master has been destroyed. Trigger the failover process.'''
     master = get_master()
     rel = context.Relations().peer
@@ -174,57 +221,27 @@ def appoint_master():
     # problem detailed above. pg_rewind and repmgr may also offer
     # alternatives, repairing the diverged timeline rather than
     # avoiding it.
-    ready_for_election = True
+    waiting_on = set()
     for unit, relinfo in rel.items():
         if master in relinfo.get('allowed-units', '').split():
             hookenv.log('Waiting for {} to stop replicating ex-master'
                         ''.format(unit))
-            ready_for_election = False
-    if ready_for_election:
+            waiting_on.add(unit)
+    if not waiting_on:
         new_master = elect_master()
         hookenv.log('Failing over to new master {}'.format(new_master),
                     WARNING)
-        leader_set(master=new_master)
+        set_master(new_master)
     else:
-        status_set(None, 'Coordinating failover')
+        status_set(None,
+                   'Coordinating failover. Waiting on {}'
+                   ''.format(',').join(sorted(waiting_on)))
 
 
 def replication_username():
     # Leading underscore for 'system' accounts, to avoid an unlikely
     # conflict with a client service named 'repl'.
     return '_juju_repl'
-
-
-# def replication_data_ready_action(func):
-#     '''A replication specific data_ready action wrapper.
-#
-#     Action skipped when the manual_replication config option is True
-#     or if we are not ready to deal with replication.
-#     '''
-#     @wraps(func)
-#     def wrapper(service_name):
-#         if hookenv.config()['manual_replication']:
-#             hookenv.log('Manual replication - skipping')
-#             return
-#
-#         peer_rel = context.Relations().peer
-#         if peer_rel is None:
-#             hookenv.log('Not yet joined peer relation - skipping')
-#             return
-#
-#         if 'following' in peer_rel.local:
-#             # Master was available, replication working or in failover.
-#             return func()
-#
-#         master = postgresql.master()
-#         if master in peer_rel or master == hookenv.local_unit():
-#             # Master is available.
-#             return func()
-#
-#         hookenv.log('Not yet joined peer relation with {} - skipping'
-#                     ''.format(postgresql.master()))
-#         return
-#     return wrapper
 
 
 @when('leadership.is_leader')
@@ -234,17 +251,24 @@ def ensure_replication_credentials():
 
 
 @when('postgresql.replication.is_master')
+@when('postgresql.replication.is_primary')
 @when('postgresql.cluster.is_running')
 @when('leadership.set.replication_password')
-def ensure_replication_user():
+@when_not('postgresql.replication.manual')
+@when_not('postgresql.replication.replication_user_created')
+def create_replication_user():
+    username = replication_username()
+    hookenv.log('Creating replication user {}'.format(username))
     con = postgresql.connect()
-    postgresql.ensure_user(con, replication_username(),
+    postgresql.ensure_user(con, username,
                            leader_get('replication_password'),
                            replication=True)
     con.commit()
+    reactive.set_state('postgresql.replication.replication_user_created')
 
 
 @when('postgresql.replication.has_peers')
+@when_not('postgresql.replication.manual')
 def publish_replication_details():
     peer = context.Relations().peer
     if peer is not None:
@@ -253,13 +277,23 @@ def publish_replication_details():
         peer.local['allowed-units'] = ' '.join(sorted(peer.keys()))
 
 
+@when('coordinator.requested.restart')
+@when_not('coordinator.granted.restart')
+@when_not('postgresql.replication.cloned')
+@when_not('postgresql.replication.manual')
+@when_not('workloadstatus.blocked')
+def wait_for_clone():
+    status_set('waiting',
+               'Waiting for permission to clone {}'.format(get_master()))
+
+
 @when('postgresql.cluster.configured')
 @when('postgresql.replication.master.authorized')
 @when_not('postgresql.replication.cloned')
+@when_not('postgresql.replication.manual')
 def clone_master():
-    master = postgresql.master()
+    master = get_master()
     peer_rel = context.Relations().peer
-    local_relinfo = peer_rel.local
     master_relinfo = peer_rel[master]
 
     # Be paranoid since we are about to destroy data.
@@ -284,7 +318,7 @@ def clone_master():
     else:
         cmd.append('--xlog')
     hookenv.log('Cloning {} with {}'.format(master, ' '.join(cmd)))
-    helpers.status_set('maintenance', 'Cloning {}'.format(master))
+    status_set('maintenance', 'Cloning {}'.format(master))
     try:
         # Switch to a directory the postgres user can access.
         with helpers.switch_cwd('/tmp'):
@@ -302,14 +336,13 @@ def clone_master():
     ensure_ssl_certs()
     update_recovery_conf()
 
-    local_relinfo['following'] = master
     reactive.set_state('postgresql.replication.cloned')
 
 
 def ensure_ssl_certs():
     if postgresql.has_version('9.2'):
-        hookenv.log('Nothing to do with PostgreSQL {}'
-                    ''.format(postgresql.version()))
+        hookenv.log('No SSL cleanup with PostgreSQL {}'
+                    ''.format(postgresql.version()), DEBUG)
         return
 
     # Ensure the SSL certificates exist in $DATA_DIR, where PostgreSQL
@@ -327,47 +360,41 @@ def ensure_ssl_certs():
 
 
 @when('postgresql.replication.is_master')
-@when('postgresql.replication.had_peers')
-def promote_master():
-    rels = context.Relations()
-    if 'following' in rels.peer.local:
-        if postgresql.is_secondary():
-            hookenv.status_set('maintenance', 'Promoting to master')
-            postgresql.promote()
-        while postgresql.is_in_recovery():
-            time.sleep(1)
-        del rels.peer.local['following']
+@when('postgresql.replication.cloned')
+@when('postgresql.cluster.is_running')
+@when_not('postgresql.replication.is_primary')
+@when_not('postgresql.replication.manual')
+def promote_to_master():
+    status_set('maintenance', 'Promoting to master')
+    postgresql.promote()
 
+    while postgresql.is_in_recovery():
+        status_set('maintenance', 'Waiting for startup')
+        time.sleep(1)
 
-# Use @when_file_changed for this when Issue #44 is resolved.
-# @when_file_changed(postgresql.recovery_conf_path)
-# @when('postgresql.cluster.is_running')
-# def restart_on_master_change():
-#     reactive.set_state('postgresql.cluster.needs_restart')
+    update_replication_states()
 
 
 @when('postgresql.replication.master.authorized')
 @when('postgresql.replication.cloned')
-@not_unless('postgresql.replication.master.peered')
+@when_not('postgresql.replication.manual')
 def update_recovery_conf():
     master = get_master()
+    assert master != hookenv.local_unit()
+
     path = postgresql.recovery_conf_path()
 
     peer_rel = context.Relations().peer
     master_relinfo = peer_rel.get(master)
 
-    if not (master_relinfo and 'host' in master_relinfo):
-        hookenv.log('Master {} has no published connection details'
-                    ''.format(master))
-        return
-
-    following = peer_rel.local.get('following')
+    following = unitdata.kv().get('postgresql.replication.following')
     leader = context.Leader()
     config = hookenv.config()
 
     if master != following:
-        hookenv.log('Following new master {} (was {})'.format(master,
-                                                              following))
+        status_set('maintenance', 'Following new master {}'.format(master))
+        unitdata.kv().set('postgresql.replication.following', master)
+
     else:
         # Even though the master is unchanged, we still regenerate
         # recovery.conf in case connection details such as IP addresses
@@ -427,7 +454,7 @@ def elect_master():
         # This should only happen if we failover before replication has
         # been setup, like a test suite destroying units without waiting
         # for the initial deployment to complete.
-        helpers.status_set('blocked', 'No candidates for master found!')
+        status_set('blocked', 'No candidates for master found!')
         raise SystemExit(0)
     elected_master = offsets[0][1]
     return elected_master

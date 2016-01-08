@@ -179,11 +179,13 @@ class PGBaseTestCase(object):
     @property
     def master(self):
         status = self.deployment.get_status()
+        messages = []
         for unit, info in status['services']['postgresql']['units'].items():
             status_message = info['workload-status'].get('message')
             if status_message == 'Live master':
                 return unit
-        self.fail('There is no master')
+            messages.append(status_message)
+        self.fail('There is no master. Got {!r}'.format(messages))
 
     @property
     def secondaries(self):
@@ -412,7 +414,7 @@ class PGMultiBaseTestCase(PGBaseTestCase):
     def test_replication(self):
         self._replication_test()
 
-    @unittest.skip('Bug #1511659')
+    # @unittest.skip('Bug #1511659')
     def test_failover(self):
         # Destroy the master in a stable environment.
         self.deployment.add_unit('postgresql')
