@@ -569,7 +569,7 @@ def ensure_viable_postgresql_conf(opts):
 
     # Log shipping with WAL-E.
     if config['wal_e_storage_uri']:
-        force(archive_mode=True)
+        force(archive_mode='on')  # Boolean pre-9.5, enum 9.5+
         force(archive_command=wal_e.wal_e_archive_command())
 
     # Log destinations for syslog. This charm only supports standard
@@ -617,7 +617,8 @@ def validate_postgresql_conf(conf):
             elif r.vartype == 'enum':
                 v = v.lower()
                 if v not in r.enumvals:
-                    raise ValueError('Must be one of {!r}'.format(r.enumvals))
+                    raise ValueError('Must be one of {}. Got {}'
+                                     ''.format(','.join(r.enumvals), v))
 
             elif r.vartype == 'integer':
                 if r.unit:

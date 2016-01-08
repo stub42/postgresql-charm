@@ -551,6 +551,17 @@ class PG94MultiTests(PGMultiBaseTestCase, unittest.TestCase):
                        pgdg=(False if SERIES == 'wily' else True))
 
 
+class PG95Tests(PGBaseTestCase, unittest.TestCase):
+    test_config = dict(version=(None if SERIES == 'xenial' else '9.5'),
+                       pgdg=(False if SERIES == 'xenial' else True))
+
+
+class PG95MultiTests(PGMultiBaseTestCase, unittest.TestCase):
+    num_units = 3
+    test_config = dict(version=(None if SERIES == 'xenial' else '9.5'),
+                       pgdg=(False if SERIES == 'xenial' else True))
+
+
 class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
     num_units = 2  # Old charm only supported 2 unit initial deploy.
     test_config = dict(version=None)

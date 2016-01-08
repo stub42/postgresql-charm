@@ -308,7 +308,7 @@ and set the service configuration settings similar to the following::
 
 - [PostgreSQL website](http://www.postgresql.org/)
 - [PostgreSQL bug submission
-  guidelines](http://www.postgresql.org/docs/9.2/static/bug-reporting.html)
+  guidelines](http://www.postgresql.org/docs/9.5/static/bug-reporting.html)
 - [PostgreSQL Mailing List](http://www.postgresql.org/list/)
 
   [1]: https://bugs.launchpad.net/charms/+source/postgresql/+bug/1258485

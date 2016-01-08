@@ -48,8 +48,8 @@ options:
     type: string
     description: >
         Version of PostgreSQL that we want to install. Supported versions
-        are "9.1", "9.2", "9.3" & "9.4". The default version for the
-        deployed Ubuntu release is used when the version is not specified.
+        are "9.1", "9.2", "9.3", "9.4" & "9.5". The default version for the
+        deployed Ubuntu release is used when the version is unspecified.
   extra_pg_conf:
       # The defaults here match the defaults chosen by the charm,
       # so removing them will not change them. They are listed
@@ -67,7 +67,7 @@ options:
         log_disconnections=true
         log_autovacuum_min_duration=-1
         log_line_prefix='%t [%p]: [%l-1] db=%d,user=%u '
-        archive_mode=true
+        archive_mode=on
         archive_command='/bin/true'
         hot_standby=true
         max_wal_senders=80
