@@ -19,7 +19,7 @@ import subprocess
 import time
 
 from charmhelpers import context
-from charmhelpers.core import hookenv
+from charmhelpers.core import hookenv, host
 from charmhelpers.core.hookenv import DEBUG
 
 from coordinator import coordinator
@@ -42,7 +42,7 @@ def handle_storage_relation():
         raise SystemExit(0)
     elif data_rels:
         relid, rel = list(data_rels.items())[0]
-        rel['mountpoint'] = external_volume_mount
+        rel.local['mountpoint'] = external_volume_mount
 
     if needs_remount():
         # Migrate any data when we can restart.
@@ -53,6 +53,22 @@ def needs_remount():
     mounted = os.path.isdir(external_volume_mount)
     linked = os.path.islink(postgresql.data_dir())
     return mounted and not linked
+
+
+def fix_perms(data_dir):
+    # The path to data_dir must be world readable, so the postgres user
+    # can traverse to it.
+    p = data_dir
+    while p != '/':
+        p = os.path.dirname(p)
+        subprocess.check_call(['chmod', 'a+rX', p], universal_newlines=True)
+
+    # data_dir and all of its contents should be owned by the postgres
+    # user and group.
+    host.chownr(data_dir, 'postgres', 'postgres', follow_links=False)
+
+    # data_dir should not be world readable.
+    os.chmod(data_dir, 0o700)
 
 
 @data_ready_action
@@ -71,7 +87,7 @@ def remount():
     if not os.path.isdir(new_data_dir):
         hookenv.log('Migrating data from {} to {}'.format(old_data_dir,
                                                           new_data_dir))
-        helpers.makedirs(new_data_dir, mode=0o770,
+        helpers.makedirs(new_data_dir, mode=0o700,
                          user='postgres', group='postgres')
         try:
             rsync_cmd = ['rsync', '-av',
@@ -81,6 +97,7 @@ def remount():
             subprocess.check_call(rsync_cmd)
             os.replace(old_data_dir, backup_data_dir)
             os.symlink(new_data_dir, old_data_dir)
+            fix_perms(new_data_dir)
         except subprocess.CalledProcessError:
             helpers.status_set('blocked',
                                'Failed to sync data from {} to {}'

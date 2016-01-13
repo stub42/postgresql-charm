@@ -509,6 +509,33 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         self.assertTrue(table_found, "Replication not replicating")
 
 
+class BSBStorageTestCase(unittest.TestCase):
+    storage_subordinate = True
+
+    def test_mount(self):
+        client_unit = self.deployment.sentry['postgresql'][0].info['unit_name']
+        details = subprocess.check_output(['juju', 'run',
+                                           '--unit', client_unit,
+                                           'stat --format "%A %U %G %N" '
+                                           '/var/lib/postgresql/9.3/main'],
+                                          stderr=subprocess.DEVNULL,
+                                          universal_newlines=True).strip()
+        self.assertEqual(details,
+                         "lrwxrwxrwx root root "
+                         "'/var/lib/postgresql/9.3/main' -> "
+                         "'/srv/data/postgresql/9.3/main'")
+
+        details = subprocess.check_output(['juju', 'run',
+                                           '--unit', client_unit,
+                                           'stat --format "%A %U %G %N" '
+                                           '/srv/data/postgresql/9.3/main'],
+                                          stderr=subprocess.DEVNULL,
+                                          universal_newlines=True).strip()
+        self.assertEqual(details,
+                         "drwx------ postgres postgres "
+                         "'/srv/data/postgresql/9.3/main'")
+
+
 class PG91Tests(PGBaseTestCase, unittest.TestCase):
     test_config = dict(version=(None if SERIES == 'precise' else '9.1'),
                        pgdg=(False if SERIES == 'precise' else True))
@@ -527,13 +554,14 @@ class PG92MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     test_config = dict(version='9.2', pgdg=True)
 
 
-class PG93Tests(PGBaseTestCase, unittest.TestCase):
+class PG93Tests(BSBStorageTestCase, PGBaseTestCase, unittest.TestCase):
     test_config = dict(version=(None if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True))
 
 
-class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
-    storage_subordinate = True
+class PG93MultiTests(BSBStorageTestCase, PGMultiBaseTestCase,
+                     unittest.TestCase):
+    # storage_subordinate = True
     nagios_subordinate = True
     test_config = dict(version=(None if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True))
