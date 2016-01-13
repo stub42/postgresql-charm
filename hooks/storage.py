@@ -77,6 +77,7 @@ def remount():
         return
 
     if postgresql.is_running():
+        # Attempting this while PostgreSQL is live would be really, really bad.
         postgresql.stop()
 
     old_data_dir = postgresql.data_dir()
@@ -85,6 +86,8 @@ def remount():
     backup_data_dir = '{}-{}'.format(old_data_dir, int(time.time()))
 
     if not os.path.isdir(new_data_dir):
+        # If there is not an existing db on the mount, migrate the current
+        # db there.
         hookenv.log('Migrating data from {} to {}'.format(old_data_dir,
                                                           new_data_dir))
         helpers.makedirs(new_data_dir, mode=0o700,
@@ -95,11 +98,12 @@ def remount():
                          new_data_dir + '/']
             hookenv.log('Running {}'.format(' '.join(rsync_cmd)), DEBUG)
             subprocess.check_call(rsync_cmd)
-            os.replace(old_data_dir, backup_data_dir)
-            os.symlink(new_data_dir, old_data_dir)
-            fix_perms(new_data_dir)
         except subprocess.CalledProcessError:
             helpers.status_set('blocked',
                                'Failed to sync data from {} to {}'
                                ''.format(old_data_dir, new_data_dir))
             raise SystemExit(0)
+
+    os.replace(old_data_dir, backup_data_dir)
+    os.symlink(new_data_dir, old_data_dir)
+    fix_perms(new_data_dir)
