@@ -24,6 +24,7 @@ from charmhelpers.core.hookenv import DEBUG, WARNING
 from charms import reactive
 from charms.reactive import hook, when
 
+from reactive import apt
 from reactive import coordinator
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
