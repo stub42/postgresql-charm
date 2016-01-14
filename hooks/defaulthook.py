@@ -22,7 +22,9 @@ import sys
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 sys.path.insert(1, ROOT)
 sys.path.insert(2, os.path.join(ROOT, 'lib'))
-sys.path.insert(3, os.path.join(ROOT, 'lib', 'pypi'))
+
+from charms.bootstrap import bootstrap_charm_deps
+bootstrap_charm_deps()
 
 from charmhelpers import fetch  # NOQA: flake8
 from charmhelpers.core import hookenv  # NOQA: flake8

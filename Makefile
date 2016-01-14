@@ -3,6 +3,10 @@ TEST_TIMEOUT := 900
 SERIES := $(shell juju get-environment default-series)
 HOST_SERIES := $(shell lsb_release -sc)
 
+BUILD_ROOT=/home/stub/charms/built
+BUILD_DIR=${BUILD_ROOT}/${SERIES}/postgresql
+
+
 # /!\ Ensure that errors early in pipes cause failures, rather than
 # overridden by the last stage of the pipe. cf. 'test.py | ts'
 SHELL := /bin/bash
@@ -53,6 +57,14 @@ lint:
 	    --exclude=lib/charmhelpers,lib/pgclient/hooks/charmhelpers,lib/pypi,__pycache__ \
 	    hooks actions testing tests reactive lib
 
+build:
+	@echo "Building charm"
+	@charm build -o ${BUILD_ROOT} -s ${SERIES}
+
+fbuild:
+	@echo "Forcefully building charm"
+	@charm build -o ${BUILD_ROOT} -s ${SERIES} --force
+
 _co=,
 _empty=
 _sp=$(_empty) $(_empty)
@@ -96,27 +108,6 @@ integration_breakup:
 	${NOSE} tests/test_integration.py:PG92Tests 2>&1 | ts
 	${NOSE} tests/test_integration.py:PG92MultiTests 2>&1 | ts
 	@echo OK: Integration tests pass `date`
-
-sync: sync-charmhelpers sync-pypi
-
-# Embed from a branch, as we often will need patches applied.
-sync-charmhelpers:
-	@bzr cat \
-	    lp:charm-helpers/tools/charm_helpers_sync/charm_helpers_sync.py \
-		> .charm_helpers_sync.py
-	rm -rf lib/charmhelpers
-	@python .charm_helpers_sync.py -c charm-helpers.yaml
-	@rm .charm_helpers_sync.py
-	git add -A lib/charmhelpers
-
-	
-# Embed pure python pypi dependencies.
-sync-pypi:
-	rm -rf lib/pypi
-	mkdir lib/pypi
-	pip3 install --no-compile --no-deps -t lib/pypi charms.reactive
-	git add -A lib/pypi
-
 
 # These targets are to separate the test output in the Charm CI system
 # eg. 'make test_integration.py:PG93Tests'
