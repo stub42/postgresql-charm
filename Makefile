@@ -54,15 +54,17 @@ lint:
 	@echo "Lint check (flake8)"
 	@flake8 -v \
             --ignore=E402 \
-	    --exclude=lib/charmhelpers,lib/pgclient/hooks/charmhelpers,lib/pypi,__pycache__ \
+	    --exclude=lib/testdeps,lib/pgclient/hooks/charmhelpers,lib/charms,__pycache__ \
 	    hooks actions testing tests reactive lib
 
 build:
 	@echo "Building charm"
+	rm -rf lib/testdeps
 	@charm build -o ${BUILD_ROOT} -s ${SERIES}
 
 fbuild:
 	@echo "Forcefully building charm"
+	rm -rf lib/testdeps
 	@charm build -o ${BUILD_ROOT} -s ${SERIES} --force
 
 _co=,
@@ -79,23 +81,37 @@ else
 TIMING_NOSE := nosetests3 -sv --with-timer
 endif
 
-unittest:
+# We need to unpack charmhelpers and charms.reactive so the tests can
+# find them.
+unpackdeps:
+	mkdir -p lib/testdeps
+	tar -xz --strip-components 1 \
+	    -f wheelhouse/charms.reactive-*.tar.gz \
+	    -C lib/testdeps --wildcards '*/charms'
+	tar -xz --strip-components 1 \
+	    -f wheelhouse/charmhelpers-*.tar.gz \
+	    -C lib/testdeps --wildcards '*/charmhelpers'
+	tar -xz --strip-components 1 \
+	    -f wheelhouse/charmhelpers-*.tar.gz \
+	    -C lib/pgclient/hooks --wildcards '*/charmhelpers'
+
+unittest: unpackdeps
 	${NOSE} ${TESTFILES} --cover-package=${PACKAGES} \
 	    --with-coverage --cover-branches
 	@echo OK: Unit tests pass `date`
 
-coverage:
+coverage: unpackdeps
 	${NOSE} ${TESTFILES} --cover-package=${PACKAGES} \
 	    --with-coverage --cover-branches \
 	    --cover-erase --cover-html --cover-html-dir=coverage \
 	    --cover-min-percentage=100 || \
 		(gnome-open coverage/index.html; false)
 
-integration:
+integration: testdeps
 	${TIMING_NOSE} tests/test_integration.py 2>&1 | ts
 
 # More overheads, but better progress reporting
-integration_breakup:
+integration_breakup: testdeps
 	${NOSE} tests/test_integration.py:PG93Tests 2>&1 | ts
 	${NOSE} tests/test_integration.py:PG93MultiTests 2>&1 | ts
 	${NOSE} tests/test_integration.py:UpgradedCharmTests 2>&1 | ts

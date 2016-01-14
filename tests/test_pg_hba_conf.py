@@ -21,7 +21,7 @@ import unittest
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 sys.path.insert(1, ROOT)
 sys.path.insert(2, os.path.join(ROOT, 'lib'))
-sys.path.insert(3, os.path.join(ROOT, 'lib', 'pypi'))
+sys.path.insert(3, os.path.join(ROOT, 'lib', 'testdeps'))
 
 from reactive.postgresql.service import generate_pg_hba_conf
 

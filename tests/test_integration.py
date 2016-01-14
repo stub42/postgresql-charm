@@ -640,20 +640,22 @@ class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
                 self.assertGreaterEqual(cur.fetchone()[0], 1)
 
 
-def setUpModule():
-    # Mirror charmhelpers into our support charms, since charms
-    # can't symlink out of their subtree.
-    main_charmhelpers = os.path.abspath(os.path.join(ROOT, 'lib',
-                                                     'charmhelpers'))
-    test_client_charmhelpers = os.path.join(CLIENT_CHARMDIR,
-                                            'hooks', 'charmhelpers')
-    if os.path.exists(test_client_charmhelpers):
-        shutil.rmtree(test_client_charmhelpers)
-    shutil.copytree(main_charmhelpers, test_client_charmhelpers)
-
-
-def tearDownModule():
-    test_client_charmhelpers = os.path.join(CLIENT_CHARMDIR,
-                                            'hooks', 'charmhelpers')
-    if os.path.exists(test_client_charmhelpers):
-        shutil.rmtree(test_client_charmhelpers)
+# Now installed by the Makefile.
+#
+# def setUpModule():
+#     # Mirror charmhelpers into our support charms, since charms
+#     # can't symlink out of their subtree.
+#     main_charmhelpers = os.path.abspath(os.path.join(ROOT, 'lib',
+#                                                      'charmhelpers'))
+#     test_client_charmhelpers = os.path.join(CLIENT_CHARMDIR,
+#                                             'hooks', 'charmhelpers')
+#     if os.path.exists(test_client_charmhelpers):
+#         shutil.rmtree(test_client_charmhelpers)
+#     shutil.copytree(main_charmhelpers, test_client_charmhelpers)
+#
+#
+# def tearDownModule():
+#     test_client_charmhelpers = os.path.join(CLIENT_CHARMDIR,
+#                                             'hooks', 'charmhelpers')
+#     if os.path.exists(test_client_charmhelpers):
+#         shutil.rmtree(test_client_charmhelpers)

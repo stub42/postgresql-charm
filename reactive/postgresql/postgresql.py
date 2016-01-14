@@ -32,7 +32,10 @@ from charmhelpers import context
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charms import reactive
-from charms.reactive import not_unless
+
+# This module is unit tested, so we can't use not_unless until we
+# deal with charms.reactive Issue #46.
+# from charms.reactive import not_unless
 
 from reactive.postgresql import helpers
 from reactive import workloadstatus
@@ -289,7 +292,7 @@ def drop_cluster():
     subprocess.check_call(cmd, universal_newlines=True)
 
 
-@not_unless('postgresql.replication.is_primary')
+# @not_unless('postgresql.replication.is_primary')
 def ensure_database(database):
     '''Create the database if it doesn't already exist.
 
@@ -304,7 +307,7 @@ def ensure_database(database):
         cur.execute('CREATE DATABASE %s', (pgidentifier(database),))
 
 
-@not_unless('postgresql.replication.is_primary')
+# @not_unless('postgresql.replication.is_primary')
 def ensure_user(con, username, password, superuser=False, replication=False):
     if role_exists(con, username):
         cmd = ["ALTER ROLE"]
@@ -325,7 +328,7 @@ def role_exists(con, role):
     return cur.fetchone() is not None
 
 
-@not_unless('postgresql.replication.is_primary')
+# @not_unless('postgresql.replication.is_primary')
 def grant_database_privileges(con, role, database, privs):
     cur = con.cursor()
     for priv in privs:
@@ -333,7 +336,7 @@ def grant_database_privileges(con, role, database, privs):
                     (AsIs(priv), pgidentifier(database), pgidentifier(role)))
 
 
-@not_unless('postgresql.replication.is_primary')
+# @not_unless('postgresql.replication.is_primary')
 def grant_user_roles(con, username, roles):
     wanted_roles = set(roles)
 
@@ -372,7 +375,7 @@ def grant_user_roles(con, username, roles):
     #                     (pgidentifier(role), pgidentifier(username)))
 
 
-@not_unless('postgresql.replication.is_primary')
+# @not_unless('postgresql.replication.is_primary')
 def ensure_role(con, role):
     # Older PG versions don't have 'CREATE ROLE IF NOT EXISTS'
     cur = con.cursor()
@@ -383,7 +386,7 @@ def ensure_role(con, role):
                     (pgidentifier(role),))
 
 
-@not_unless('postgresql.replication.is_primary')
+# @not_unless('postgresql.replication.is_primary')
 def ensure_extensions(con, extensions):
     cur = con.cursor()
     cur.execute('SELECT extname FROM pg_extension')
