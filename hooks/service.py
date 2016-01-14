@@ -915,11 +915,13 @@ def install_administrative_scripts():
                       owner='root', group='postgres', perms=0o755)
 
     if not os.path.exists(logs_dir):
-        helpers.makedirs(logs_dir, mode=0o755)
+        helpers.makedirs(logs_dir, mode=0o755, owner='postgres',
+                         group='postgres')
         # Create the backups.log file used by the backup wrapper if it
         # does not exist, in order to trigger spurious alerts when a
         # unit is installed, per Bug #1329816.
-        helpers.write(helpers.backups_log_path(), '', mode=0o644)
+        helpers.write(helpers.backups_log_path(), '', mode=0o644,
+                      owner='postgres', group='postgres')
 
 
 @data_ready_action
