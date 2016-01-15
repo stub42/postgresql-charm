@@ -33,7 +33,7 @@ _success_ex:
 test: testdeps lint unittest integration
 
 testdeps:
-	sudo apt-get install -y python3-psycopg2 bzr moreutils
+	sudo apt-get install -y tox python3-psycopg2 bzr moreutils
 
 lint:
 	@echo "Charm Proof"
