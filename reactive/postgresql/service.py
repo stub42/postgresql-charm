@@ -267,6 +267,8 @@ def generate_pg_hba_conf(pg_hba, config, rels):
     # Peers need replication access as the charm replication user.
     if rels.peer:
         for peer, relinfo in rels.peer.items():
+            if 'private-address' not in relinfo:
+                continue  # Other end not yet provisioned?
             addr = postgresql.addr_to_range(relinfo['private-address'])
             qaddr = postgresql.quote_identifier(addr)
             # Magic replication database, for replication.
@@ -280,6 +282,8 @@ def generate_pg_hba_conf(pg_hba, config, rels):
     for rel in rels['db'].values():
         if 'user' in rel.local:
             for relinfo in rel.values():
+                if 'private-address' not in relinfo:
+                    continue  # Other end not yet provisioned?
                 addr = postgresql.addr_to_range(relinfo['private-address'])
                 # Quote everything, including the address, to disenchant
                 # magic tokens like 'all'.
@@ -301,6 +305,8 @@ def generate_pg_hba_conf(pg_hba, config, rels):
     for rel in rels['db-admin'].values():
         if 'user' in rel.local:
             for relinfo in rel.values():
+                if 'private-address' not in relinfo:
+                    continue  # Other end not yet provisioned?
                 addr = postgresql.addr_to_range(relinfo['private-address'])
                 add('host', 'all', 'all',
                     postgresql.quote_identifier(addr),
@@ -312,6 +318,8 @@ def generate_pg_hba_conf(pg_hba, config, rels):
     # database name.
     for rel in rels['master'].values():
         for relinfo in rel.values():
+            if 'private-address' not in relinfo:
+                continue  # Other end not yet provisioned?
             addr = postgresql.addr_to_range(relinfo['private-address'])
             add('host', 'replication',
                 postgresql.quote_identifier(rel.local['user']),
