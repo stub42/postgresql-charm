@@ -182,7 +182,8 @@ def db_relation_common(rel):
     # This is to avoid the race condition where a new client unit
     # joins an existing client relation and sees valid credentials,
     # before we have had a chance to grant it access.
-    local['allowed-units'] = ' '.join(rel.keys())
+    local['allowed-units'] = ' '.join(unit for unit, relinfo in rel.items()
+                                      if 'private-address' in relinfo)
 
 
 @not_unless('postgresql.replication.is_primary')
