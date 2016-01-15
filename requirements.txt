@@ -1,0 +1,11 @@
+flake8
+nose
+nose-cov
+nose-timing
+# pytest
+amulet
+jinja2
+juju-wait
+python-swiftclient
+charms.reactive
+charmhelpers

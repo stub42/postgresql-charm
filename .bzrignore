@@ -6,3 +6,4 @@ lib/testdeps
 coverage
 .coverage
 .unit-state.db
+.tox

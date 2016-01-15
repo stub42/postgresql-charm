@@ -33,19 +33,15 @@ _success_ex:
 test: testdeps lint unittest integration
 
 testdeps:
-	sudo add-apt-repository -y ppa:juju/stable
 	sudo add-apt-repository -y ppa:stub/juju
 	sudo apt-get update
 ifeq ($(HOST_SERIES),trusty)
 	sudo apt-get install -y \
-	    python3-psycopg2 python3-nose python3-flake8 amulet \
-	    python3-jinja2 python3-yaml juju-wait bzr python3-amulet \
-	    python-swiftclient moreutils
+	    python3-psycopg2 juju-wait bzr moreutils python3-nose
 else
 	sudo apt-get install -y \
-	    python3-psycopg2 python3-nose python3-flake8 amulet \
-	    python3-jinja2 python3-yaml juju-wait bzr python3-amulet \
-	    python3-nose-cov python3-nose-timer python-swiftclient moreutils
+	    python3-nose-cov python3-nose-timer \
+	    python3-psycopg2 juju-wait bzr moreutils python3-nose
 endif
 
 lint:
@@ -54,18 +50,21 @@ lint:
 	@echo "Lint check (flake8)"
 	@flake8 -v \
             --ignore=E402 \
-	    --exclude=lib/testdeps,lib/pgclient/hooks/charmhelpers,lib/charms,__pycache__ \
+	    --exclude=lib/testdeps,lib/pgclient/hooks/charmhelpers,lib/charms,__pycache__,.tox \
 	    hooks actions testing tests reactive lib
 
 build:
 	@echo "Building charm"
-	rm -rf lib/testdeps
-	@charm build -o ${BUILD_ROOT} -s ${SERIES}
+	rm -rf ${BUILD_DIR}/lib/pgclient/hooks/charmhelpers
+	rm -rf ${BUILD_DIR}/.tox
+	rm -rf ${BUILD_DIR}/.cache
+	rm -rf ${BUILD_DIR}/.unit-state.db
+	rm -rf ${BUILD_DIR}/.coverage
+	charm build -o ${BUILD_ROOT} -s ${SERIES}
 
 fbuild:
 	@echo "Forcefully building charm"
-	rm -rf lib/testdeps
-	@charm build -o ${BUILD_ROOT} -s ${SERIES} --force
+	charm build -o ${BUILD_ROOT} -s ${SERIES} --force
 
 _co=,
 _empty=
@@ -74,44 +73,49 @@ _sp=$(_empty) $(_empty)
 TESTFILES=$(filter-out %/test_integration.py,$(wildcard tests/test_*.py))
 PACKAGES=$(subst $(_sp),$(_co),$(notdir $(basename $(wildcard hooks/*.py))))
 
-NOSE := nosetests3 -sv
-ifeq ($(HOST_SERIES),trusty)
-TIMING_NOSE := nosetests3 -sv
-else
-TIMING_NOSE := nosetests3 -sv --with-timer
-endif
+tox: .tox/testenv/bin/python3
 
-# We need to unpack charmhelpers and charms.reactive so the tests can
-# find them. TODO: Stop this hack and use a real Python venv.
-unpackdeps:
-	mkdir -p lib/testdeps
-	tar -xz --strip-components 1 \
-	    -f wheelhouse/charms.reactive-*.tar.gz \
-	    -C lib/testdeps --wildcards '*/charms'
-	tar -xz --strip-components 1 \
-	    -f wheelhouse/charmhelpers-*.tar.gz \
-	    -C lib/testdeps --wildcards '*/charmhelpers'
-	tar -xz --strip-components 1 \
-	    -f wheelhouse/charmhelpers-*.tar.gz \
-	    -C lib/pgclient/hooks --wildcards '*/charmhelpers'
+.tox/testenv/bin/python3: requirements.txt
+	tox --notest -r
 
-unittest: unpackdeps
-	${NOSE} ${TESTFILES} --cover-package=${PACKAGES} \
-	    --with-coverage --cover-branches
+export PATH := .tox/testenv/bin:$(PATH)
+
+NOSE := .tox/testenv/bin/nosetests -sv
+TIMING_NOSE := ${NOSE} --with-timer
+
+unittest: tox
+	${NOSE} ${TESTFILES}
 	@echo OK: Unit tests pass `date`
 
-coverage: unpackdeps
-	${NOSE} ${TESTFILES} --cover-package=${PACKAGES} \
-	    --with-coverage --cover-branches \
-	    --cover-erase --cover-html --cover-html-dir=coverage \
-	    --cover-min-percentage=100 || \
-		(gnome-open coverage/index.html; false)
+# Coverage broken?
+#
+# unittest: tox
+# 	${NOSE} ${TESTFILES} --cover-package=${PACKAGES} \
+# 	    --with-coverage --cover-branches
+# 	@echo OK: Unit tests pass `date`
+# 
+# coverage: tox
+# 	${NOSE} ${TESTFILES} --cover-package=${PACKAGES} \
+# 	    --with-coverage --cover-branches \
+# 	    --cover-erase --cover-html --cover-html-dir=coverage \
+# 	    --cover-min-percentage=100 || \
+# 		(gnome-open coverage/index.html; false)
 
-integration: unpackdeps
+
+# We need to unpack charmhelpers so the old non-reactive test client
+# charm works (rather than embed another copy).
+client-charmhelpers:
+	tar -xz --strip-components 1 \
+           -f wheelhouse/charmhelpers-*.tar.gz \
+           -C lib/pgclient/hooks --wildcards '*/charmhelpers'
+
+integration-deps: tox client-charmhelpers
+
+integration: integration-deps
 	${TIMING_NOSE} tests/test_integration.py 2>&1 | ts
 
 # More overheads, but better progress reporting
-integration_breakup: unpackdeps
+integration_breakup: integration-deps
 	${NOSE} tests/test_integration.py:PG93Tests 2>&1 | ts
 	${NOSE} tests/test_integration.py:PG93MultiTests 2>&1 | ts
 	${NOSE} tests/test_integration.py:UpgradedCharmTests 2>&1 | ts
@@ -127,6 +131,6 @@ integration_breakup: unpackdeps
 
 # These targets are to separate the test output in the Charm CI system
 # eg. 'make test_integration.py:PG93Tests'
-test_integration.py%: unpackdeps
+test_integration.py%: integration-deps
 	${TIMING_NOSE} tests/$@ 2>&1 | ts
 	@echo OK: $@ tests pass `date`
