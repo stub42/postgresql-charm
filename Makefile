@@ -33,16 +33,7 @@ _success_ex:
 test: testdeps lint unittest integration
 
 testdeps:
-	sudo add-apt-repository -y ppa:stub/juju
-	sudo apt-get update
-ifeq ($(HOST_SERIES),trusty)
-	sudo apt-get install -y \
-	    python3-psycopg2 juju-wait bzr moreutils python3-nose
-else
-	sudo apt-get install -y \
-	    python3-nose-cov python3-nose-timer \
-	    python3-psycopg2 juju-wait bzr moreutils python3-nose
-endif
+	sudo apt-get install -y python3-psycopg2 bzr moreutils
 
 lint:
 	@echo "Charm Proof"
@@ -78,6 +69,7 @@ tox: .tox/testenv/bin/python3
 .tox/testenv/bin/python3: requirements.txt
 	tox --notest -r
 
+# Put the testenv on the PATH so the juju-wait plugin is found.
 export PATH := .tox/testenv/bin:$(PATH)
 
 NOSE := .tox/testenv/bin/nosetests -sv
