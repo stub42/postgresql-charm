@@ -82,7 +82,7 @@ TIMING_NOSE := nosetests3 -sv --with-timer
 endif
 
 # We need to unpack charmhelpers and charms.reactive so the tests can
-# find them.
+# find them. TODO: Stop this hack and use a real Python venv.
 unpackdeps:
 	mkdir -p lib/testdeps
 	tar -xz --strip-components 1 \
@@ -107,11 +107,11 @@ coverage: unpackdeps
 	    --cover-min-percentage=100 || \
 		(gnome-open coverage/index.html; false)
 
-integration: testdeps
+integration: unpackdeps
 	${TIMING_NOSE} tests/test_integration.py 2>&1 | ts
 
 # More overheads, but better progress reporting
-integration_breakup: testdeps
+integration_breakup: unpackdeps
 	${NOSE} tests/test_integration.py:PG93Tests 2>&1 | ts
 	${NOSE} tests/test_integration.py:PG93MultiTests 2>&1 | ts
 	${NOSE} tests/test_integration.py:UpgradedCharmTests 2>&1 | ts
@@ -127,6 +127,6 @@ integration_breakup: testdeps
 
 # These targets are to separate the test output in the Charm CI system
 # eg. 'make test_integration.py:PG93Tests'
-test_integration.py%:
+test_integration.py%: unpackdeps
 	${TIMING_NOSE} tests/$@ 2>&1 | ts
 	@echo OK: $@ tests pass `date`
