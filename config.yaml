@@ -59,7 +59,6 @@ options:
       default: |
         # Additional service specific postgresql.conf settings.
         listen_addresses='*'
-        max_connections=100
         ssl=true
         log_timezone=UTC
         log_checkpoints=true
@@ -75,6 +74,7 @@ options:
         # wal_level=hot_standby (<9.4) or logical (>=9.4)
         # shared_buffers=total_ram*0.25
         # effective_cache_size=total_ram*0.75
+        # max_connections=100
         default_statistics_target=250
         from_collapse_limit=16
         join_collapse_limit=16
