@@ -462,11 +462,13 @@ def assemble_postgresql_conf():
     # Start with charm defaults.
     conf.update(postgresql_conf_defaults())
 
-    # User overrides from deprecated service config.
-    conf.update(postgresql_conf_deprecated_overrides())
-
     # User overrides from service config.
     conf.update(postgresql_conf_overrides())
+
+    # User overrides from deprecated service config. Settings are
+    # only returned if the user changed them from the default. If so,
+    # they override the settings listed in extra_pg_conf.
+    conf.update(postgresql_conf_deprecated_overrides())
 
     # Ensure minimal settings so the charm can actually work.
     ensure_viable_postgresql_conf(conf)
