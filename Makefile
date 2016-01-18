@@ -33,7 +33,11 @@ _success_ex:
 test: testdeps lint unittest integration
 
 testdeps:
+ifeq ($(HOST_SERIES),trusty)
+	sudo apt-get install -y python-tox python3-psycopg2 bzr moreutils
+else
 	sudo apt-get install -y tox python3-psycopg2 bzr moreutils
+endif
 
 lint:
 	@echo "Charm Proof"
