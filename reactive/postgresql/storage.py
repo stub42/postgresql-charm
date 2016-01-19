@@ -36,8 +36,8 @@ from reactive.workloadstatus import status_set
 external_volume_mount = "/srv/data"
 
 
-@hook('{interface:block-storage}-relation-changed')
-def handle_storage_relation():
+@hook('data-relation-changed')
+def handle_storage_relation(dead_chicken):
     # Remove this once Juju storage is no longer experiemental and
     # everyone has had a chance to upgrade.
     data_rels = context.Relations()['data']
