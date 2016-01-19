@@ -541,6 +541,29 @@ class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     test_config = dict(version=(None if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True))
 
+    def test_mount(self):
+        client_unit = self.deployment.sentry['postgresql'][0].info['unit_name']
+        details = subprocess.check_output(['juju', 'run',
+                                           '--unit', client_unit,
+                                           'stat --format "%A %U %G %N" '
+                                           '/var/lib/postgresql/9.3/main'],
+                                          stderr=subprocess.DEVNULL,
+                                          universal_newlines=True).strip()
+        self.assertEqual(details,
+                         "lrwxrwxrwx root root "
+                         "'/var/lib/postgresql/9.3/main' -> "
+                         "'/srv/data/postgresql/9.3/main'")
+
+        details = subprocess.check_output(['juju', 'run',
+                                           '--unit', client_unit,
+                                           'stat --format "%A %U %G %N" '
+                                           '/srv/data/postgresql/9.3/main'],
+                                          stderr=subprocess.DEVNULL,
+                                          universal_newlines=True).strip()
+        self.assertEqual(details,
+                         "drwx------ postgres postgres "
+                         "'/srv/data/postgresql/9.3/main'")
+
 
 class PG94Tests(PGBaseTestCase, unittest.TestCase):
     test_config = dict(version=(None if SERIES == 'wily' else '9.4'),
