@@ -90,7 +90,7 @@ TIME_DUMP=$(date +%s -r $THRESHOLD_GLOBALS_DUMP)
 THRESHOLD_AGE=$(($TIME_NOW - $TIME_DUMP))
 THRESHOLD_MINS=$(($THRESHOLD_AGE / 60))
 THRESHOLD_MINS=$(($THRESHOLD_MINS + 1)) # always round up
-find ${DUMP_DIR} -type f -mmin $THRESHOLD_MINS -delete
+find ${DUMP_DIR} -type f -mmin +${THRESHOLD_MINS} -delete
 
 echo backups completed $(date)
 
