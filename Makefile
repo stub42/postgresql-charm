@@ -1,6 +1,7 @@
 CHARM_DIR := $(shell pwd)
 TEST_TIMEOUT := 900
-SERIES := $(shell juju get-environment default-series)
+#SERIES := $(shell juju get-environment default-series)
+SERIES := trusty
 HOST_SERIES := $(shell lsb_release -sc)
 
 BUILD_ROOT=/home/stub/charms/built
@@ -34,10 +35,14 @@ test: testdeps lint unittest integration
 
 testdeps:
 ifeq ($(HOST_SERIES),trusty)
-	sudo apt-get install -y python-tox python3-psycopg2 bzr moreutils
+	sudo apt-get install -y python-tox python3-psycopg2 bzr moreutils \
+	    software-properties-common python3-flake8
 else
-	sudo apt-get install -y tox python3-psycopg2 bzr moreutils
+	sudo apt-get install -y tox python3-psycopg2 bzr moreutils \
+	    software-properties-common python3-flake8
 endif
+	sudo add-apt-repository -y ppa:juju/stable
+	sudo apt-get install charm-tools
 
 lint:
 	@echo "Charm Proof"
