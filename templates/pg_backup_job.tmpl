@@ -50,13 +50,11 @@ fi
 # Check the size of the last backup, and that we have enough space
 # to do a backup
 TOTAL_SIZE=0
-NUMBER_OF_DATABASES=1 # start at 1, for the globals dump
 for DATABASE in ${DATABASES}; do
     DUMP_SIZE=$(ls -lrt ${DUMP_DIR}/${DATABASE}* | tail -1 | awk '{ print $5 }')
     if [[ -n $DUMP_SIZE ]]; then
         let TOTAL_SIZE=${TOTAL_SIZE}+${DUMP_SIZE}
     fi
-    NUMBER_OF_DATABASES=$((NUMBER_OF_DATABASES + 1))
 done
 
 FREE_SPACE=$(df -k ${DUMP_DIR} | sed -e 1d | awk '{ print $4 }')
@@ -83,9 +81,16 @@ fi
 nice -n 19 ${SCRIPTS}/dump-pg-db --dir=${DUMP_DIR} --compression=postgres ${DATABASES}
 
 # Prune old backups:
-# - Delete anything beyond $KEEP files
-KEEP=$(($FILES * $NUMBER_OF_DATABASES))
-cd ${DUMP_DIR} && ls -tp | grep -v '/' | tail -n +${KEEP} | xargs -d '\n' rm --
+# - Delete anything beyond $FILES count of each backup
+
+# get name/size of the globals dump from $FILES runs ago
+THRESHOLD_GLOBALS_DUMP=$(find ${DUMP_DIR} -type f -name 'globals.*.sql' | sort | tail -${FILES}| head -1)
+TIME_NOW=$(date +%s)
+TIME_DUMP=$(date +%s -r $THRESHOLD_GLOBALS_DUMP)
+THRESHOLD_AGE=$(($TIME_NOW - $TIME_DUMP))
+THRESHOLD_MINS=$(($THRESHOLD_AGE / 60))
+THRESHOLD_MINS=$(($THRESHOLD_MINS + 1)) # always round up
+find ${DUMP_DIR} -type f -mmin $THRESHOLD_MINS -delete
 
 echo backups completed $(date)
 
