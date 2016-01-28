@@ -1,3 +1,4 @@
 includes:
     - layer:basic
+    - layer:apt
     - layer:leadership

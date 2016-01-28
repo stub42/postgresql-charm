@@ -33,11 +33,6 @@ options:
       objects in the database are responsible to granting suitable
       access on those objects to other roles and users (or PUBLIC) using
       standard GRANT statements.
-  extra_packages:
-    default: ""
-    type: string
-    description: >
-        Space separated list of extra packages to install.
   version:
     default: ""
     type: string
@@ -153,18 +148,6 @@ options:
         provided by the main Ubuntu archive.
     type: boolean
     default: false
-  install_sources:
-    description: >
-        List of extra package sources, per charm-helpers standard.
-        YAML format.
-    type: string
-    default: ""
-  install_keys:
-    description: >
-        List of signing keys for install_sources package sources, per
-        charmhelpers standard. YAML format.
-    type: string
-    default: ""
   wal_e_storage_uri:
     type: string
     default: ""
@@ -238,13 +221,6 @@ options:
     type: string
     default: ""
     description: EXPERIMENTAL. Windows Azure access key.
-  package_status:
-    default: "install"
-    type: string
-    description: >
-        The status of service-affecting packages will be set to this
-        value in the dpkg database. Useful valid values are "install"
-        and "hold".
   # statsd-compatible metrics
   metrics_target:
     default: ""
