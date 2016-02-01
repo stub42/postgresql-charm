@@ -6,12 +6,12 @@ export LANG=C
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 usage () {
-    echo "usage: $0 <retain_days>"
+    echo "usage: $0 <retain_files>"
 }
 
-typeset -i DAYS=$1
+typeset -i FILES=$1
 shift
-if [ $DAYS -le 0 ]; then
+if [ $FILES -le 0 ]; then
     usage
     exit 1
 fi
@@ -27,14 +27,14 @@ backup_success () {
 # Set umask so backups are automatically created without group and other
 umask 0077
 
-echo backups started `date`
+echo backups started $(date)
 
 export PGPORT=5432 
 export PGUSER=postgres
 
 DUMP_DIR={{backups_dir}}
 SCRIPTS={{scripts_dir}}
-TODAY=`date +'%Y%m%d'`
+TODAY=$(date +'%Y%m%d_%H%M%S')
 
 # Dump globals, which we often need to restore a database dump.
 pg_dumpall --globals-only --quote-all-identifiers \
@@ -81,9 +81,17 @@ fi
 nice -n 19 ${SCRIPTS}/dump-pg-db --dir=${DUMP_DIR} --compression=postgres ${DATABASES}
 
 # Prune old backups:
-# - Delete anything older than $DAYS days
-find ${DUMP_DIR}/ -mtime +${DAYS} -delete
+# - Delete anything beyond $FILES count of each backup
 
-echo backups completed `date`
+# get name/size of the globals dump from $FILES runs ago
+THRESHOLD_GLOBALS_DUMP=$(find ${DUMP_DIR} -type f -name 'globals.*.sql' | sort | tail -${FILES}| head -1)
+TIME_NOW=$(date +%s)
+TIME_DUMP=$(date +%s -r $THRESHOLD_GLOBALS_DUMP)
+THRESHOLD_AGE=$(($TIME_NOW - $TIME_DUMP))
+THRESHOLD_MINS=$(($THRESHOLD_AGE / 60))
+THRESHOLD_MINS=$(($THRESHOLD_MINS + 1)) # always round up
+find ${DUMP_DIR} -type f -mmin +${THRESHOLD_MINS} -delete
+
+echo backups completed $(date)
 
 backup_success

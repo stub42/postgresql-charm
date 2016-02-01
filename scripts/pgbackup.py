@@ -1,11 +1,11 @@
 #!/usr/bin/python
 
-# Copyright 2008-2014 Canonical Ltd.  All rights reserved.
+# Copyright 2008-2016 Canonical Ltd.  All rights reserved.
 
 """
 Backup one or more PostgreSQL databases.
 
-Suitable for use in crontab for daily backups.
+Suitable for use in crontab for regular backups.
 """
 
 __metaclass__ = type
@@ -24,9 +24,7 @@ MB = float(1024 * 1024)
 
 
 def main(options, databases):
-    #Need longer file names if this is used more than daily
-    #today = datetime.now().strftime('%Y%m%d_%H:%M:%S')
-    today = datetime.now().strftime('%Y%m%d')
+    today = datetime.now().strftime('%Y%m%d_%H%M%S')
 
     backup_dir = options.backup_dir
     rv = 0
@@ -80,6 +78,7 @@ def main(options, databases):
         # If the file already exists, it is from an older dump today.
         # We don't know if it was successful or not, so abort on this
         # dump. Leave for operator intervention
+        # n.b. this is extremely unlikely with %H%M%S in the filename
         if os.path.exists(dest):
             log.error("%s already exists. Skipping." % dest)
             continue
