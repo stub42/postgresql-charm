@@ -532,7 +532,15 @@ class PG92MultiTests(PGMultiBaseTestCase, unittest.TestCase):
 
 class PG93Tests(PGBaseTestCase, unittest.TestCase):
     test_config = dict(version=(None if SERIES == 'trusty' else '9.3'),
-                       pgdg=(False if SERIES == 'trusty' else True))
+                       pgdg=(False if SERIES == 'trusty' else True),
+                       max_connections=150)
+
+    def test_deprecated_overrides(self):
+        con = self.connect()
+        cur = con.cursor()
+        cur.execute('show max_connections')
+        max_connections = cur.fetchone()[0]
+        self.assertEqual(int(max_connections), 150)
 
 
 class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):

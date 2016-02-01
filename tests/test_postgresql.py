@@ -142,7 +142,7 @@ class TestPostgresql(unittest.TestCase):
     def test_packages(self, version):
         version.return_value = '9.9'
         expected = set(['postgresql-9.9', 'postgresql-common',
-                        'postgresql-client-common',
+                        'postgresql-client-common', 'run-one',
                         'postgresql-contrib-9.9', 'postgresql-client-9.9'])
         self.assertSetEqual(postgresql.packages(), expected)
 
