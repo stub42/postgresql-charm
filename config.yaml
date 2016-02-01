@@ -54,7 +54,6 @@ options:
       default: |
         # Additional service specific postgresql.conf settings.
         listen_addresses='*'
-        max_connections=100
         ssl=true
         log_timezone=UTC
         log_checkpoints=true
@@ -119,11 +118,11 @@ options:
   backup_schedule:
     default: "13 4 * * *"
     type: string
-    description: Cron-formatted schedule for daily database backups.
+    description: Cron-formatted schedule for regular database backups.
   backup_retention_count:
     default: 7
     type: int
-    description: Number of daily backups to retain.
+    description: Number of backups to retain.
   backup_dir:
     default: "/var/lib/postgresql/backups"
     type: string

@@ -4,10 +4,10 @@
 # Scheduled logical dump of the primary using pg_dump. We don't dump hot
 # standbys, as operations performed on the primary can cause queries on
 # the standby to be aborted.
-{{backup_schedule}} postgres {{scripts_dir}}/pg_backup_job {{backup_retention_count}}
+{{backup_schedule}} postgres run-one {{scripts_dir}}/pg_backup_job {{backup_retention_count}}
 {% endif -%}
 
 {% if is_master and wal_e_enabled and wal_e_backup_schedule -%}
 # Scheduled filesystem backup of the primary using wal-e.
-{{wal_e_backup_schedule}} postgres {{wal_e_backup_command}} && {{wal_e_prune_command}}
+{{wal_e_backup_schedule}} postgres run-one {{wal_e_backup_command}} && {{wal_e_prune_command}}
 {% endif -%}

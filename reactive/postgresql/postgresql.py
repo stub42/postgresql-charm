@@ -133,6 +133,7 @@ def packages():
     ver = version()
     return set(['postgresql-{}'.format(ver),
                 'postgresql-common', 'postgresql-client-common',
+                'run-one',
                 'postgresql-contrib-{}'.format(ver),
                 'postgresql-client-{}'.format(ver)])
 
