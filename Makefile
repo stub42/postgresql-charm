@@ -53,18 +53,26 @@ lint:
 	    --exclude=lib/testdeps,lib/pgclient/hooks/charmhelpers,lib/charms,__pycache__,.tox \
 	    hooks actions testing tests reactive lib
 
-build:
-	@echo "Building charm"
+# Clean crud from running tests etc.
+buildclean:
 	rm -rf ${BUILD_DIR}/lib/pgclient/hooks/charmhelpers
 	rm -rf ${BUILD_DIR}/.tox
 	rm -rf ${BUILD_DIR}/.cache
 	rm -rf ${BUILD_DIR}/.unit-state.db
 	rm -rf ${BUILD_DIR}/.coverage
+
+build: buildclean
+	@echo "Building charm"
 	charm build -o ${BUILD_ROOT} -s ${SERIES}
 
-fbuild:
+fbuild: buildclean
 	@echo "Forcefully building charm"
 	charm build -o ${BUILD_ROOT} -s ${SERIES} --force
+	rm -f ${BUILD_DIR}/wheelhouse/charms.reactive*
+	rsync -rav --delete \
+	    --exclude='*.pyc' --exclude='__pycache__' --exclude='*~' \
+	    ${HOME}/charms/charms.reactive/charms/reactive/ \
+	    ${BUILD_DIR}/lib/charms/reactive/
 
 _co=,
 _empty=
