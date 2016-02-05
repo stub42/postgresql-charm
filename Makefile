@@ -68,6 +68,9 @@ build: buildclean
 fbuild: buildclean
 	@echo "Forcefully building charm"
 	charm build -o ${BUILD_ROOT} -s ${SERIES} --force
+
+# Build with a custom charms.reactive
+custombuild: fbuild
 	rm -f ${BUILD_DIR}/wheelhouse/charms.reactive*
 	rsync -rav --delete \
 	    --exclude='*.pyc' --exclude='__pycache__' --exclude='*~' \
