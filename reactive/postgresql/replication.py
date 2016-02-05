@@ -28,6 +28,7 @@ from charms import reactive
 from charms.reactive import not_unless, when, when_not
 
 from everyhook import everyhook
+from reactive import coordinator
 from reactive.leadership import leader_get, leader_set
 from reactive.workloadstatus import status_set
 from reactive.postgresql import helpers
@@ -277,6 +278,18 @@ def publish_replication_details():
         peer.local['allowed-units'] = ' '.join(sorted(peer.keys()))
 
 
+@when_not('coordinator.requested.restart')
+@when_not('coordinator.granted.restart')
+@when_not('postgresql.replication.cloned')
+@when_not('postgresql.replication.manual')
+@when('postgresql.cluster.configured')
+@when('postgresql.replication.master.authorized')
+def need_clone_lock():
+    # We need to grab the restart lock before cloning, to ensure
+    # that the master is not restarted during the process.
+    coordinator.acquire('restart')
+
+
 @when('coordinator.requested.restart')
 @when_not('coordinator.granted.restart')
 @when_not('postgresql.replication.cloned')
@@ -287,8 +300,21 @@ def wait_for_clone():
                'Waiting for permission to clone {}'.format(get_master()))
 
 
+@when('postgresql.cluster.is_running')
+@when('postgresql.replication.is_primary')
+@when_not('postgresql.replication.cloned')
+@when_not('postgresql.replication.manual')
+def diverged_timeline():
+    status_set('maintenance', 'Diverged timeline')
+    # Don't shutdown without the coordinator lock. Most likely,
+    # this unit is being destroyed and shouldn't reclone.
+    reactive.set_state('postgresql.cluster.needs_restart')
+
+
 @when('postgresql.cluster.configured')
 @when('postgresql.replication.master.authorized')
+@when('coordinator.granted.restart')
+@when_not('postgresql.cluster.is_running')
 @when_not('postgresql.replication.cloned')
 @when_not('postgresql.replication.manual')
 def clone_master():
