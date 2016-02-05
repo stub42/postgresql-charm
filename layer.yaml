@@ -2,6 +2,7 @@ includes:
     - layer:basic
     - layer:apt
     - layer:leadership
+    - layer:coordinator
 options:
     basic:
         packages:
