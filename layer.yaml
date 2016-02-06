@@ -7,3 +7,5 @@ options:
     basic:
         packages:
             - python3-psycopg2
+    coordinator:
+        log_level: debug
