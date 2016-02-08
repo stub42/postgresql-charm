@@ -197,6 +197,10 @@ def pid_path():
     return '/var/run/postgresql/{}-main.pid'.format(version())
 
 
+def pg_log_path():
+    return '/var/log/postgresql/postgresql-{}-main.log'.format(version())
+
+
 def is_in_recovery():
     '''True if the local cluster is in recovery.
 
@@ -457,6 +461,7 @@ def start():
         if x.returncode == 2:
             return  # The server is already running.
         workloadstatus.status_set('blocked', 'PostgreSQL failed to start')
+        emit_pg_log()  # For debugging inscruitable pg_ctlcluster failures.
         raise SystemExit(0)
 
 
@@ -486,6 +491,11 @@ def stop():
             return  # The server was not running.
         workloadstatus.status_set('blocked', 'Unable to shutdown PostgreSQL')
         raise SystemExit(0)
+
+
+def emit_pg_log(lines=100):
+    '''Dump the end of the PostgreSQL log file to stdout'''
+    subprocess.call(['tail', '-{:d}'.format(lines), pg_log_path()])
 
 
 def reload_config():
