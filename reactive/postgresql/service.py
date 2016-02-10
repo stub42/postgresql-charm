@@ -25,7 +25,7 @@ from charmhelpers import context
 from charmhelpers.core import hookenv, host, sysctl, templating, unitdata
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charms import reactive
-from charms.reactive import only_once, when, when_not
+from charms.reactive import when, when_not
 
 from reactive import apt
 from reactive import coordinator
@@ -42,7 +42,6 @@ from everyhook import everyhook
 
 @everyhook
 def main():
-    generate_locale()
     configure_sources()
 
     # Don't trust this state from the last hook. Daemons may have
@@ -75,7 +74,7 @@ def emit_deprecated_option_warnings():
 hookenv.atexit(emit_deprecated_option_warnings)
 
 
-@only_once
+@when_not('postgresql.cluster.locale.set')
 def generate_locale():
     '''Ensure that the requested database locale is available.
 
@@ -90,6 +89,7 @@ def generate_locale():
                                '{}.{}'.format(hookenv.config('locale'),
                                               hookenv.config('encoding'))],
                               universal_newlines=True)
+    reactive.set_state('postgresql.cluster.locale.set')
 
 
 def configure_sources():
@@ -140,6 +140,7 @@ def uninhibit_default_cluster_creation():
 
 
 @when('postgresql.cluster.inhibited')
+@when('postgresql.cluster.locale.set')
 def install_postgresql_packages():
     hookenv.log('Inhibited == {}'
                 .format(reactive.is_state('postgresql.cluster.inhibited')))
@@ -156,8 +157,7 @@ def install_extra_packages():
     apt.queue_install(packages)
 
 
-@when('apt.installed.postgresql-common')
-@only_once
+@when_not('postgresql.cluster.kernel_settings.set')
 def update_kernel_settings():
     lots_and_lots = pow(1024, 4)  # 1 TB
     sysctl_settings = {'kernel.shmmax': lots_and_lots,
