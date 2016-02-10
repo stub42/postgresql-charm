@@ -535,10 +535,11 @@ class TestPostgresql(unittest.TestCase):
             postgresql.is_running()
         self.assertEqual(x.exception.returncode, 42)
 
+    @patch.object(postgresql, 'emit_pg_log')
     @patch.object(workloadstatus, 'status_set')
     @patch('subprocess.check_call')
     @patch.object(postgresql, 'version')
-    def test_start(self, version, check_call, status_set):
+    def test_start(self, version, check_call, status_set, emit_pg_log):
         version.return_value = '9.9'
 
         # When it works, it works.
@@ -550,6 +551,7 @@ class TestPostgresql(unittest.TestCase):
                                             'start', '--', '-w',
                                             '-t', '86400'],
                                            universal_newlines=True)
+        self.assertFalse(emit_pg_log.called)
 
         # If it is already running, pg_ctlcluster returns code 2.
         # We block, and terminate whatever hook is running.
@@ -568,6 +570,7 @@ class TestPostgresql(unittest.TestCase):
             postgresql.start()
         status_set.assert_called_once_with('blocked', ANY)  # Set blocked.
         self.assertEqual(x.exception.code, 0)  # Terminated without error
+        emit_pg_log.assert_called_once_with()  # Tail of log emitted to logs.
 
     @patch.object(hookenv, 'log')
     @patch.object(workloadstatus, 'status_set')
