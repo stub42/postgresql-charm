@@ -164,6 +164,7 @@ def update_kernel_settings():
                        'kernel.shmall': lots_and_lots}
     sysctl.create(yaml.dump(sysctl_settings),
                   '/etc/sysctl.d/50-postgresql.conf')
+    reactive.set_state('postgresql.cluster.kernel_settings.set')
 
 
 @when('apt.installed.postgresql-common')
@@ -405,6 +406,7 @@ def stop():
 @when('postgresql.cluster.configured')
 @when('postgresql.replication.has_master')
 @when('postgresql.replication.cloned')
+@when('postgresql.cluster.kernel_settings.set')
 def start():
     status_set('maintenance', 'Starting PostgreSQL')
     postgresql.start()
