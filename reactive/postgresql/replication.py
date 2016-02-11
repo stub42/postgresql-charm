@@ -24,12 +24,11 @@ import psycopg2
 from charmhelpers import context
 from charmhelpers.core import host, hookenv, templating, unitdata
 from charmhelpers.core.hookenv import DEBUG, ERROR, WARNING
-from charms import reactive
+from charms import coordinator, reactive
+from charms.leadership import leader_get, leader_set
 from charms.reactive import not_unless, when, when_not
 
 from everyhook import everyhook
-from reactive import coordinator
-from reactive.leadership import leader_get, leader_set
 from reactive.workloadstatus import status_set
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql

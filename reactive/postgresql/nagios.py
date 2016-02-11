@@ -20,10 +20,9 @@ from charmhelpers import context
 from charmhelpers.contrib.charmsupport.nrpe import NRPE
 from charmhelpers.core import host
 
-from charms import reactive
+from charms import leadership, reactive
 from charms.reactive import hook, only_once, when, when_not
 
-from reactive import leadership
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
 

@@ -21,11 +21,9 @@ import time
 from charmhelpers import context
 from charmhelpers.core import hookenv, host
 from charmhelpers.core.hookenv import DEBUG, WARNING
-from charms import reactive
+from charms import apt, coordinator, reactive
 from charms.reactive import hook, when
 
-from reactive import apt
-from reactive import coordinator
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
 from reactive.postgresql import service
