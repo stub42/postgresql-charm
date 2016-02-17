@@ -111,12 +111,11 @@ def build_script(script_name, relation):
             PGHOST={host} PGPORT={port} PGDATABASE={database} \\
             PGUSER={user} PGPASSFILE={pgpass} \\
             psql $@
-        """).format(
-            host=relation['host'],
-            port=relation['port'],
-            database=relation.get('database', ''),  # db-admin has no database
-            user=relation['user'],
-            pgpass=pgpass_path)
+        """).format(host=relation['host'],
+                    port=relation['port'],
+                    database=relation.get('database', ''),
+                    user=relation['user'],
+                    pgpass=pgpass_path)
     log("Generating wrapper {}".format(script_path), INFO)
     host.write_file(
         script_path, script, owner="ubuntu", group="ubuntu", perms=0o700)

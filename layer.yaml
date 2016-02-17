@@ -1,0 +1,11 @@
+includes:
+    - layer:basic
+    - layer:apt
+    - layer:leadership
+    - layer:coordinator
+options:
+    basic:
+        packages:
+            - python3-psycopg2
+    coordinator:
+        log_level: debug

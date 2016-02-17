@@ -13,14 +13,17 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+from collections import defaultdict
 import os
 import sys
 import unittest
 
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, 'hooks'))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.insert(1, ROOT)
+sys.path.insert(2, os.path.join(ROOT, 'lib'))
+sys.path.insert(3, os.path.join(ROOT, 'lib', 'testdeps'))
 
-from service import generate_pg_hba_conf
-from collections import defaultdict
+from reactive.postgresql.service import generate_pg_hba_conf
 
 
 # set of classes to stub out the context relation interface

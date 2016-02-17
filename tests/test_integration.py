@@ -31,15 +31,16 @@ import uuid
 import psycopg2
 import yaml
 
-HERE = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(os.path.abspath(os.path.join(HERE, os.pardir)))
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+sys.path.insert(1, ROOT)
+sys.path.insert(2, os.path.join(ROOT, 'lib'))
+sys.path.insert(3, os.path.join(ROOT, 'lib', 'pypi'))
 
 from testing.amuletfixture import AmuletFixture
 
 
 SERIES = os.environ.get('SERIES', 'trusty').strip()
-CLIENT_CHARMDIR = os.path.abspath(os.path.join(HERE, os.pardir,
-                                               'lib', 'pgclient'))
+CLIENT_CHARMDIR = os.path.abspath(os.path.join(ROOT, 'lib', 'pgclient'))
 assert os.path.isdir(CLIENT_CHARMDIR)
 
 
@@ -178,11 +179,13 @@ class PGBaseTestCase(object):
     @property
     def master(self):
         status = self.deployment.get_status()
+        messages = []
         for unit, info in status['services']['postgresql']['units'].items():
             status_message = info['workload-status'].get('message')
             if status_message == 'Live master':
                 return unit
-        self.fail('There is no master')
+            messages.append(status_message)
+        self.fail('There is no master. Got {!r}'.format(messages))
 
     @property
     def secondaries(self):
@@ -312,9 +315,9 @@ class PGBaseTestCase(object):
         # to set a password on the postgres user.
         pw = str(uuid.uuid1())
         con = self.connect(self.master, admin=True)
-        con.autocommit = True
         cur = con.cursor()
         cur.execute("ALTER USER postgres ENCRYPTED PASSWORD %s", (pw,))
+        con.commit()
 
         status = self.deployment.get_status()
         unit_infos = status['services']['postgresql']['units']
@@ -411,7 +414,7 @@ class PGMultiBaseTestCase(PGBaseTestCase):
     def test_replication(self):
         self._replication_test()
 
-    @unittest.skip('Bug #1511659')
+    # @unittest.skip('Bug #1511659')
     def test_failover(self):
         # Destroy the master in a stable environment.
         self.deployment.add_unit('postgresql')
@@ -581,6 +584,17 @@ class PG94MultiTests(PGMultiBaseTestCase, unittest.TestCase):
                        pgdg=(False if SERIES == 'wily' else True))
 
 
+class PG95Tests(PGBaseTestCase, unittest.TestCase):
+    test_config = dict(version=(None if SERIES == 'xenial' else '9.5'),
+                       pgdg=(False if SERIES == 'xenial' else True))
+
+
+class PG95MultiTests(PGMultiBaseTestCase, unittest.TestCase):
+    num_units = 3
+    test_config = dict(version=(None if SERIES == 'xenial' else '9.5'),
+                       pgdg=(False if SERIES == 'xenial' else True))
+
+
 class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
     num_units = 2  # Old charm only supported 2 unit initial deploy.
     test_config = dict(version=None)
@@ -657,20 +671,22 @@ class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
                 self.assertGreaterEqual(cur.fetchone()[0], 1)
 
 
-def setUpModule():
-    # Mirror charmhelpers into our support charms, since charms
-    # can't symlink out of their subtree.
-    main_charmhelpers = os.path.abspath(os.path.join(HERE, os.pardir,
-                                                     'hooks', 'charmhelpers'))
-    test_client_charmhelpers = os.path.join(CLIENT_CHARMDIR,
-                                            'hooks', 'charmhelpers')
-    if os.path.exists(test_client_charmhelpers):
-        shutil.rmtree(test_client_charmhelpers)
-    shutil.copytree(main_charmhelpers, test_client_charmhelpers)
-
-
-def tearDownModule():
-    test_client_charmhelpers = os.path.join(CLIENT_CHARMDIR,
-                                            'hooks', 'charmhelpers')
-    if os.path.exists(test_client_charmhelpers):
-        shutil.rmtree(test_client_charmhelpers)
+# Now installed by the Makefile.
+#
+# def setUpModule():
+#     # Mirror charmhelpers into our support charms, since charms
+#     # can't symlink out of their subtree.
+#     main_charmhelpers = os.path.abspath(os.path.join(ROOT, 'lib',
+#                                                      'charmhelpers'))
+#     test_client_charmhelpers = os.path.join(CLIENT_CHARMDIR,
+#                                             'hooks', 'charmhelpers')
+#     if os.path.exists(test_client_charmhelpers):
+#         shutil.rmtree(test_client_charmhelpers)
+#     shutil.copytree(main_charmhelpers, test_client_charmhelpers)
+#
+#
+# def tearDownModule():
+#     test_client_charmhelpers = os.path.join(CLIENT_CHARMDIR,
+#                                             'hooks', 'charmhelpers')
+#     if os.path.exists(test_client_charmhelpers):
+#         shutil.rmtree(test_client_charmhelpers)
