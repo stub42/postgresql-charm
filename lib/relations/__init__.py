@@ -18,7 +18,8 @@ from pkgutil import extend_path
 import sys
 
 
-charm_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
+charm_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                         os.pardir, os.pardir))
 hooks_dir = os.path.join(charm_dir, 'hooks')
 if hooks_dir not in sys.path:
     sys.path.append(hooks_dir)

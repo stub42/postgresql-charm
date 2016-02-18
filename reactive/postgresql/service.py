@@ -24,7 +24,7 @@ import yaml
 from charmhelpers import context
 from charmhelpers.core import hookenv, host, sysctl, templating, unitdata
 from charmhelpers.core.hookenv import DEBUG, WARNING
-from charms import apt, coordinator, leadership, reactive
+from charms import apt, coordinator, reactive
 from charms.reactive import when, when_not
 
 from reactive.workloadstatus import status_set
