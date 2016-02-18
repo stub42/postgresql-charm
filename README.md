@@ -302,15 +302,42 @@ and set the service configuration settings similar to the following::
             - cloud:icehouse
 
 
-# Contact Information
+# Development and Contributions
 
-## PostgreSQL 
+The PostgreSQL Charm is maintained on Launchpad[4] using git. The 'master'
+branch is a Reactive Framework Layer, and generates a deployable Charm
+using the 'charm build' command provided by charm-tools.
+
+The latest stable source layer is in the 'master' branch in the
+git+ssh://git.launchpad.net/postgresql-charm repository. Merge proposals
+should be made against the 'master' branch. Do not make merge proposals
+against the old Bazaar branches or the 'built' branch.
+
+
+# Support
+
+Bug reports can be made at https://bugs.launchpad.net/postgresql-charm.
+Queries can be made in any of the major Juju forums, such as the main
+Juju mailing list or the #juju channel on Freenode IRC.
+
+
+## Latest Stable
+
+The latest tested, stable and deployable charm is stored in the 'built'
+branch in the git+ssh://git.launchpad.net/postgresql-charm repository::
+
+    mkdir trusty
+    git clone -b built \
+        https://git.launchpad.net/postgresql-charm trusty/postgresql
+    JUJU_REPOSITORY=. juju deploy local:postgresql
+
+
+# References 
 
 - [PostgreSQL website](http://www.postgresql.org/)
-- [PostgreSQL bug submission
-  guidelines](http://www.postgresql.org/docs/9.5/static/bug-reporting.html)
 - [PostgreSQL Mailing List](http://www.postgresql.org/list/)
 
   [1]: https://bugs.launchpad.net/charms/+source/postgresql/+bug/1258485
   [2]: https://github.com/wal-e/wal-e
   [3]: http://www.postgresql.org/docs/9.3/static/sql-grant.html
+  [4]: https://launchpad.net/postgresql-charm
