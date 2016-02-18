@@ -16,7 +16,7 @@
     "lib/reactive/__init__.py": [
       "postgresql", 
       "static", 
-      "ca6578174778448a111c4989e7cf6371306b57b214894663590f8d08a9b26d90"
+      "dc1e89fc8c1a137a08dda8091eb115c120888e7044220f58946b6aa0d7a6360a"
     ], 
     "actions/replication-resume": [
       "postgresql", 
@@ -341,7 +341,7 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "8167478d199a427f8428e8338b773b18d1353a4291ae1ce3658784ece70d30b0"
+      "45b2bff0d74870c625207aee8ef8019e0ef8f2c55dac36e75094731bd54965f9"
     ], 
     "wheelhouse/charms.reactive-0.3.8.tar.gz": [
       "layer:basic", 
@@ -616,7 +616,7 @@
     "lib/relations/__init__.py": [
       "postgresql", 
       "static", 
-      "fd688dfa4de1d9c55fa75308fd5eec415ea73a14e06bdd73fc292f4d69d751e9"
+      "9cd78d4bfba601cad3c1f5b2f7a1efb64b01dbad9f07cfee922d819c673dd2f5"
     ], 
     "layer.yaml": [
       "postgresql", 
