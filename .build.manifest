@@ -1,0 +1,637 @@
+{
+  "layers": [
+    "layer:basic", 
+    "layer:apt", 
+    "layer:leadership", 
+    "layer:coordinator", 
+    "postgresql", 
+    "build"
+  ], 
+  "signatures": {
+    "reactive/postgresql/syslog.py": [
+      "postgresql", 
+      "static", 
+      "89d75ed073122877ab54939be957235688976c0073b5fbab0cd79fd9951d0628"
+    ], 
+    "lib/reactive/__init__.py": [
+      "postgresql", 
+      "static", 
+      "ca6578174778448a111c4989e7cf6371306b57b214894663590f8d08a9b26d90"
+    ], 
+    "actions/replication-resume": [
+      "postgresql", 
+      "static", 
+      "d5cc0041d00122974ceaab3e15d644f34cb5cd5a92d24897a167c952b93595a2"
+    ], 
+    "hooks/leader-settings-changed": [
+      "layer:coordinator", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "hooks/master-relation-departed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "reactive/postgresql/upgrade.py": [
+      "postgresql", 
+      "static", 
+      "b17288705c3075e18340822a64ccd5aea50ca2e108f10ecaf5b1f9aa20be2b0f"
+    ], 
+    "hooks/relations/syslog/__init__.py": [
+      "postgresql", 
+      "static", 
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ], 
+    "hooks/leader-elected": [
+      "layer:coordinator", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "wheelhouse/Jinja2-2.8.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "bc1ff2ff88dbfacefde4ddde471d1417d3b304e8df103a7a9437d47269201bf4"
+    ], 
+    "hooks/master-relation-changed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "lib/pgdg.key": [
+      "postgresql", 
+      "static", 
+      "b5e2273afa3d00bb72c33db479dd1734830995c17542300a9d7f78468c418665"
+    ], 
+    "hooks/db-admin-relation-changed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "reactive/postgresql/client.py": [
+      "postgresql", 
+      "static", 
+      "02adee770a91d2a043be649fe6c1eed82517672ddff7f58b744f3f63ec32703f"
+    ], 
+    "lib/preflight.py": [
+      "postgresql", 
+      "static", 
+      "44c7c8e9f5bcca5a7004578d171ee16b42898d9f8d9d6bf4126c6e2c21cdaa56"
+    ], 
+    "hooks/data-relation-departed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "lib/pgclient/hooks/hooks.py": [
+      "postgresql", 
+      "static", 
+      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+    ], 
+    "actions.yaml": [
+      "postgresql", 
+      "static", 
+      "ac50b8e0a4443fb73780269b77f8443a8bc022f90960a7d9bdc6780785d5b4e0"
+    ], 
+    "actions/actions.py": [
+      "postgresql", 
+      "static", 
+      "d5cc0041d00122974ceaab3e15d644f34cb5cd5a92d24897a167c952b93595a2"
+    ], 
+    "templates/recovery.conf.tmpl": [
+      "postgresql", 
+      "static", 
+      "a441d24c1baf969e2db38b94aa7525c5934f8bf3f9687202070d7c41b2df85b2"
+    ], 
+    "actions/replication-pause": [
+      "postgresql", 
+      "static", 
+      "d5cc0041d00122974ceaab3e15d644f34cb5cd5a92d24897a167c952b93595a2"
+    ], 
+    "lib/charms/coordinator.py": [
+      "layer:coordinator", 
+      "static", 
+      "0bbd2f3664f7f067bb037cda88fc67d18c57f37f7b246aa053578dfd8c3e2966"
+    ], 
+    "hooks/defaulthook.py": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "copyright": [
+      "postgresql", 
+      "static", 
+      "5d53c0caa528000229bd4db076ee0516ecd4a88146196edb31740365bb2899ec"
+    ], 
+    "hooks/replication-relation-departed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "requirements.txt": [
+      "postgresql", 
+      "static", 
+      "d690f4480ec2ab809634d59b7bb0f252bc3dbf96f28442087c8c2363712d5458"
+    ], 
+    ".gitignore": [
+      "postgresql", 
+      "static", 
+      "4456de55b108d6e2e1d507553414c40eb02817632d6374fba83ef46ce68944de"
+    ], 
+    "hooks/install": [
+      "layer:basic", 
+      "static", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
+    ], 
+    "wheelhouse/MarkupSafe-0.23.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "a4ec1aff59b95a14b45eb2e23761a0179e98319da5a7eb76b56ea8cdc7b871c3"
+    ], 
+    "hooks/local-monitors-relation-changed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "templates/postgres.cron.tmpl": [
+      "postgresql", 
+      "static", 
+      "d378320acccde83609aa1edb66c99162a775ca5dc4c63195988adfe8232f4365"
+    ], 
+    "charm-helpers.yaml": [
+      "postgresql", 
+      "static", 
+      "623de7525d60892fe653fac1b6fcd82df1044138c47bdab7dec12545ec9a53d6"
+    ], 
+    "bzrsync2.sh": [
+      "postgresql", 
+      "static", 
+      "f4998a90b51ceb6b3c1d9d0fd9e1427ed9675b81012166f3327a1c340b8bbb47"
+    ], 
+    "hooks/db-relation-departed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "lib/pgclient/config.yaml": [
+      "postgresql", 
+      "static", 
+      "aeae87eca107835959d830dd1afd1a03ecbaf03fb358a944fe6788dbf9c4f229"
+    ], 
+    "icon.svg": [
+      "postgresql", 
+      "static", 
+      "00ffc4f772f0e5d37c6c8a2a472488c9c9e396af38ddaa251f92b9e9dbda0358"
+    ], 
+    "tests/test_postgresql.py": [
+      "postgresql", 
+      "static", 
+      "3bfed026d0fcce7be07cac0f56604619bcc107e75cd693535f16b3cd0506a676"
+    ], 
+    "config.yaml": [
+      "postgresql", 
+      "dynamic", 
+      "fe0626d425a1873245fba996b9179208da2231d318726138364b3a8116fbecd7"
+    ], 
+    "hooks/relations/block-storage/__init__.py": [
+      "postgresql", 
+      "static", 
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ], 
+    "reactive/coordinator.py": [
+      "layer:coordinator", 
+      "static", 
+      "18cda7ddf00ae0e47578d489fc3ebb376b4428cd0559797a87ddbead54360d02"
+    ], 
+    "reactive/workloadstatus.py": [
+      "postgresql", 
+      "static", 
+      "ec87dafd476b3ab14e89a0c776c38f3e77cbec3adfda3a43cec8db11ca19fe9b"
+    ], 
+    "lib/pgclient/hooks/db-admin-relation-joined": [
+      "postgresql", 
+      "static", 
+      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+    ], 
+    "hooks/hook.template": [
+      "layer:basic", 
+      "static", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
+    ], 
+    "wheelhouse/PyYAML-3.11.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "c36c938a872e5ff494938b33b14aaa156cb439ec67548fcab3535bb78b0846e8"
+    ], 
+    "tests/tests.yaml": [
+      "postgresql", 
+      "static", 
+      "b0a7b70178b3a80da4f0625663448fe5973ba093c838d6ba5d115c546d8a29f0"
+    ], 
+    "hooks/relations/block-storage/provides.py": [
+      "postgresql", 
+      "static", 
+      "21bb1924a348ffd7900b19d625ab096c91faf84426d2f9ce69a34043963de862"
+    ], 
+    "reactive/__init__.py": [
+      "postgresql", 
+      "static", 
+      "4032724b98ed267185b12b8ec78dd9bcb0423ab1c89a6f0dad99397fd51159d9"
+    ], 
+    "hooks/relations/syslog/provides.py": [
+      "postgresql", 
+      "static", 
+      "cfd5c0cbf82fe1715a294eb264a85b89717de596263e7a9f5bec576a240b74f5"
+    ], 
+    "hooks/coordinator-relation-changed": [
+      "layer:coordinator", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "lib/juju-deployer-wrapper.py": [
+      "postgresql", 
+      "static", 
+      "b33d9d4c0ae65b8b0084854fe1a22c468646699179fc7b25710b2b637dc7b1ba"
+    ], 
+    "hooks/syslog-relation-changed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "reactive/postgresql/helpers.py": [
+      "postgresql", 
+      "static", 
+      "ef7aa7ce718c15803c460953e3bcd7250baa9faa62765613e6e202b61b19f4d9"
+    ], 
+    "reactive/postgresql/nagios.py": [
+      "postgresql", 
+      "static", 
+      "dcf2117295d6b78f335911a10f476e75decc4197f4c02c2a60036ba4edf145f4"
+    ], 
+    "hooks/update-status": [
+      "layer:basic", 
+      "static", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
+    ], 
+    "templates/metrics_cronjob.template": [
+      "postgresql", 
+      "static", 
+      "c607c576dea12923a701855f97ea748e1340e3c14309dd2cd6dd912e0d522e59"
+    ], 
+    "reactive/postgresql/metrics.py": [
+      "postgresql", 
+      "static", 
+      "c6b957110b97cf6dbf8e10e72a552b334bae12239d45f290170dfbef2537f86a"
+    ], 
+    "README.md": [
+      "postgresql", 
+      "static", 
+      "fd4e5ec48f069bb42dd0973a4c373be4232cd5bfec4270c5035a3f320f9e693c"
+    ], 
+    ".bzrignore": [
+      "postgresql", 
+      "static", 
+      "0add588743632fea5f0753d45d9b2f1d78c47689cf48d67744a3c3af55548404"
+    ], 
+    "hooks/replication-relation-changed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "hooks/nrpe-external-master-relation-departed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "reactive/postgresql/replication.py": [
+      "postgresql", 
+      "static", 
+      "0ad94373d23a030c40d083df70892a30879faa3ebc7091d4471b8b931a6298ac"
+    ], 
+    "hooks/config-changed": [
+      "layer:basic", 
+      "static", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
+    ], 
+    "lib/pg_settings_9.1.json": [
+      "postgresql", 
+      "static", 
+      "cf8d3deb211c752dd747f19305399a0a27863a013a78dbd417c51dec818fd6d4"
+    ], 
+    "lib/pgclient/hooks/upgrade-charm": [
+      "postgresql", 
+      "static", 
+      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+    ], 
+    "scripts/pgbackup.py": [
+      "postgresql", 
+      "static", 
+      "75d841e055226929d365f6d16b745f814a33dd3f0132e94db3b6d63c8bdbf207"
+    ], 
+    "lib/everyhook.py": [
+      "postgresql", 
+      "static", 
+      "eea4308c7609c0a6989c829e6c64eac5686fad56106935b65ea6b191a50f8f34"
+    ], 
+    "hooks/start": [
+      "layer:basic", 
+      "static", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
+    ], 
+    "reactive/postgresql/service.py": [
+      "postgresql", 
+      "static", 
+      "8167478d199a427f8428e8338b773b18d1353a4291ae1ce3658784ece70d30b0"
+    ], 
+    "wheelhouse/charms.reactive-0.3.8.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "3f8722d85f7d489f8414d11fc2a3e8793c68000f7a1bc7b1ad71120e037aebee"
+    ], 
+    "wheelhouse/pyaml-15.8.2.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "9c54fb5f17b58572c4cef50affea60bb73f445ab153580dac07a12383712b5b8"
+    ], 
+    "reactive/postgresql/__init__.py": [
+      "postgresql", 
+      "static", 
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ], 
+    "wheelhouse/pip-7.1.2.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "ca047986f0528cfa975a14fb9f7f106271d4e0c3fe1ddced6c1db2e7ae57a477"
+    ], 
+    "lib/pgclient/hooks/start": [
+      "postgresql", 
+      "static", 
+      "88b982246c3bc30f59c18c20e9f95c257c5c8d6114dcc300a5652931d10d7052"
+    ], 
+    "Makefile": [
+      "postgresql", 
+      "static", 
+      "d592b55f279fe62868eee02bf3bb92910154ad4f6429ae5e620a1290cbe9ba99"
+    ], 
+    "reactive/postgresql/wal_e.py": [
+      "postgresql", 
+      "static", 
+      "731e3428a672e377f651bf0892c96fa1127e4473baee5d8638eb78e463db5b97"
+    ], 
+    "wheelhouse/charmhelpers-0.6.2.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "521f406d6fa5a60df3341f55516917b871310b5b25343970fdd6f3fa92ef8ceb"
+    ], 
+    "lib/pg_settings_9.3.json": [
+      "postgresql", 
+      "static", 
+      "e3acd92c66413d9876cec0517a65219a8437756138da1bd06c52041275c477fc"
+    ], 
+    "reactive/postgresql/preflight.py": [
+      "postgresql", 
+      "static", 
+      "08ad2d066de3caa0d2c7750cae99b347041186a417d679bb32072416f06ed7a0"
+    ], 
+    "hooks/coordinator-relation-departed": [
+      "layer:coordinator", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "hooks/upgrade-charm": [
+      "layer:basic", 
+      "static", 
+      "8b9c153a61cc78067af8d016a8fa1c764caad3a40c82bb0b5121fc4c4c6a04f1"
+    ], 
+    "wheelhouse/Tempita-0.5.2.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
+    ], 
+    "hooks/db-admin-relation-departed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "lib/pgclient/hooks/stop": [
+      "postgresql", 
+      "static", 
+      "88b982246c3bc30f59c18c20e9f95c257c5c8d6114dcc300a5652931d10d7052"
+    ], 
+    "reactive/leadership.py": [
+      "layer:leadership", 
+      "static", 
+      "e2b233cf861adc3b2d9e9c062134ce2f104953f03283cdddd88f49efee652e8f"
+    ], 
+    "lib/pgclient/metadata.yaml": [
+      "postgresql", 
+      "static", 
+      "526b5c1525b53f9f10b142933a3eed00123a1e6a6b0e700f101bdf7014d5881e"
+    ], 
+    "lib/pgclient/hooks/db-relation-joined": [
+      "postgresql", 
+      "static", 
+      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+    ], 
+    "files/metrics/postgres_to_statsd.py": [
+      "postgresql", 
+      "static", 
+      "974ef68ae533abba2d345ba475bba3ad88b629ed13ade1f92fe928f5df814eda"
+    ], 
+    "tox.ini": [
+      "postgresql", 
+      "static", 
+      "518188cb48bd2bb184ddd981360768449cff2b517f2bebb1b8166ff3e5774261"
+    ], 
+    "metadata.yaml": [
+      "postgresql", 
+      "dynamic", 
+      "0a5b3f90cc6e76d4c3f986e2bbf4f809bfb222a7c8e51d2ef59582a4521f1cc8"
+    ], 
+    "lib/pgclient/hooks/db-admin-relation-changed": [
+      "postgresql", 
+      "static", 
+      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+    ], 
+    "hooks/nrpe-external-master-relation-changed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "lib/charms/leadership.py": [
+      "layer:leadership", 
+      "static", 
+      "12b52fa768c3e9072556ac6f46f68129dc762f89eb806d8dee921c86497f6707"
+    ], 
+    "wheelhouse/netaddr-0.7.18.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "a1f5c9fcf75ac2579b9995c843dade33009543c04f218ff7c007b3c81695bd19"
+    ], 
+    "hooks/local-monitors-relation-departed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "tests/test_integration.py": [
+      "postgresql", 
+      "static", 
+      "2b236c8720ce974c62febd7ed2abcde90e25aa7c69152b749555940c2b536b7d"
+    ], 
+    "lib/pgclient/hooks/db-relation-broken": [
+      "postgresql", 
+      "static", 
+      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+    ], 
+    "templates/pg_backup_job.tmpl": [
+      "postgresql", 
+      "static", 
+      "4c136bed07da283c5703c68fbd9afdb688c819d8bb0f1af44d483bd284bacfd3"
+    ], 
+    ".build.manifest": [
+      "build", 
+      "dynamic", 
+      "unchecked"
+    ], 
+    "lib/charms/layer/__init__.py": [
+      "layer:basic", 
+      "static", 
+      "4ffd74384bd81d737572acf2d14fe55431eab8f49d6212d9aabedf24e1d992b2"
+    ], 
+    "lib/cache_settings.py": [
+      "postgresql", 
+      "static", 
+      "2e4d7ffa99cb4da680cf009da6f4fd3c6ee6eff46d7b698f0ef5c4bf978b407a"
+    ], 
+    "hooks/stop": [
+      "layer:basic", 
+      "static", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
+    ], 
+    "reactive/apt.py": [
+      "layer:apt", 
+      "static", 
+      "d47770a6a44c723082a6a7a658679e15b73f0f2280d4662bc80c2935823dc20a"
+    ], 
+    "lib/charms/layer/basic.py": [
+      "layer:basic", 
+      "static", 
+      "dffc5976e96afa5f1d73140b4ca6affee229507b96a2a9ef5d859a2d255febd8"
+    ], 
+    "hooks/data-relation-changed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "lib/pg_settings_9.2.json": [
+      "postgresql", 
+      "static", 
+      "aa4b49cb48f3ae388bc685c31ddb7f6befc55e74baa9317f80eb117cec7d03a2"
+    ], 
+    "lib/pg_settings_9.4.json": [
+      "postgresql", 
+      "static", 
+      "eef6c9a38014506c09ec56972475fd41df129a1f616e807a18d626687bed4eae"
+    ], 
+    "hooks/syslog-relation-departed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "lib/pgclient/hooks/db-relation-changed": [
+      "postgresql", 
+      "static", 
+      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+    ], 
+    "hooks/relations/__init__.py": [
+      "postgresql", 
+      "static", 
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ], 
+    "testing/amuletfixture.py": [
+      "postgresql", 
+      "static", 
+      "1d9f021442fcdde9c12d3aa72f1939003b689ea3e204617fed9194bdf18f69f3"
+    ], 
+    "lib/pgclient/hooks/db-admin-relation-broken": [
+      "postgresql", 
+      "static", 
+      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+    ], 
+    "lib/charms/__init__.py": [
+      "layer:coordinator", 
+      "static", 
+      "4032724b98ed267185b12b8ec78dd9bcb0423ab1c89a6f0dad99397fd51159d9"
+    ], 
+    "testing/__init__.py": [
+      "postgresql", 
+      "static", 
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ], 
+    "templates/rsyslog_forward.conf": [
+      "postgresql", 
+      "static", 
+      "b5c3685640c128e4fd956bab36c9ef8cc60e229acb524d0d6eccf27c67307709"
+    ], 
+    "lib/pgclient/hooks/install": [
+      "postgresql", 
+      "static", 
+      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+    ], 
+    "lib/pgclient/hooks/config-changed": [
+      "postgresql", 
+      "static", 
+      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+    ], 
+    "templates/nrpe_service.tmpl": [
+      "postgresql", 
+      "static", 
+      "6e33f1818251131a644527c87ea47bd1fc690cefd9fe0c06b120ea9f25d78f92"
+    ], 
+    "reactive/postgresql/storage.py": [
+      "postgresql", 
+      "static", 
+      "ab6e9f2bb05a56a6d190cedf95c7c696ef2a4b53732118718075b76e8b845539"
+    ], 
+    "lib/pg_settings_9.5.json": [
+      "postgresql", 
+      "static", 
+      "e07ae636acf64402fc837b3af4d1e1312755dfca73489739162a4c7519029d9c"
+    ], 
+    "reactive/postgresql/postgresql.py": [
+      "postgresql", 
+      "static", 
+      "89ec2528da6010ec995542dc08b6a8a0e58a3c206612fa3f522d632ef77390ae"
+    ], 
+    "hooks/db-relation-changed": [
+      "postgresql", 
+      "static", 
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "wheelhouse/six-1.10.0.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "105f8d68616f8248e24bf0e9372ef04d3cc10104f1980f54d57b2ce73a5ad56a"
+    ], 
+    "lib/relations/__init__.py": [
+      "postgresql", 
+      "static", 
+      "fd688dfa4de1d9c55fa75308fd5eec415ea73a14e06bdd73fc292f4d69d751e9"
+    ], 
+    "layer.yaml": [
+      "postgresql", 
+      "dynamic", 
+      "6fdf1b081fcca0e5131a4b0fa15883e598972ba3aaa54b54c44967e794468bc4"
+    ], 
+    "tests/test_pg_hba_conf.py": [
+      "postgresql", 
+      "static", 
+      "c1636786ad8d3a8a721faa5633afebb105abe58f9bbfd83e20632abac6bdfa4f"
+    ], 
+    "lib/charms/apt.py": [
+      "layer:apt", 
+      "static", 
+      "99e23b5feb97c31a488e97a54044ad36d57490713aa37a8ce66bce4148f921e4"
+    ]
+  }
+}

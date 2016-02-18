@@ -1,11 +1,17 @@
 includes:
-    - layer:basic
-    - layer:apt
-    - layer:leadership
-    - layer:coordinator
+- layer:basic
+- layer:apt
+- layer:leadership
+- layer:coordinator
 options:
-    basic:
-        packages:
-            - python3-psycopg2
-    coordinator:
-        log_level: debug
+  coordinator:
+    class: charms.coordinator.SimpleCoordinator
+    log_level: debug
+  basic:
+    packages:
+    - python3-psycopg2
+    use_venv: false
+    include_system_packages: false
+  leadership: {}
+  postgresql: {}
+is: postgresql
