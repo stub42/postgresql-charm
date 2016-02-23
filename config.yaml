@@ -90,6 +90,14 @@ options:
         databases to external managed systems, or configuring replication
         between unrelated PostgreSQL services using the manual_replication
         option.
+  idle_reap_secs:
+    type: int
+    default: 900
+    description: >
+        Terminate transactions that have been idle more than this many
+        seconds. While this may seem harsh, in most environments it is
+        preferable to allowing them to create database bloat and hold
+        locks needed by well behaved transactions. Set to 0 to disable.
   performance_tuning:
     default: "Mixed"
     type: string
