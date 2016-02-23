@@ -11,3 +11,8 @@
 # Scheduled filesystem backup of the primary using wal-e.
 {{wal_e_backup_schedule}} postgres run-one {{wal_e_backup_command}} && {{wal_e_prune_command}}
 {% endif -%}
+
+{% if idle_reap_secs -%}
+# Terminate IDLE in transaction connections.
+* * * * * postgres run-one {{scripts_dir}}/pgkillidle.py -i postgres -s {{idle_reap_secs}}
+{% endif -%}

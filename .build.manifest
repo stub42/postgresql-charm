@@ -156,7 +156,7 @@
     "templates/postgres.cron.tmpl": [
       "postgresql", 
       "static", 
-      "d378320acccde83609aa1edb66c99162a775ca5dc4c63195988adfe8232f4365"
+      "bd90960a3efb30a051432ea43d73302055f08fa8bee33f62e22078d66a043673"
     ], 
     "charm-helpers.yaml": [
       "postgresql", 
@@ -191,7 +191,7 @@
     "config.yaml": [
       "postgresql", 
       "dynamic", 
-      "fe0626d425a1873245fba996b9179208da2231d318726138364b3a8116fbecd7"
+      "da4648a10556d98fdb32ecaafcac7ac21c09a098aa5ce664566136aaede1cf63"
     ], 
     "hooks/relations/block-storage/__init__.py": [
       "postgresql", 
@@ -341,7 +341,12 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "45b2bff0d74870c625207aee8ef8019e0ef8f2c55dac36e75094731bd54965f9"
+      "4d466e671eaa46d66d7c09362114e95e787b1958e79a8036fdb8054526461d3f"
+    ], 
+    "scripts/pgkillidle.py": [
+      "postgresql", 
+      "static", 
+      "eab206ea6846a5f59bb079a336ff2f4ccf3b9467d99626798df6062498d74d65"
     ], 
     "wheelhouse/charms.reactive-0.3.8.tar.gz": [
       "layer:basic", 
@@ -631,7 +636,7 @@
     "lib/charms/apt.py": [
       "layer:apt", 
       "static", 
-      "99e23b5feb97c31a488e97a54044ad36d57490713aa37a8ce66bce4148f921e4"
+      "9ed953bd9411b982561646607212eaa37494f7a8d1696e15832d8ea0ec23c762"
     ]
   }
 }
