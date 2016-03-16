@@ -51,7 +51,7 @@
     "lib/pgdg.key": [
       "postgresql", 
       "static", 
-      "b5e2273afa3d00bb72c33db479dd1734830995c17542300a9d7f78468c418665"
+      "628a1e23fe2be9162b36326191b9cb618d6fc4949c333a97b906985e7249030d"
     ], 
     "hooks/db-admin-relation-changed": [
       "postgresql", 
