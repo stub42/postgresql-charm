@@ -79,7 +79,7 @@ def version():
 
     # If the version wasn't set, we are using the default version for
     # the distro release.
-    version_map = dict(precise='9.1', trusty='9.3')
+    version_map = dict(precise='9.1', trusty='9.3', xenial='9.5')
     return version_map[helpers.distro_codename()]
 
 
