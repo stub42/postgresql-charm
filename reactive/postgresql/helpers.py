@@ -55,7 +55,7 @@ def write(path, content, mode=0o640, user='root', group='root'):
             f.flush()
             shutil.chown(f.name, user, group)
             os.chmod(f.name, mode)
-            os.replace(f.name, path)
+            shutil.move(f.name, path)
         finally:
             if os.path.exists(f.name):
                 os.unlink(f.name)
