@@ -1,85 +1,67 @@
-options:
-  extra_packages:
-    description: 'Space separated list of extra deb packages to install.
-
-      '
-    type: string
-    default: ''
-  package_status:
-    default: install
-    type: string
-    description: 'The status of service-affecting packages will be set to this value
-      in the dpkg database. Valid values are "install" and "hold".
-
-      '
-  install_sources:
-    description: 'List of extra apt sources, per charm-helpers standard format (a
-      yaml list of strings encoded as a string). Each source may be either a line
-      that can be added directly to sources.list(5), or in the form ppa:<user>/<ppa-name>
-      for adding Personal Package Archives, or a distribution component to enable.
-
-      '
-    type: string
-    default: ''
-  install_keys:
-    description: 'List of signing keys for install_sources package sources, per charmhelpers
-      standard format (a yaml list of strings encoded as a string). The keys should
-      be the full ASCII armoured GPG public keys. While GPG key ids are also supported
-      and looked up on a keyserver, operators should be aware that this mechanism
-      is insecure. null can be used if a standard package signing key is used that
-      will already be installed on the machine, and for PPA sources where the package
-      signing key is securely retrieved from Launchpad.
-
-      '
-    type: string
-    default: ''
-  admin_addresses:
-    default: ''
-    type: string
-    description: 'A comma-separated list of IP Addresses (or single IP) admin tools
-      like pgAdmin3 will connect from. The IP addresses added here will be included
-      in the pg_hba.conf file allowing ip connections to all databases on the server
-      from the given IP addresses using md5 password encryption. IP address ranges
-      are also supported, using the standard format described in the PostgreSQL reference
-      guide.
-
-      '
-  locale:
-    default: C
-    type: string
-    description: 'Locale of service, defining language, default collation order, and
-      default formatting of numbers, currency, dates & times. Can only be set when
-      deploying the first unit of a service.
-
-      '
-  encoding:
-    default: UTF-8
-    type: string
-    description: 'Default encoding used to store text in this service. Can only be
-      set when deploying the first unit of a service.
-
-      '
-  relation_database_privileges:
-    default: ALL
-    type: string
-    description: 'A comma-separated list of database privileges to grant to relation
-      users on their databases. The defaults allow to connect to the database (CONNECT),
-      create objects such as tables (CREATE), and create temporary tables (TEMPORARY).
-      Client charms that create objects in the database are responsible to granting
-      suitable access on those objects to other roles and users (or PUBLIC) using
-      standard GRANT statements.
-
-      '
-  version:
-    default: ''
-    type: string
-    description: 'Version of PostgreSQL that we want to install. Supported versions
-      are "9.1", "9.2", "9.3", "9.4" & "9.5". The default version for the deployed
-      Ubuntu release is used when the version is unspecified.
-
-      '
-  extra_pg_conf:
-    default: |
+"options":
+  "extra_packages":
+    "description": "Space separated list of extra deb packages to install.\n"
+    "type": "string"
+    "default": ""
+  "package_status":
+    "default": "install"
+    "type": "string"
+    "description": "The status of service-affecting packages will be set to this value\
+      \ in the dpkg database. Valid values are \"install\" and \"hold\".\n"
+  "install_sources":
+    "description": "List of extra apt sources, per charm-helpers standard format (a\
+      \ yaml list of strings encoded as a string). Each source may be either a line\
+      \ that can be added directly to sources.list(5), or in the form ppa:<user>/<ppa-name>\
+      \ for adding Personal Package Archives, or a distribution component to enable.\n"
+    "type": "string"
+    "default": ""
+  "install_keys":
+    "description": "List of signing keys for install_sources package sources, per\
+      \ charmhelpers standard format (a yaml list of strings encoded as a string).\
+      \ The keys should be the full ASCII armoured GPG public keys. While GPG key\
+      \ ids are also supported and looked up on a keyserver, operators should be aware\
+      \ that this mechanism is insecure. null can be used if a standard package signing\
+      \ key is used that will already be installed on the machine, and for PPA sources\
+      \ where the package signing key is securely retrieved from Launchpad.\n"
+    "type": "string"
+    "default": ""
+  "admin_addresses":
+    "default": ""
+    "type": "string"
+    "description": "A comma-separated list of IP Addresses (or single IP) admin tools\
+      \ like pgAdmin3 will connect from. The IP addresses added here will be included\
+      \ in the pg_hba.conf file allowing ip connections to all databases on the server\
+      \ from the given IP addresses using md5 password encryption. IP address ranges\
+      \ are also supported, using the standard format described in the PostgreSQL\
+      \ reference guide.\n"
+  "locale":
+    "default": "C"
+    "type": "string"
+    "description": "Locale of service, defining language, default collation order,\
+      \ and default formatting of numbers, currency, dates & times. Can only be set\
+      \ when deploying the first unit of a service.\n"
+  "encoding":
+    "default": "UTF-8"
+    "type": "string"
+    "description": "Default encoding used to store text in this service. Can only\
+      \ be set when deploying the first unit of a service.\n"
+  "relation_database_privileges":
+    "default": "ALL"
+    "type": "string"
+    "description": "A comma-separated list of database privileges to grant to relation\
+      \ users on their databases. The defaults allow to connect to the database (CONNECT),\
+      \ create objects such as tables (CREATE), and create temporary tables (TEMPORARY).\
+      \ Client charms that create objects in the database are responsible to granting\
+      \ suitable access on those objects to other roles and users (or PUBLIC) using\
+      \ standard GRANT statements.\n"
+  "version":
+    "default": ""
+    "type": "string"
+    "description": "Version of PostgreSQL that we want to install. Supported versions\
+      \ are \"9.1\", \"9.2\", \"9.3\", \"9.4\" & \"9.5\". The default version for\
+      \ the deployed Ubuntu release is used when the version is unspecified.\n"
+  "extra_pg_conf":
+    "default": |
       # Additional service specific postgresql.conf settings.
       listen_addresses='*'
       ssl=true
@@ -104,94 +86,79 @@ options:
       checkpoint_completion_target=0.9
       password_encryption=true
       max_connections=100
-    type: string
-    description: 'postgresql.conf settings, one per line in standard key=value PostgreSQL
-      format. These settings will generally override any values selected by the charm.
-      The charm however will attempt to ensure minimum requirements for the charm''s
-      operation are met.
-
-      '
-  extra_pg_auth:
-    type: string
-    default: ''
-    description: 'A comma separated extra pg_hba.conf auth rules. This will be written
-      to the pg_hba.conf file, one line per rule. Note that this should not be needed
-      as db relations already create those rules the right way. Only use this if you
-      really need too (e.g. on a development environment), or are connecting juju
-      managed databases to external managed systems, or configuring replication between
-      unrelated PostgreSQL services using the manual_replication option.
-
-      '
-  idle_reap_secs:
-    type: int
-    default: 900
-    description: 'Terminate transactions that have been idle more than this many seconds.
-      While this may seem harsh, in most environments it is preferable to allowing
-      them to create database bloat and hold locks needed by well behaved transactions.
-      Set to 0 to disable.
-
-      '
-  performance_tuning:
-    default: Mixed
-    type: string
-    description: 'DEPRECATED AND IGNORED. The pgtune project has been abandoned and
-      the packages dropped from Debian and Ubuntu. The charm still performs some basic
-      tuning, which users can tweak using extra_pg_config.
-
-      '
-  manual_replication:
-    type: boolean
-    default: false
-    description: 'Enable or disable charm managed replication. When manual_replication
-      is True, the operator is responsible for maintaining recovery.conf and performing
-      any necessary database mirroring. The charm will still advertise the unit as
-      standalone, master or hot standby to relations based on whether the system is
-      in recovery mode or not. Note that this option makes it possible to create a
-      PostgreSQL service with multiple master units, which is a very silly thing to
-      do unless you are also using multi-master software like BDR.
-
-      '
-  backup_schedule:
-    default: 13 4 * * *
-    type: string
-    description: Cron-formatted schedule for regular database backups.
-  backup_retention_count:
-    default: 7
-    type: int
-    description: Number of backups to retain.
-  backup_dir:
-    default: /var/lib/postgresql/backups
-    type: string
-    description: 'Directory to place backups in.
-
-      '
-  nagios_context:
-    default: juju
-    type: string
-    description: "Used by the nrpe subordinate charms. A string that will be prepended\
+    "type": "string"
+    "description": "postgresql.conf settings, one per line in standard key=value PostgreSQL\
+      \ format. These settings will generally override any values selected by the\
+      \ charm. The charm however will attempt to ensure minimum requirements for the\
+      \ charm's operation are met.\n"
+  "extra_pg_auth":
+    "type": "string"
+    "default": ""
+    "description": "A comma separated extra pg_hba.conf auth rules. This will be written\
+      \ to the pg_hba.conf file, one line per rule. Note that this should not be needed\
+      \ as db relations already create those rules the right way. Only use this if\
+      \ you really need too (e.g. on a development environment), or are connecting\
+      \ juju managed databases to external managed systems, or configuring replication\
+      \ between unrelated PostgreSQL services using the manual_replication option.\n"
+  "idle_reap_secs":
+    "type": "int"
+    "default": !!int "900"
+    "description": "Terminate transactions that have been idle more than this many\
+      \ seconds. While this may seem harsh, in most environments it is preferable\
+      \ to allowing them to create database bloat and hold locks needed by well behaved\
+      \ transactions. Set to 0 to disable.\n"
+  "performance_tuning":
+    "default": "Mixed"
+    "type": "string"
+    "description": "DEPRECATED AND IGNORED. The pgtune project has been abandoned\
+      \ and the packages dropped from Debian and Ubuntu. The charm still performs\
+      \ some basic tuning, which users can tweak using extra_pg_config.\n"
+  "manual_replication":
+    "type": "boolean"
+    "default": !!bool "false"
+    "description": "Enable or disable charm managed replication. When manual_replication\
+      \ is True, the operator is responsible for maintaining recovery.conf and performing\
+      \ any necessary database mirroring. The charm will still advertise the unit\
+      \ as standalone, master or hot standby to relations based on whether the system\
+      \ is in recovery mode or not. Note that this option makes it possible to create\
+      \ a PostgreSQL service with multiple master units, which is a very silly thing\
+      \ to do unless you are also using multi-master software like BDR.\n"
+  "backup_schedule":
+    "default": "13 4 * * *"
+    "type": "string"
+    "description": "Cron-formatted schedule for regular database backups."
+  "backup_retention_count":
+    "default": !!int "7"
+    "type": "int"
+    "description": "Number of backups to retain."
+  "backup_dir":
+    "default": "/var/lib/postgresql/backups"
+    "type": "string"
+    "description": "Directory to place backups in.\n"
+  "nagios_context":
+    "default": "juju"
+    "type": "string"
+    "description": "Used by the nrpe subordinate charms. A string that will be prepended\
       \ to instance name to set the host name in nagios. So for instance the hostname\
       \ would be something like:\n    juju-postgresql-0\nIf you're running multiple\
       \ environments with the same services in them this allows you to differentiate\
       \ between them.\n"
-  nagios_servicegroups:
-    default: ''
-    type: string
-    description: 'A comma-separated list of nagios servicegroups. If left empty, the
-      nagios_context will be used as the servicegroup
-
-      '
-  pgdg:
-    description: 'Enable the PostgreSQL Global Development Group APT repository (https://wiki.postgresql.org/wiki/Apt).
-      This package source provides official PostgreSQL packages for Ubuntu LTS releases
-      beyond those provided by the main Ubuntu archive.
-
-      '
-    type: boolean
-    default: false
-  wal_e_storage_uri:
-    type: string
-    default: ''
-    description: |
+  "nagios_servicegroups":
+    "default": ""
+    "type": "string"
+    "description": "A comma-separated list of nagios servicegroups. If left empty,\
+      \ the nagios_context will be used as the servicegroup\n"
+  "pgdg":
+    "description": "Enable the PostgreSQL Global Development Group APT repository\
+      \ (https://wiki.postgresql.org/wiki/Apt). This package source provides official\
+      \ PostgreSQL packages for Ubuntu LTS releases beyond those provided by the main\
+      \ Ubuntu archive.\n"
+    "type": "boolean"
+    "default": !!bool "false"
+  "wal_e_storage_uri":
+    "type": "string"
+    "default": ""
+    "description": |
       EXPERIMENTAL.
       Specify storage to be used by WAL-E. Every PostgreSQL service must use
       a unique URI. Backups will be unrecoverable if it is not unique. The
@@ -205,155 +172,132 @@ options:
       storage. Point-in-time recovery becomes possible, as is disabling the
       streaming_replication configuration item and relying solely on
       log shipping for replication.
-  wal_e_backup_schedule:
-    type: string
-    default: 13 0 * * *
-    description: 'EXPERIMENTAL. Cron-formatted schedule for WAL-E database backups.
-      If wal_e_backup_schedule is unset, WAL files will never be removed from WAL-E
-      storage.
-
-      '
-  wal_e_backup_retention:
-    type: int
-    default: 2
-    description: 'EXPERIMENTAL. Number of recent base backups and WAL files to retain.
-      You need enough space for this many backups plus one more, as an old backup
-      will only be removed after a new one has been successfully made to replace it.
-
-      '
-  streaming_replication:
-    type: boolean
-    default: true
-    description: 'Enable streaming replication. Normally, streaming replication is
-      always used, and any log shipping configured is used as a fallback. Turning
-      this off without configuring log shipping is an error.
-
-      '
-  os_username:
-    type: string
-    default: ''
-    description: EXPERIMENTAL. OpenStack Swift username.
-  os_password:
-    type: string
-    default: ''
-    description: EXPERIMENTAL. OpenStack Swift password.
-  os_auth_url:
-    type: string
-    default: ''
-    description: EXPERIMENTAL. OpenStack Swift authentication URL.
-  os_tenant_name:
-    type: string
-    default: ''
-    description: EXPERIMENTAL. OpenStack Swift tenant name.
-  aws_access_key_id:
-    type: string
-    default: ''
-    description: EXPERIMENTAL. Amazon AWS access key id.
-  aws_secret_access_key:
-    type: string
-    default: ''
-    description: EXPERIMENTAL. Amazon AWS secret access key.
-  wabs_account_name:
-    type: string
-    default: ''
-    description: EXPERIMENTAL. Windows Azure account name.
-  wabs_access_key:
-    type: string
-    default: ''
-    description: EXPERIMENTAL. Windows Azure access key.
-  metrics_target:
-    default: ''
-    type: string
-    description: 'Destination for statsd-format metrics, format "host:port". If not
-      present and valid, metrics disabled.
-
-      '
-  metrics_prefix:
-    default: dev.$UNIT.postgresql
-    type: string
-    description: 'Prefix for metrics. Special value $UNIT can be used to include the
-      name of the unit in the prefix.
-
-      '
-  metrics_sample_interval:
-    default: 5
-    type: int
-    description: Period for metrics cron job to run in minutes
-  advisory_lock_restart_key:
-    default: 765
-    type: int
-    description: 'DEPRECATED AND IGNORED. An advisory lock key used internally by
-      the charm. You do not need to change it unless it happens to conflict with an
-      advisory lock key being used by your applications.
-
-      '
-  extra-packages:
-    default: ''
-    type: string
-    description: DEPRECATED. Use extra_packages.
-  listen_port:
-    default: -1
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. Port to listen on. Default is automatically
-      assigned.
-
-      '
-  max_connections:
-    default: 100
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. Maximum number of connections to
-      allow to the PG database
-
-      '
-  max_prepared_transactions:
-    default: 0
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. Maximum number of prepared two phase
-      commit transactions, waiting to be committed. Defaults to 0. as using two phase
-      commit without a process to monitor and resolve lost transactions is dangerous.
-
-      '
-  ssl:
-    default: 'True'
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. Whether PostgreSQL should talk SSL
-
-      '
-  log_min_duration_statement:
-    default: -1
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. -1 is disabled, 0 logs all statements
-      and their durations, > 0 logs only statements running at least this number of
-      milliseconds
-
-      '
-  log_checkpoints:
-    default: false
-    type: boolean
-    description: 'DEPRECATED. Use extra_pg_conf.
-
-      '
-  log_connections:
-    default: false
-    type: boolean
-    description: DEPRECATED. Use extra_pg_conf.
-  log_disconnections:
-    default: false
-    type: boolean
-    description: DEPRECATED. Use extra_pg_conf.
-  log_temp_files:
-    default: '-1'
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. Log creation of temporary files larger
-      than the threshold. -1 disables the feature, 0 logs all temporary files, or
-      specify the threshold size with an optional unit (eg. "512KB", default unit
-      is kilobytes).
-
-      '
-  log_line_prefix:
-    default: '%t [%p]: [%l-1] db=%d,user=%u '
-    type: string
-    description: |
+  "wal_e_backup_schedule":
+    "type": "string"
+    "default": "13 0 * * *"
+    "description": "EXPERIMENTAL. Cron-formatted schedule for WAL-E database backups.\
+      \ If wal_e_backup_schedule is unset, WAL files will never be removed from WAL-E\
+      \ storage.\n"
+  "wal_e_backup_retention":
+    "type": "int"
+    "default": !!int "2"
+    "description": "EXPERIMENTAL. Number of recent base backups and WAL files to retain.\
+      \ You need enough space for this many backups plus one more, as an old backup\
+      \ will only be removed after a new one has been successfully made to replace\
+      \ it.\n"
+  "streaming_replication":
+    "type": "boolean"
+    "default": !!bool "true"
+    "description": "Enable streaming replication. Normally, streaming replication\
+      \ is always used, and any log shipping configured is used as a fallback. Turning\
+      \ this off without configuring log shipping is an error.\n"
+  "os_username":
+    "type": "string"
+    "default": ""
+    "description": "EXPERIMENTAL. OpenStack Swift username."
+  "os_password":
+    "type": "string"
+    "default": ""
+    "description": "EXPERIMENTAL. OpenStack Swift password."
+  "os_auth_url":
+    "type": "string"
+    "default": ""
+    "description": "EXPERIMENTAL. OpenStack Swift authentication URL."
+  "os_tenant_name":
+    "type": "string"
+    "default": ""
+    "description": "EXPERIMENTAL. OpenStack Swift tenant name."
+  "aws_access_key_id":
+    "type": "string"
+    "default": ""
+    "description": "EXPERIMENTAL. Amazon AWS access key id."
+  "aws_secret_access_key":
+    "type": "string"
+    "default": ""
+    "description": "EXPERIMENTAL. Amazon AWS secret access key."
+  "wabs_account_name":
+    "type": "string"
+    "default": ""
+    "description": "EXPERIMENTAL. Windows Azure account name."
+  "wabs_access_key":
+    "type": "string"
+    "default": ""
+    "description": "EXPERIMENTAL. Windows Azure access key."
+  "metrics_target":
+    "default": ""
+    "type": "string"
+    "description": "Destination for statsd-format metrics, format \"host:port\". If\
+      \ not present and valid, metrics disabled.\n"
+  "metrics_prefix":
+    "default": "dev.$UNIT.postgresql"
+    "type": "string"
+    "description": "Prefix for metrics. Special value $UNIT can be used to include\
+      \ the name of the unit in the prefix.\n"
+  "metrics_sample_interval":
+    "default": !!int "5"
+    "type": "int"
+    "description": "Period for metrics cron job to run in minutes"
+  "advisory_lock_restart_key":
+    "default": !!int "765"
+    "type": "int"
+    "description": "DEPRECATED AND IGNORED. An advisory lock key used internally by\
+      \ the charm. You do not need to change it unless it happens to conflict with\
+      \ an advisory lock key being used by your applications.\n"
+  "extra-packages":
+    "default": ""
+    "type": "string"
+    "description": "DEPRECATED. Use extra_packages."
+  "listen_port":
+    "default": !!int "-1"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. Port to listen on. Default is automatically\
+      \ assigned.\n"
+  "max_connections":
+    "default": !!int "100"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. Maximum number of connections to\
+      \ allow to the PG database\n"
+  "max_prepared_transactions":
+    "default": !!int "0"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. Maximum number of prepared two\
+      \ phase commit transactions, waiting to be committed. Defaults to 0. as using\
+      \ two phase commit without a process to monitor and resolve lost transactions\
+      \ is dangerous.\n"
+  "ssl":
+    "default": "True"
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. Whether PostgreSQL should talk\
+      \ SSL\n"
+  "log_min_duration_statement":
+    "default": !!int "-1"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. -1 is disabled, 0 logs all statements\
+      \ and their durations, > 0 logs only statements running at least this number\
+      \ of milliseconds\n"
+  "log_checkpoints":
+    "default": !!bool "false"
+    "type": "boolean"
+    "description": "DEPRECATED. Use extra_pg_conf.\n"
+  "log_connections":
+    "default": !!bool "false"
+    "type": "boolean"
+    "description": "DEPRECATED. Use extra_pg_conf."
+  "log_disconnections":
+    "default": !!bool "false"
+    "type": "boolean"
+    "description": "DEPRECATED. Use extra_pg_conf."
+  "log_temp_files":
+    "default": "-1"
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. Log creation of temporary files\
+      \ larger than the threshold. -1 disables the feature, 0 logs all temporary files,\
+      \ or specify the threshold size with an optional unit (eg. \"512KB\", default\
+      \ unit is kilobytes).\n"
+  "log_line_prefix":
+    "default": "%t [%p]: [%l-1] db=%d,user=%u "
+    "type": "string"
+    "description": |
       DEPRECATED. Use extra_pg_conf.
       special values:
         %a = application name
@@ -374,261 +318,197 @@ options:
         %q = stop here in non-session processes
         %% = '%'
       e.g. '<%u%%%d> '
-  log_lock_waits:
-    default: false
-    type: boolean
-    description: DEPRECATED. Use extra_pg_conf.
-  log_timezone:
-    default: UTC
-    type: string
-    description: DEPRECATED. Use extra_pg_conf.
-  autovacuum:
-    default: true
-    type: boolean
-    description: 'DEPRECATED. Use extra_pg_conf. Autovacuum should almost always be
-      running. If you want to turn this off, you are probably following out of date
-      documentation.
-
-      '
-  log_autovacuum_min_duration:
-    default: -1
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. -1 disables, 0 logs all actions and
-      their durations, > 0 logs only actions running at least this number of milliseconds.
-
-      '
-  autovacuum_analyze_threshold:
-    default: 50
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. min number of row updates before
-      analyze
-
-      '
-  autovacuum_vacuum_scale_factor:
-    default: 0.2
-    type: float
-    description: 'DEPRECATED. Use extra_pg_conf. Fraction of table size before vacuum
-
-      '
-  autovacuum_analyze_scale_factor:
-    default: 0.1
-    type: float
-    description: 'DEPRECATED. Use extra_pg_conf. Fraction of table size before analyze
-
-      '
-  autovacuum_vacuum_cost_delay:
-    default: 20ms
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. Default vacuum cost delay for autovacuum,
-      in milliseconds; -1 means use vacuum_cost_delay
-
-      '
-  search_path:
-    default: '"$user",public'
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. Comma separated list of schema names
-      for the default SQL search path.
-
-      '
-  standard_conforming_strings:
-    default: true
-    type: boolean
-    description: 'DEPRECATED. Use extra_pg_conf. Standard conforming strings
-
-      '
-  hot_standby:
-    default: false
-    type: boolean
-    description: 'DEPRECATED. Use extra_pg_conf. Hot standby or warm standby. When
-      True, queries can be run against the database when in recovery or standby mode
-      (ie. replicated). Overridden when service contains multiple units.
-
-      '
-  hot_standby_feedback:
-    default: false
-    type: boolean
-    description: 'DEPRECATED. Use extra_pg_conf. Hot standby feedback, informing a
-      master about in progress transactions on a streaming hot standby and allowing
-      the master to defer cleanup and avoid query cancelations on the hot standby.
-
-      '
-  wal_level:
-    default: minimal
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. ''minimal'', ''archive'', ''hot_standby''
-      or ''logical''. Defines how much information is written to the WAL. Set to ''minimal''
-      for stand alone databases and ''hot_standby'' for replicated setups. Overridden
-      by juju when replication is used.
-
-      '
-  max_wal_senders:
-    default: 0
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. Maximum number of hot standbys that
-      can connect using streaming replication. Set this to the expected maximum number
-      of hot standby units to avoid unnecessary blocking and database restarts. Overridden
-      by juju if necessary.
-
-      '
-  wal_keep_segments:
-    default: 0
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. Number of old WAL files to keep,
-      providing a larger buffer for streaming hot standbys to catch up from when lagged.
-      Each WAL file is 16MB in size. The WAL files are the buffer of how far a hot
-      standby can lag behind the master, and replication fails if this buffer is overrun.
-      When this service is replicated, the larger value of wal_keep_segments and replicated_wal_keep_segments
-      is used.
-
-      '
-  replicated_wal_keep_segments:
-    default: 5000
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. Value of wal_keep_segments used when
-      this service is replicated. This setting only exists to provide a sane default
-      when replication is requested (so it doesn''t fail) and nobody bothered to change
-      the wal_keep_segments setting.
-
-      '
-  archive_mode:
-    default: false
-    type: boolean
-    description: 'DEPRECATED. Use extra_pg_conf. Enable archiving of WAL files using
-      the command specified by archive_command. If archive_mode is enabled and archive_command
-      not set, then archiving is deferred until archive_command is set and the WAL
-      files will accumulate.
-
-      '
-  archive_command:
-    default: ''
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. Command used to archive WAL files
-      when archive_mode is set and wal_level > minimal.
-
-      '
-  work_mem:
-    default: 1MB
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. Working Memory. Ignored unless ''performance_tuning''
-      is set to ''manual''.
-
-      '
-  maintenance_work_mem:
-    default: 1MB
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. Maintenance working memory. Ignored
-      unless ''performance_tuning'' is set to ''manual''.
-
-      '
-  kernel_shmall:
-    default: 0
-    type: int
-    description: 'DEPRECATED and ignored.  Total amount of shared memory available,
-      in bytes.
-
-      '
-  kernel_shmmax:
-    default: 0
-    type: int
-    description: 'DEPRECATED and ignored. The maximum size, in bytes, of a shared
-      memory segment.
-
-      '
-  shared_buffers:
-    default: ''
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. The amount of memory the database
-      server uses for shared memory buffers. This string should be of the format ''###MB''.
-      Ignored unless ''performance_tuning'' is set to ''manual''.
-
-      '
-  effective_cache_size:
-    default: ''
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. Effective cache size is an estimate
-      of how much memory is available for disk caching within the database. (50% to
-      75% of system memory). This string should be of the format ''###MB''. Ignored
-      unless ''performance_tuning'' is set to ''manual''.
-
-      '
-  default_statistics_target:
-    default: -1
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. Sets the default statistics target
-      for table columns without a column-specific target set via ALTER TABLE SET STATISTICS.
-      Leave unchanged to use the server default, which in recent releases is 100.
-      Ignored unless ''performance_tuning'' is ''manual''. Larger values increase
-      the time needed to do ANALYZE, but might improve the quality of the planner''s
-      estimates.
-
-      '
-  collapse_limit:
-    default: -1
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. Sets the from_collapse_limit and
-      join_collapse_limit query planner options, controlling the maximum number of
-      tables that can be joined before the turns off the table collapse query optimization.
-
-      '
-  temp_buffers:
-    default: 1MB
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. The maximum number of temporary buffers
-      used by each database session.
-
-      '
-  wal_buffers:
-    default: '-1'
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. min 32kB, -1 sets based on shared_buffers
-      (change requires restart). Ignored unless ''performance_tuning'' is set to ''manual''.
-
-      '
-  checkpoint_segments:
-    default: 10
-    type: int
-    description: 'DEPRECATED. Use extra_pg_conf. in logfile segments, min 1, 16MB
-      each. Ignored unless ''performance_tuning'' is set to ''manual''.
-
-      '
-  checkpoint_completion_target:
-    default: 0.9
-    type: float
-    description: 'DEPRECATED. Use extra_pg_conf. checkpoint target duration time,
-      as a fraction of checkpoint_timeout. Range [0.0, 1.0].
-
-      '
-  checkpoint_timeout:
-    default: ''
-    type: string
-    description: 'DEPRECATED. Use extra_pg_conf. Maximum time between automatic WAL
-      checkpoints. range ''30s-1h''. If left empty, the default postgresql value will
-      be used.
-
-      '
-  fsync:
-    type: boolean
-    default: true
-    description: 'DEPRECATED. Use extra_pg_conf. Turns forced synchronization on/off.
-      If fsync is turned off, database failures are likely to involve database corruption
-      and require recreating the unit
-
-      '
-  synchronous_commit:
-    type: boolean
-    default: true
-    description: 'DEPRECATED. Use extra_pg_conf. Immediate fsync after commit.
-
-      '
-  full_page_writes:
-    type: boolean
-    default: true
-    description: 'DEPRECATED. Use extra_pg_conf. Recover from partial page writes.
-
-      '
-  random_page_cost:
-    default: 4.0
-    type: float
-    description: 'DEPRECATED. Use extra_pg_conf. Random page cost
-
-      '
+  "log_lock_waits":
+    "default": !!bool "false"
+    "type": "boolean"
+    "description": "DEPRECATED. Use extra_pg_conf."
+  "log_timezone":
+    "default": "UTC"
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf."
+  "autovacuum":
+    "default": !!bool "true"
+    "type": "boolean"
+    "description": "DEPRECATED. Use extra_pg_conf. Autovacuum should almost always\
+      \ be running. If you want to turn this off, you are probably following out of\
+      \ date documentation.\n"
+  "log_autovacuum_min_duration":
+    "default": !!int "-1"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. -1 disables, 0 logs all actions\
+      \ and their durations, > 0 logs only actions running at least this number of\
+      \ milliseconds.\n"
+  "autovacuum_analyze_threshold":
+    "default": !!int "50"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. min number of row updates before\
+      \ analyze\n"
+  "autovacuum_vacuum_scale_factor":
+    "default": !!float "0.2"
+    "type": "float"
+    "description": "DEPRECATED. Use extra_pg_conf. Fraction of table size before vacuum\n"
+  "autovacuum_analyze_scale_factor":
+    "default": !!float "0.1"
+    "type": "float"
+    "description": "DEPRECATED. Use extra_pg_conf. Fraction of table size before analyze\n"
+  "autovacuum_vacuum_cost_delay":
+    "default": "20ms"
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. Default vacuum cost delay for autovacuum,\
+      \ in milliseconds; -1 means use vacuum_cost_delay\n"
+  "search_path":
+    "default": "\"$user\",public"
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. Comma separated list of schema\
+      \ names for the default SQL search path.\n"
+  "standard_conforming_strings":
+    "default": !!bool "true"
+    "type": "boolean"
+    "description": "DEPRECATED. Use extra_pg_conf. Standard conforming strings\n"
+  "hot_standby":
+    "default": !!bool "false"
+    "type": "boolean"
+    "description": "DEPRECATED. Use extra_pg_conf. Hot standby or warm standby. When\
+      \ True, queries can be run against the database when in recovery or standby\
+      \ mode (ie. replicated). Overridden when service contains multiple units.\n"
+  "hot_standby_feedback":
+    "default": !!bool "false"
+    "type": "boolean"
+    "description": "DEPRECATED. Use extra_pg_conf. Hot standby feedback, informing\
+      \ a master about in progress transactions on a streaming hot standby and allowing\
+      \ the master to defer cleanup and avoid query cancelations on the hot standby.\n"
+  "wal_level":
+    "default": "minimal"
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. 'minimal', 'archive', 'hot_standby'\
+      \ or 'logical'. Defines how much information is written to the WAL. Set to 'minimal'\
+      \ for stand alone databases and 'hot_standby' for replicated setups. Overridden\
+      \ by juju when replication is used.\n"
+  "max_wal_senders":
+    "default": !!int "0"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. Maximum number of hot standbys\
+      \ that can connect using streaming replication. Set this to the expected maximum\
+      \ number of hot standby units to avoid unnecessary blocking and database restarts.\
+      \ Overridden by juju if necessary.\n"
+  "wal_keep_segments":
+    "default": !!int "0"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. Number of old WAL files to keep,\
+      \ providing a larger buffer for streaming hot standbys to catch up from when\
+      \ lagged. Each WAL file is 16MB in size. The WAL files are the buffer of how\
+      \ far a hot standby can lag behind the master, and replication fails if this\
+      \ buffer is overrun. When this service is replicated, the larger value of wal_keep_segments\
+      \ and replicated_wal_keep_segments is used.\n"
+  "replicated_wal_keep_segments":
+    "default": !!int "5000"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. Value of wal_keep_segments used\
+      \ when this service is replicated. This setting only exists to provide a sane\
+      \ default when replication is requested (so it doesn't fail) and nobody bothered\
+      \ to change the wal_keep_segments setting.\n"
+  "archive_mode":
+    "default": !!bool "false"
+    "type": "boolean"
+    "description": "DEPRECATED. Use extra_pg_conf. Enable archiving of WAL files using\
+      \ the command specified by archive_command. If archive_mode is enabled and archive_command\
+      \ not set, then archiving is deferred until archive_command is set and the WAL\
+      \ files will accumulate.\n"
+  "archive_command":
+    "default": ""
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. Command used to archive WAL files\
+      \ when archive_mode is set and wal_level > minimal.\n"
+  "work_mem":
+    "default": "1MB"
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. Working Memory. Ignored unless\
+      \ 'performance_tuning' is set to 'manual'.\n"
+  "maintenance_work_mem":
+    "default": "1MB"
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. Maintenance working memory. Ignored\
+      \ unless 'performance_tuning' is set to 'manual'.\n"
+  "kernel_shmall":
+    "default": !!int "0"
+    "type": "int"
+    "description": "DEPRECATED and ignored.  Total amount of shared memory available,\
+      \ in bytes.\n"
+  "kernel_shmmax":
+    "default": !!int "0"
+    "type": "int"
+    "description": "DEPRECATED and ignored. The maximum size, in bytes, of a shared\
+      \ memory segment.\n"
+  "shared_buffers":
+    "default": ""
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. The amount of memory the database\
+      \ server uses for shared memory buffers. This string should be of the format\
+      \ '###MB'. Ignored unless 'performance_tuning' is set to 'manual'.\n"
+  "effective_cache_size":
+    "default": ""
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. Effective cache size is an estimate\
+      \ of how much memory is available for disk caching within the database. (50%\
+      \ to 75% of system memory). This string should be of the format '###MB'. Ignored\
+      \ unless 'performance_tuning' is set to 'manual'.\n"
+  "default_statistics_target":
+    "default": !!int "-1"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. Sets the default statistics target\
+      \ for table columns without a column-specific target set via ALTER TABLE SET\
+      \ STATISTICS. Leave unchanged to use the server default, which in recent releases\
+      \ is 100. Ignored unless 'performance_tuning' is 'manual'. Larger values increase\
+      \ the time needed to do ANALYZE, but might improve the quality of the planner's\
+      \ estimates.\n"
+  "collapse_limit":
+    "default": !!int "-1"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. Sets the from_collapse_limit and\
+      \ join_collapse_limit query planner options, controlling the maximum number\
+      \ of tables that can be joined before the turns off the table collapse query\
+      \ optimization.\n"
+  "temp_buffers":
+    "default": "1MB"
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. The maximum number of temporary\
+      \ buffers used by each database session.\n"
+  "wal_buffers":
+    "default": "-1"
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. min 32kB, -1 sets based on shared_buffers\
+      \ (change requires restart). Ignored unless 'performance_tuning' is set to 'manual'.\n"
+  "checkpoint_segments":
+    "default": !!int "10"
+    "type": "int"
+    "description": "DEPRECATED. Use extra_pg_conf. in logfile segments, min 1, 16MB\
+      \ each. Ignored unless 'performance_tuning' is set to 'manual'.\n"
+  "checkpoint_completion_target":
+    "default": !!float "0.9"
+    "type": "float"
+    "description": "DEPRECATED. Use extra_pg_conf. checkpoint target duration time,\
+      \ as a fraction of checkpoint_timeout. Range [0.0, 1.0].\n"
+  "checkpoint_timeout":
+    "default": ""
+    "type": "string"
+    "description": "DEPRECATED. Use extra_pg_conf. Maximum time between automatic\
+      \ WAL checkpoints. range '30s-1h'. If left empty, the default postgresql value\
+      \ will be used.\n"
+  "fsync":
+    "type": "boolean"
+    "default": !!bool "true"
+    "description": "DEPRECATED. Use extra_pg_conf. Turns forced synchronization on/off.\
+      \ If fsync is turned off, database failures are likely to involve database corruption\
+      \ and require recreating the unit\n"
+  "synchronous_commit":
+    "type": "boolean"
+    "default": !!bool "true"
+    "description": "DEPRECATED. Use extra_pg_conf. Immediate fsync after commit.\n"
+  "full_page_writes":
+    "type": "boolean"
+    "default": !!bool "true"
+    "description": "DEPRECATED. Use extra_pg_conf. Recover from partial page writes.\n"
+  "random_page_cost":
+    "default": !!float "4.0"
+    "type": "float"
+    "description": "DEPRECATED. Use extra_pg_conf. Random page cost\n"
