@@ -366,7 +366,7 @@
     "tests/test_postgresql.py": [
       "postgresql", 
       "static", 
-      "3bfed026d0fcce7be07cac0f56604619bcc107e75cd693535f16b3cd0506a676"
+      "dd537d9537fc788238adc0130c4f0e38971ced8c77d170c68e8e9d49e08342c8"
     ], 
     "Makefile": [
       "postgresql", 

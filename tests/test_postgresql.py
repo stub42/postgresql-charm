@@ -426,8 +426,8 @@ class TestPostgresql(unittest.TestCase):
         # If the role does not exist, it is created.
         cur.fetchone.return_value = None
         postgresql.ensure_role(con, 'roleA')
-        cur.execute.assert_has_call("CREATE ROLE %s INHERIT NOLOGIN",
-                                    ('q_roleA',))
+        cur.execute.assert_has_calls([call("CREATE ROLE %s INHERIT NOLOGIN",
+                                           ('q_roleA',))])
 
     @patch.object(hookenv, 'log')
     @patch.object(postgresql, 'pgidentifier')
