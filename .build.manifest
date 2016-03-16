@@ -51,7 +51,7 @@
     "lib/pgdg.key": [
       "postgresql", 
       "static", 
-      "b5e2273afa3d00bb72c33db479dd1734830995c17542300a9d7f78468c418665"
+      "628a1e23fe2be9162b36326191b9cb618d6fc4949c333a97b906985e7249030d"
     ], 
     "hooks/db-admin-relation-changed": [
       "postgresql", 
@@ -141,7 +141,7 @@
     "templates/postgres.cron.tmpl": [
       "postgresql", 
       "static", 
-      "bd90960a3efb30a051432ea43d73302055f08fa8bee33f62e22078d66a043673"
+      "607f45a45d6b725801d087d7b3aea24ab6cfd83e13419aef5aed8ceec0aa4755"
     ], 
     "charm-helpers.yaml": [
       "postgresql", 
@@ -606,7 +606,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql", 
       "static", 
-      "89ec2528da6010ec995542dc08b6a8a0e58a3c206612fa3f522d632ef77390ae"
+      "ee83764d5615b5a8563a391187681504ff0482e8a970eaa2ab76685a4ed4ddba"
     ], 
     "hooks/master-relation-departed": [
       "postgresql", 
