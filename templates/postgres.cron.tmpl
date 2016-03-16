@@ -14,5 +14,5 @@
 
 {% if idle_reap_secs -%}
 # Terminate IDLE in transaction connections.
-* * * * * postgres run-one {{scripts_dir}}/pgkillidle.py -i postgres -s {{idle_reap_secs}}
+* * * * * postgres run-one {{scripts_dir}}/pgkillidle.py -q -i postgres -s {{idle_reap_secs}}
 {% endif -%}
