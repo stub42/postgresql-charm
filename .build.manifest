@@ -203,6 +203,11 @@
       "static", 
       "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
+    "hooks/relations/local-monitors/provides.py": [
+      "postgresql", 
+      "static", 
+      "dd81937ffec7f2e0d3eb72beb21421183303856466bd45e0334c502c8e9c7d34"
+    ], 
     "hooks/data-relation-changed": [
       "postgresql", 
       "static", 
@@ -246,7 +251,7 @@
     "reactive/postgresql/nagios.py": [
       "postgresql", 
       "static", 
-      "dcf2117295d6b78f335911a10f476e75decc4197f4c02c2a60036ba4edf145f4"
+      "d8fea6fe437b30f2fed801b8e387b5ff7beaed751cd1dad2917b16a4c4a19f40"
     ], 
     "hooks/update-status": [
       "layer:basic", 
@@ -287,6 +292,11 @@
       "postgresql", 
       "static", 
       "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "templates/nrpe_service.tmpl": [
+      "postgresql", 
+      "static", 
+      "6e33f1818251131a644527c87ea47bd1fc690cefd9fe0c06b120ea9f25d78f92"
     ], 
     "reactive/postgresql/replication.py": [
       "postgresql", 
@@ -331,7 +341,7 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "4d466e671eaa46d66d7c09362114e95e787b1958e79a8036fdb8054526461d3f"
+      "efb20a8f02cbe598adaf11c75e53a36fa14141d8ca8f4b6e1c449a77ec70eb65"
     ], 
     "scripts/pgkillidle.py": [
       "postgresql", 
@@ -358,6 +368,11 @@
       "static", 
       "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     ], 
+    "lib/charms/layer/execd.py": [
+      "layer:basic", 
+      "static", 
+      "c0eb4c90e93a14f04d851f78bc6592e093226321fbe328125958633397aed014"
+    ], 
     "wheelhouse/pip-7.1.2.tar.gz": [
       "layer:basic", 
       "dynamic", 
@@ -371,7 +386,7 @@
     "Makefile": [
       "postgresql", 
       "static", 
-      "d592b55f279fe62868eee02bf3bb92910154ad4f6429ae5e620a1290cbe9ba99"
+      "99747138b9b3f1fcf5875d4dbce669135b2b25570e7fefa5b8768e5e47b72ced"
     ], 
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
@@ -483,6 +498,11 @@
       "static", 
       "4c136bed07da283c5703c68fbd9afdb688c819d8bb0f1af44d483bd284bacfd3"
     ], 
+    "layer.yaml": [
+      "postgresql", 
+      "dynamic", 
+      "b2c05147d5e64c9731d85d5905bc3185e5fe79bf1de4296ad3eb7d7edd137274"
+    ], 
     ".build.manifest": [
       "build", 
       "dynamic", 
@@ -516,7 +536,7 @@
     "lib/charms/layer/basic.py": [
       "layer:basic", 
       "static", 
-      "7c2398ac9bc618aae7d1e39d23d1bb8249e0451f43b062c588c2afa6e065ead0"
+      "9bb722e622264ce618f1ddcdd0d3d138e0d5be554539e70cc7b15591b0f79b9f"
     ], 
     "tests/tests.yaml": [
       "postgresql", 
@@ -578,6 +598,11 @@
       "static", 
       "b5c3685640c128e4fd956bab36c9ef8cc60e229acb524d0d6eccf27c67307709"
     ], 
+    "hooks/relations/nrpe-external-master/__init__.py": [
+      "postgresql", 
+      "static", 
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ], 
     "actions/replication-pause": [
       "postgresql", 
       "static", 
@@ -588,10 +613,10 @@
       "static", 
       "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
     ], 
-    "templates/nrpe_service.tmpl": [
+    "hooks/relations/nrpe-external-master/provides.py": [
       "postgresql", 
       "static", 
-      "6e33f1818251131a644527c87ea47bd1fc690cefd9fe0c06b120ea9f25d78f92"
+      "eb995dff8c39508aa500d3a0669817aeb3e1e88b5b3390a491141e46a340f2ff"
     ], 
     "reactive/postgresql/storage.py": [
       "postgresql", 
@@ -623,10 +648,10 @@
       "static", 
       "9cd78d4bfba601cad3c1f5b2f7a1efb64b01dbad9f07cfee922d819c673dd2f5"
     ], 
-    "layer.yaml": [
+    "hooks/relations/local-monitors/__init__.py": [
       "postgresql", 
-      "dynamic", 
-      "b2c05147d5e64c9731d85d5905bc3185e5fe79bf1de4296ad3eb7d7edd137274"
+      "static", 
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     ], 
     "tests/test_pg_hba_conf.py": [
       "postgresql", 

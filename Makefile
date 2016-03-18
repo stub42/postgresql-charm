@@ -6,6 +6,8 @@ HOST_SERIES := $(shell lsb_release -sc)
 
 BUILD_ROOT=/home/stub/charms/built
 BUILD_DIR=${BUILD_ROOT}/${SERIES}/postgresql
+export LAYER_PATH=/home/stub/layers
+export INTERFACE_PATH=/home/stub/interfaces
 
 
 # /!\ Ensure that errors early in pipes cause failures, rather than
