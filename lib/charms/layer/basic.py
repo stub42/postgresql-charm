@@ -4,11 +4,19 @@ import shutil
 from glob import glob
 from subprocess import check_call
 
+from charms.layer.execd import execd_preinstall
+
 
 def bootstrap_charm_deps():
     """
     Set up the base charm dependencies so that the reactive system can run.
     """
+    # execd must happen first, before any attempt to install packages or
+    # access the network, because sites use this hook to do bespoke
+    # configuration and install secrets so the rest of this bootstrap
+    # and the charm itself can actually succeed. This call does nothing
+    # unless the operator has created and populated $CHARM_DIR/exec.d.
+    execd_preinstall()
     venv = os.path.abspath('../.venv')
     vbin = os.path.join(venv, 'bin')
     vpip = os.path.join(vbin, 'pip')
@@ -32,7 +40,7 @@ def bootstrap_charm_deps():
         if cfg.get('use_venv'):
             if not os.path.exists(venv):
                 apt_install(['python-virtualenv'])
-                cmd = ['virtualenv', '--python=python3', venv]
+                cmd = ['virtualenv', '-ppython3', '--never-download', venv]
                 if cfg.get('include_system_packages'):
                     cmd.append('--system-site-packages')
                 check_call(cmd)
