@@ -1,4 +1,4 @@
-# Copyright 2015 Canonical Ltd.
+# Copyright 2015-2016 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -27,21 +27,28 @@ from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
 
 
-@hook('{interface:nrpe-external-master}-relation-changed',
-      '{interface:local-monitors}-relation-changed')
-def enable_nagios():
-    reactive.set_state('postgresql.nagios.enabled')
+@hook('nrpe-external-master-relation-changed',
+      'local-monitors-relation-changed')
+def enable_nagios(*dead_chickens):
+    if os.path.exists('/var/lib/nagios'):
+        reactive.set_state('postgresql.nagios.enabled')
+        reactive.set_state('postgresql.nagios.needs_update')
 
 
-@hook('config-changed',
-      '{interface:nrpe-external-master}-relation-changed',
-      '{interface:local-monitors}-relation-changed')
+@hook('upgrade-charm')
+def upgrade_charm():
+    reactive.set_state('postgresql.nagios.needs_update')
+    reactive.remove_state('postgresql.nagios.user_ensured')
+
+
+@when('postgresql.nagios.enabled')
+@when('config.changed')
 def update_nagios():
     reactive.set_state('postgresql.nagios.needs_update')
 
 
 def nagios_username():
-    return '_juju_nagios'
+    return 'nagios'
 
 
 @when('postgresql.nagios.enabled')
@@ -55,22 +62,22 @@ def ensure_nagios_credentials():
 @when('postgresql.cluster.is_running')
 @when('postgresql.replication.is_master')
 @when('leadership.set.nagios_password')
-@only_once
+@when_not('postgresql.nagios.user_ensured')
 def ensure_nagios_user():
     con = postgresql.connect()
     postgresql.ensure_user(con, nagios_username(),
                            leadership.leader_get('nagios_password'))
     con.commit()
+    reactive.set_state('postgresql.nagios.user_ensured')
 
 
 def nagios_pgpass_path():
     return os.path.expanduser('~nagios/.pgpass')
 
 
+@when('postgresql.nagios.enabled')
 @when('leadership.changed.nagios_password')
 def update_nagios_pgpass():
-    if not os.path.isdir(os.path.expanduser('~nagios')):
-        return  # Nagios user does not yet exist. Wait for subordinate.
     leader = context.Leader()
     nagios_password = leader['nagios_password']
     content = '*:*:*:{}:{}'.format(nagios_username(), nagios_password)
@@ -78,6 +85,14 @@ def update_nagios_pgpass():
                   mode=0o600, user='nagios', group='nagios')
 
 
+@when('postgresql.nagios.enabled')
+@when('leadership.set.nagios_password')
+@only_once
+def create_nagios_pgpass():
+    update_nagios_pgpass()
+
+
+@when('postgresql.nagios.enabled')
 @when('postgresql.nagios.needs_update')
 @when('leadership.set.nagios_password')
 def update_nrpe_config():
