@@ -354,7 +354,7 @@ def generate_pg_hba_conf(pg_hba, config, rels):
 
     # And anything-goes rules, if specified by the operator.
     for line in config['extra_pg_auth'].split(','):
-        add(line + '# extra_pg_auth config')
+        add(line + ' # extra_pg_auth config')
 
     # Deny everything else
     add('local', 'all', 'all', 'reject', '# Refuse by default')
