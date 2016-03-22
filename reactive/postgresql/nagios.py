@@ -105,14 +105,21 @@ def update_nrpe_config():
                    description='Check pgsql',
                    check_cmd='check_pgsql -P {} -l {}'.format(port, user))
 
-    # TODO: These should be calcualted from the backup schedule,
-    # which is difficult since that is specified in crontab format.
-    warn_age = 172800
-    crit_age = 194400
-    backups_log = helpers.backups_log_path()
-    nrpe.add_check(shortname='pgsql_backups',
-                   description='Check pgsql backups',
-                   check_cmd=('check_file_age -w {} -c {} -f {}'
-                              ''.format(warn_age, crit_age, backups_log)))
+    if reactive.is_state('postgresql.replication.is_master'):
+        # TODO: These should be calcualted from the backup schedule,
+        # which is difficult since that is specified in crontab format.
+        warn_age = 172800
+        crit_age = 194400
+        backups_log = helpers.backups_log_path()
+        nrpe.add_check(shortname='pgsql_backups',
+                       description='Check pgsql backups',
+                       check_cmd=('check_file_age -w {} -c {} -f {}'
+                                  ''.format(warn_age, crit_age, backups_log)))
+    else:
+        # Standbys don't do backups. We still generate a check though,
+        # to ensure alerts get through to monitoring after a failover.
+        nrpe.add_check(shortname='pgsql_backups',
+                       description='Check pgsql backups',
+                       check_cmd=r'check_dummy 0 standby_does_not_backup')
     nrpe.write()
     reactive.remove_state('postgresql.nagios.needs_update')
