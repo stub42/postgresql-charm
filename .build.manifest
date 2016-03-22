@@ -251,7 +251,7 @@
     "reactive/postgresql/nagios.py": [
       "postgresql", 
       "static", 
-      "d8fea6fe437b30f2fed801b8e387b5ff7beaed751cd1dad2917b16a4c4a19f40"
+      "21b39ccea7629b0c4b9d576fd0196b2e3905882cd767f40436d7ad8e7293bfc1"
     ], 
     "hooks/update-status": [
       "layer:basic", 
@@ -496,7 +496,7 @@
     "templates/pg_backup_job.tmpl": [
       "postgresql", 
       "static", 
-      "4c136bed07da283c5703c68fbd9afdb688c819d8bb0f1af44d483bd284bacfd3"
+      "5fea8cbd70201fea958a0e92abbb5a06df5aa3e6512c0599553729596b182944"
     ], 
     "layer.yaml": [
       "postgresql", 
