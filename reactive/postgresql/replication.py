@@ -325,7 +325,11 @@ def clone_master():
     assert not reactive.helpers.is_state('postgresql.replication.is_master')
     assert not reactive.helpers.is_state('postgresql.cluster.is_running')
 
-    data_dir = postgresql.data_dir()
+    # We use realpath on data_dir as it may have been replaced with
+    # a symbolic link, so we empty and recreate the actual directory
+    # and the links remain in place.
+    data_dir = os.path.realpath(postgresql.data_dir())
+
     if os.path.exists(data_dir):
         hookenv.log('Removing {} in preparation for clone'.format(data_dir))
         shutil.rmtree(data_dir)
