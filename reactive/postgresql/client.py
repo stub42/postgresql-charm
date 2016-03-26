@@ -125,14 +125,16 @@ def publish_client_conninfos():
                 hookenv.log('Connection info for {} not yet available'
                             ''.format(rel.relid))
                 continue
-            publish_client_conninfo(rel, conninfos[rel.relid])
-            reactive.remove_state('postgresql.client.resources_ensured')
+            if rel:
+                publish_client_conninfo(rel, conninfos[rel.relid])
+                reactive.remove_state('postgresql.client.resources_ensured')
     reactive.set_state('postgresql.client.clients_published')
 
 
 def publish_client_conninfo(rel, conninfo):
     hookenv.log('Publishing client connection info to {}'.format(rel.relid))
     local = rel.local
+    assert rel, 'Empty relation {}'.format(rel.relid)
     for remote in rel.values():
         break
 
