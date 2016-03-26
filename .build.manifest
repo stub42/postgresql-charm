@@ -586,7 +586,7 @@
     "testing/amuletfixture.py": [
       "postgresql", 
       "static", 
-      "163a3e91cd5a6fc869540dad5563f0559c4a41ed5ec094bb570e3ce65d95ddc1"
+      "751f6eb12a3d64ad110ade9851c437cfb111233da247d8113f580f9a41b765e6"
     ], 
     "hooks/master-relation-changed": [
       "postgresql", 
