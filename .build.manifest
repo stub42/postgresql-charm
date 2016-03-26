@@ -61,7 +61,7 @@
     "reactive/postgresql/client.py": [
       "postgresql", 
       "static", 
-      "02adee770a91d2a043be649fe6c1eed82517672ddff7f58b744f3f63ec32703f"
+      "9970e844a6e209d289a31e82d40da30568e7b60123b803622e8a20473e770887"
     ], 
     "lib/preflight.py": [
       "postgresql", 
@@ -178,6 +178,11 @@
       "dynamic", 
       "cff7292ea8bfa58b9445cd04eb45cf668cd62906cd7c345fafd0410c6a54453c"
     ], 
+    "hooks/relations/pgsql/__init__.py": [
+      "postgresql", 
+      "static", 
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ], 
     "hooks/relations/block-storage/__init__.py": [
       "postgresql", 
       "static", 
@@ -251,7 +256,7 @@
     "reactive/postgresql/nagios.py": [
       "postgresql", 
       "static", 
-      "21b39ccea7629b0c4b9d576fd0196b2e3905882cd767f40436d7ad8e7293bfc1"
+      "aa09bc50cdeeb829f039bf8f698376d0e5f126e23ec17dd3c7183596678c2f61"
     ], 
     "hooks/update-status": [
       "layer:basic", 
@@ -301,7 +306,7 @@
     "reactive/postgresql/replication.py": [
       "postgresql", 
       "static", 
-      "0ad94373d23a030c40d083df70892a30879faa3ebc7091d4471b8b931a6298ac"
+      "c3ffd0a90215722f554df10a2703329520837524ef80a2294e5bd07a4ea6d396"
     ], 
     "wheelhouse/charms.reactive-0.4.0.tar.gz": [
       "layer:basic", 
@@ -341,7 +346,7 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "efb20a8f02cbe598adaf11c75e53a36fa14141d8ca8f4b6e1c449a77ec70eb65"
+      "e5fb4debcecb09d739bfc84e847872d305b6769af778f422b3223d27fede61e8"
     ], 
     "scripts/pgkillidle.py": [
       "postgresql", 
@@ -538,6 +543,11 @@
       "static", 
       "9bb722e622264ce618f1ddcdd0d3d138e0d5be554539e70cc7b15591b0f79b9f"
     ], 
+    "hooks/relations/pgsql/provides.py": [
+      "postgresql", 
+      "static", 
+      "dc3d1caf25b898ee46d7f5f5df48eef19e44d51e65a1f6c63aa64d38d4ff3117"
+    ], 
     "tests/tests.yaml": [
       "postgresql", 
       "static", 
@@ -576,7 +586,7 @@
     "testing/amuletfixture.py": [
       "postgresql", 
       "static", 
-      "1d9f021442fcdde9c12d3aa72f1939003b689ea3e204617fed9194bdf18f69f3"
+      "163a3e91cd5a6fc869540dad5563f0559c4a41ed5ec094bb570e3ce65d95ddc1"
     ], 
     "hooks/master-relation-changed": [
       "postgresql", 
