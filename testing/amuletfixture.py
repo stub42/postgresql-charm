@@ -234,8 +234,8 @@ class AmuletFixture(amulet.Deployment):
         self.charm_dir = os.path.join(repack_root, self.charm_name)
 
         # Ignore .bzr to work around weird bzr interactions with
-        # juju-deployer, per Bug #1394078, and ignore .venv
+        # juju-deployer, per Bug #1394078, and ignore .tox
         # due to a) it containing symlinks juju will reject and b) to avoid
         # infinite recursion.
         shutil.copytree(src_charm_dir, self.charm_dir, symlinks=True,
-                        ignore=shutil.ignore_patterns('.venv?', '.bzr', '.tox'))
+                        ignore=shutil.ignore_patterns('.bzr', '.tox'))
