@@ -60,7 +60,7 @@ def ensure_nagios_credentials():
 
 @when('postgresql.nagios.enabled')
 @when('postgresql.cluster.is_running')
-@when('postgresql.replication.is_master')
+@when('postgresql.replication.is_primary')
 @when('leadership.set.nagios_password')
 @when_not('postgresql.nagios.user_ensured')
 def ensure_nagios_user():
