@@ -1,4 +1,4 @@
-# Copyright 2015-2016 Canonical Ltd.
+# Copyright 2015 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -14,98 +14,68 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import json
-
 from charmhelpers import context
 from charmhelpers.core import hookenv, host
-from charms import leadership, reactive
-from charms.reactive import hook, not_unless, when, when_any, when_not
+from charms import reactive
+from charms.reactive import not_unless, when, when_not
 
+from reactive.postgresql import replication
 from reactive.postgresql import postgresql
+
+from everyhook import everyhook
+
+
+# @hook('{interface:pgsql}-relation-changed',
+#       'replication-relation-changed',
+#       'leader-settings-changed',
+#       'leader-elected',
+#       'config-changed',
+#       'upgrade-charm')
+@everyhook
+def publish_client_relations():
+    reactive.remove_state('postgresql.client.published')
 
 
 CLIENT_RELNAMES = frozenset(['db', 'db-admin', 'master'])
 
 
-@hook('leader-elected')
-def leader_elected():
-    reactive.remove_state('postgresql.client.leader_published')
+@when('postgresql.replication.is_master')
+@when('postgresql.replication.is_primary')
+@when('postgresql.cluster.is_running')
+@when_not('postgresql.client.published')
+def master_provides():
+    '''The master publishes client connection details.
 
-
-@when_any('db.connected', 'db-admin.conected', 'master.connected')
-def client_relation_changed(*ignored):
-    reactive.remove_state('postgresql.client.leader_published')
-
-
-@hook('{interface:pgsql}-relation-changed', 'config-changed')
-def update_client_conninfo(*ignored):
-    reactive.remove_state('postgresql.client.clients_published')
-
-
-@when('leadership.changed.client_conninfo')
-def leader_conninfo_changed():
-    reactive.remove_state('postgresql.client.clients_published')
-
-
-def get_conninfos():
-    return json.loads(leadership.leader_get('client_conninfo') or '{}')
-
-
-def set_conninfos(conninfos):
-    leadership.leader_set(client_conninfo=json.dumps(conninfos))
-
-
-@when('leadership.is_leader')
-@when_not('postgresql.client.leader_published')
-def publish_leader_conninfo():
-    '''Leader generates usernames and passwords.
-
-    Note that this may not be happening in a relation hook, as no
-    unit may have been leader when the relation hooks were last run.
+    Note that this may not be happening in the -relation-changed
+    hook, as this unit may not have been the master when the relation
+    was joined.
     '''
-    conninfos = get_conninfos()
     rels = context.Relations()
-    relids = set()
     for relname in CLIENT_RELNAMES:
-        # Master declares common connection details.
         for rel in rels[relname].values():
-            if not rel:
-                continue
-            relids.add(rel.relid)
-            superuser, replication = _credential_types(rel)
-            user = postgresql.username(rel.service,
-                                       superuser=superuser,
-                                       replication=replication)
+            if len(rel):
+                db_relation_master(rel)
+                db_relation_common(rel)
+                ensure_db_relation_resources(rel)
+    reactive.set_state('postgresql.client.published')
 
-            # Use the requested database name, or the existing database
-            # from the relation for backwards compatibility. Otherwise,
-            # default to the service name. We no longer use the
-            # relation id for the database name or usernames, as when a
-            # database dump is restored into a new Juju environment we
-            # are more likely to have matching service names than relation
-            # ids and less likely to have to perform manual permission and
-            # ownership cleanups.
-            for remote in rel.values():
-                break
-            if 'database' in remote:
-                database = remote['database']
-            elif 'database' in rel.local:
-                database = rel.local['database']
-            else:
-                database = remote.service
 
-            hookenv.log('Publishing leader connection info for {}'
-                        ''.format(rel.relid))
-            conninfos[rel.relid] = dict(user=user, password=host.pwgen(),
-                                        database=database)
+@when('postgresql.replication.master.authorized')
+@when('postgresql.cluster.is_running')
+@when_not('postgresql.client.published')
+def mirror_master():
+    '''A standby mirrors client connection details from the master.
 
-    # Remove conninfos for relations that no longer exist.
-    for relid in set(conninfos.keys()):
-        if relid not in relids:
-            del conninfos[relid]
-
-    set_conninfos(conninfos)
-    reactive.set_state('postgresql.client.leader_published')
+    The master pings its peers using the peer relation to ensure a hook
+    is invoked and this handler called after the credentials have been
+    published.
+    '''
+    rels = context.Relations()
+    for relname in CLIENT_RELNAMES:
+        for rel in rels[relname].values():
+            db_relation_mirror(rel)
+            db_relation_common(rel)
+    reactive.set_state('postgresql.client.published')
 
 
 def _credential_types(rel):
@@ -114,45 +84,70 @@ def _credential_types(rel):
     return (superuser, replication)
 
 
-@when('postgresql.cluster.configured')
-@when_not('postgresql.client.clients_published')
-def publish_client_conninfos():
-    conninfos = get_conninfos()
-    rels = context.Relations()
-    for relname in CLIENT_RELNAMES:
-        for rel in rels[relname].values():
-            if rel.relid not in conninfos:
-                hookenv.log('Connection info for {} not yet available'
-                            ''.format(rel.relid))
-                continue
-            publish_client_conninfo(rel, conninfos[rel.relid])
-            reactive.remove_state('postgresql.client.resources_ensured')
-    reactive.set_state('postgresql.client.clients_published')
-
-
-def publish_client_conninfo(rel, conninfo):
-    hookenv.log('Publishing client connection info to {}'.format(rel.relid))
-    local = rel.local
+@not_unless('postgresql.replication.is_master')
+def db_relation_master(rel):
+    '''The master generates credentials and negotiates resources.'''
+    master = rel.local
+    # Pick one remote unit as representative. They should all converge.
     for remote in rel.values():
         break
 
-    # Username, password and database from the leader settings.
-    local['user'] = conninfo['user']
-    local['password'] = conninfo['password']
-    local['database'] = conninfo['database']
+    # The requested database name, the existing database name, or use
+    # the remote service name as a default. We no longer use the
+    # relation id for the database name or usernames, as when a
+    # database dump is restored into a new Juju environment we
+    # are more likely to have matching service names than relation ids
+    # and less likely to have to perform manual permission and ownership
+    # cleanups.
+    if 'database' in remote:
+        master['database'] = remote['database']
+    elif 'database' not in master:
+        master['database'] = remote.service
 
-    # schema_user and schema_password are deprecated and will one
-    # day be removed.
-    local['schema_user'] = conninfo['user']
-    local['schema_password'] = conninfo['password']
+    superuser, replication = _credential_types(rel)
 
-    # Roles to be granted to generated users, requested by the client.
-    local['roles'] = remote.get('roles')
+    if 'user' not in master:
+        user = postgresql.username(remote.service, superuser=superuser,
+                                   replication=replication)
+        password = host.pwgen()
+        master['user'] = user
+        master['password'] = password
 
-    # Extensions to add to the database, requested by the client. This
-    # likely needs packages installed via the extra_packages configuration
-    # setting to work.
-    local['extensions'] = remote.get('extensions')
+        # schema_user has never been documented and is deprecated.
+        if not superuser:
+            master['schema_user'] = user
+            master['schema_password'] = password
+
+    hookenv.log('** Master providing {} ({}/{})'.format(rel,
+                                                        master['database'],
+                                                        master['user']))
+
+    # Reflect these settings back so the client knows when they have
+    # taken effect.
+    if not replication:
+        master['roles'] = remote.get('roles')
+        master['extensions'] = remote.get('extensions')
+
+
+def db_relation_mirror(rel):
+    '''Non-masters mirror relation information from the master.'''
+    master = replication.get_master()
+    master_keys = ['database', 'user', 'password', 'roles',
+                   'schema_user', 'schema_password', 'extensions']
+    master_info = rel.peers.get(master)
+    if master_info is None:
+        hookenv.log('Waiting for {} to join {}'.format(master, rel))
+        return
+    hookenv.log('Mirroring {} database credentials from {}'.format(rel,
+                                                                   master))
+    rel.local.update({k: master_info.get(k) for k in master_keys})
+
+
+def db_relation_common(rel):
+    '''Publish unit specific relation details.'''
+    local = rel.local
+    if 'database' not in local:
+        return  # Not yet ready.
 
     # Version number, allowing clients to adjust or block if their
     # expectations are not met.
@@ -180,7 +175,7 @@ def publish_client_conninfo(rel, conninfo):
     local['host'] = hookenv.unit_private_ip()
 
     # Port will be 5432, unless the user has overridden it or
-    # something odd happened when the packages where installed.
+    # something very weird happened when the packages where installed.
     local['port'] = str(postgresql.port())
 
     # The list of remote units on this relation granted access.
@@ -189,21 +184,6 @@ def publish_client_conninfo(rel, conninfo):
     # before we have had a chance to grant it access.
     local['allowed-units'] = ' '.join(unit for unit, relinfo in rel.items()
                                       if 'private-address' in relinfo)
-
-
-@when('postgresql.cluster.configured')
-@when('postgresql.cluster.is_running')
-@when('postgresql.replication.is_primary')
-@when('postgresql.client.clients_published')
-@when_not('postgresql.client.resources_ensured')
-def ensure_resources():
-    rels = context.Relations()
-    for relname in CLIENT_RELNAMES:
-        for rel in rels[relname].values():
-            if 'database' not in rel.local:
-                continue  # Should not happen?
-            ensure_db_relation_resources(rel)
-    reactive.set_state('postgresql.client.resources_ensured')
 
 
 @not_unless('postgresql.replication.is_primary')

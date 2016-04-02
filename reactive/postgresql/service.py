@@ -1,4 +1,4 @@
-# Copyright 2011-2015 Canonical Ltd.
+# Copyright 2011-2016 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -114,7 +114,7 @@ def configure_sources():
     config = hookenv.config()
 
     # Shortcut for the PGDG archive.
-    if config['pgdg'] and config.changed('pgdg'):
+    if config['pgdg']:
         pgdg_url = 'http://apt.postgresql.org/pub/repos/apt/'
         pgdg_src = 'deb {} {}-pgdg main'.format(pgdg_url,
                                                 helpers.distro_codename())
