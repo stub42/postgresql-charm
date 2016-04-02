@@ -366,7 +366,6 @@ def clone_master():
     update_recovery_conf()
 
     reactive.set_state('postgresql.replication.cloned')
-    update_replication_states()
 
 
 def ensure_ssl_certs():

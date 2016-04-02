@@ -25,7 +25,7 @@ from charmhelpers import context
 from charmhelpers.core import hookenv, host, sysctl, templating, unitdata
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charms import apt, coordinator, reactive
-from charms.reactive import hook, when, when_not
+from charms.reactive import when, when_not
 
 from reactive.workloadstatus import status_set
 
@@ -38,13 +38,10 @@ from reactive.postgresql import wal_e
 from everyhook import everyhook
 
 
-@hook('install')
-def install():
-    reactive.set_state('config.changed.pgdg')
-
-
 @everyhook
 def main():
+    configure_sources()  # Add the PGDG apt source, if selected.
+
     # Modify the behavior of the PostgreSQL package installation
     # before any packages are installed. We do this here, rather than
     # in handlers, so that extra_packages declared by the operator
@@ -108,7 +105,7 @@ def generate_locale():
     reactive.set_state('postgresql.cluster.locale.set')
 
 
-@when('config.changed.pgdg')
+# @when('config.changed.pgdg')  When config layer exists.
 def configure_sources():
     '''Add the PGDB apt sources, if selected.'''
     config = hookenv.config()
