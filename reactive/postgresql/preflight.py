@@ -14,8 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from charmhelpers.core import hookenv, unitdata
-from charmhelpers.payload import execd
+from charmhelpers.core import hookenv
 
 from reactive.workloadstatus import status_set
 from reactive.postgresql import postgresql
@@ -91,22 +90,3 @@ def block_on_invalid_config():
 
     if not valid:
         raise SystemExit(0)
-
-
-@preflight
-def preinstall():
-    '''Invoke charmhelpers.payload.execd.execd_run for site customization.
-
-    This needs to happen before anything else (as much as practical),
-    because anything else may fail if attempted before the site
-    customization hooks have customized the site.
-    '''
-    # We can't use @once_only, because we need to guarantee this is
-    # only run once (rather than only once, and maybe again after
-    # upgrade-charm).
-    store = unitdata.kv()
-    if store.get('postgresql.preflight.preinstall.done'):
-        return
-    status_set('maintenance', 'Running preinstallation hooks')
-    execd.execd_run('charm-pre-install', die_on_error=True)
-    store.set('postgresql.preflight.preinstall.done', True)
