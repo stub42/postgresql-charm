@@ -182,7 +182,7 @@ class PGBaseTestCase(object):
         messages = []
         for unit, info in status['services']['postgresql']['units'].items():
             status_message = info['workload-status'].get('message')
-            if status_message == 'Live master':
+            if status_message.startswith('Live master'):
                 return unit
             messages.append(status_message)
         self.fail('There is no master. Got {!r}'.format(messages))
@@ -191,8 +191,9 @@ class PGBaseTestCase(object):
     def secondaries(self):
         status = self.deployment.get_status()
         units = status['services']['postgresql']['units']
-        return set([unit for unit, info in units.items()
-                    if info['workload-status']['message'] == 'Live secondary'])
+        return set(unit for unit, info in units.items()
+                   if info['workload-status']
+                          ['message'].startswith('Live secondary'))
 
     @property
     def secondary(self):

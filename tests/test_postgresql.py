@@ -56,6 +56,15 @@ class TestPostgresql(unittest.TestCase):
         with self.assertRaises(KeyError):
             postgresql.version()
 
+    @patch('subprocess.check_output')
+    @patch.object(postgresql, 'postgres_path')
+    def test_point_version(self, postgres_path, check_output):
+        postgres_path.return_value = sentinel.postgres_path
+        check_output.return_value = 'postgres (PostgreSQL) 9.8.765\n'
+        self.assertEqual(postgresql.point_version(), '9.8.765')
+        check_output.assert_called_once_with([sentinel.postgres_path, '-V'],
+                                             universal_newlines=True)
+
     @patch.object(postgresql, 'version')
     def test_has_version(self, version):
         version.return_value = '9.4'

@@ -820,7 +820,7 @@ def set_active():
             msg = 'Live primary'
         else:
             msg = 'Live secondary'
-        status_set('active', msg)
+        status_set('active', '{} ({})'.format(msg, postgresql.point_version()))
     else:
         # PostgreSQL crashed! Maybe bad configuration we failed to
         # pick up, or maybe a full disk. The admin will need to diagnose.

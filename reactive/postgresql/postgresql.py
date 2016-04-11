@@ -83,6 +83,13 @@ def version():
     return version_map[helpers.distro_codename()]
 
 
+def point_version():
+    '''PostgreSQL version. major.minor.patch, as a string.'''
+    output = subprocess.check_output([postgres_path(), '-V'],
+                                     universal_newlines=True)
+    return output.split()[-1]
+
+
 def has_version(ver):
     return StrictVersion(version()) >= StrictVersion(ver)
 
