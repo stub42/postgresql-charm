@@ -18,6 +18,7 @@ from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
 from distutils.version import StrictVersion
 import functools
+import hashlib
 import itertools
 import json
 import os.path
@@ -125,6 +126,9 @@ def username(unit_or_service, superuser, replication):
         username = 'jujuadmin_{}'.format(servicename)
     else:
         username = 'juju_{}'.format(servicename)
+    if len(username) > 63:
+        h = hashlib.md5(username.encode('UTF8')).hexdigest()
+        username = username[:31] + h
     return username
 
 

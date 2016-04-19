@@ -126,6 +126,15 @@ class TestPostgresql(unittest.TestCase):
         self.assertEqual(postgresql.username('hello', False, True),
                          'jujurepl_hello')
 
+    def test_username_truncation(self):
+        # Usernames need to be truncated to 63 characters, while remaining
+        # unique.
+        service = 'X' * 70
+        too_long = 'juju_{}'.format(service)
+        truncated = too_long[:31] + 'd83abbe4d9ddcab942fe8fe92d387470'
+        self.assertEqual(len(truncated), 63)
+        self.assertEqual(postgresql.username(service, False, False), truncated)
+
     @patch.object(postgresql, 'postgresql_conf_path')
     def test_port(self, pgconf_path):
         # Pull the configured port from postgresql.conf.
