@@ -32,6 +32,11 @@ _success_ex:
 	true | ts
 
 
+ifeq ($(HOST_SERIES),xenial)
+    # Juju 1.x is now juju-1 under Xenial, not juju. Work around this.
+    export PATH := /usr/lib/juju-1.25/bin:$(PATH)
+endif
+
 
 test: testdeps lint unittest integration
 
