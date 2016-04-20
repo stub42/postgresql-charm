@@ -56,6 +56,15 @@ class TestPostgresql(unittest.TestCase):
         with self.assertRaises(KeyError):
             postgresql.version()
 
+    @patch('subprocess.check_output')
+    @patch.object(postgresql, 'postgres_path')
+    def test_point_version(self, postgres_path, check_output):
+        postgres_path.return_value = sentinel.postgres_path
+        check_output.return_value = 'postgres (PostgreSQL) 9.8.765\n'
+        self.assertEqual(postgresql.point_version(), '9.8.765')
+        check_output.assert_called_once_with([sentinel.postgres_path, '-V'],
+                                             universal_newlines=True)
+
     @patch.object(postgresql, 'version')
     def test_has_version(self, version):
         version.return_value = '9.4'
@@ -116,6 +125,15 @@ class TestPostgresql(unittest.TestCase):
                          'jujuadmin_hello')
         self.assertEqual(postgresql.username('hello', False, True),
                          'jujurepl_hello')
+
+    def test_username_truncation(self):
+        # Usernames need to be truncated to 63 characters, while remaining
+        # unique.
+        service = 'X' * 70
+        too_long = 'juju_{}'.format(service)
+        truncated = too_long[:31] + 'd83abbe4d9ddcab942fe8fe92d387470'
+        self.assertEqual(len(truncated), 63)
+        self.assertEqual(postgresql.username(service, False, False), truncated)
 
     @patch.object(postgresql, 'postgresql_conf_path')
     def test_port(self, pgconf_path):

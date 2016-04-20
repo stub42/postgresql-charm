@@ -60,8 +60,14 @@ def main():
     # Don't trust this state from the last hook. Daemons may have
     # crashed and servers rebooted since then.
     if reactive.is_state('postgresql.cluster.created'):
-        reactive.toggle_state('postgresql.cluster.is_running',
-                              postgresql.is_running())
+        try:
+            reactive.toggle_state('postgresql.cluster.is_running',
+                                  postgresql.is_running())
+        except subprocess.CalledProcessError as x:
+            if not reactive.is_state('workloadstatus.blocked'):
+                status_set('blocked',
+                           'Local PostgreSQL cluster is corrupt: {}'
+                           ''.format(x.stderr))
 
     # Reconfigure PostgreSQL. While we don't strictly speaking need
     # to do this every hook, we do need to do this almost every hook,
@@ -820,7 +826,7 @@ def set_active():
             msg = 'Live primary'
         else:
             msg = 'Live secondary'
-        status_set('active', msg)
+        status_set('active', '{} ({})'.format(msg, postgresql.point_version()))
     else:
         # PostgreSQL crashed! Maybe bad configuration we failed to
         # pick up, or maybe a full disk. The admin will need to diagnose.

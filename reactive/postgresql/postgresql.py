@@ -18,6 +18,7 @@ from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
 from distutils.version import StrictVersion
 import functools
+import hashlib
 import itertools
 import json
 import os.path
@@ -83,6 +84,13 @@ def version():
     return version_map[helpers.distro_codename()]
 
 
+def point_version():
+    '''PostgreSQL version. major.minor.patch, as a string.'''
+    output = subprocess.check_output([postgres_path(), '-V'],
+                                     universal_newlines=True)
+    return output.split()[-1]
+
+
 def has_version(ver):
     return StrictVersion(version()) >= StrictVersion(ver)
 
@@ -118,6 +126,9 @@ def username(unit_or_service, superuser, replication):
         username = 'jujuadmin_{}'.format(servicename)
     else:
         username = 'juju_{}'.format(servicename)
+    if len(username) > 63:
+        h = hashlib.md5(username.encode('UTF8')).hexdigest()
+        username = username[:31] + h
     return username
 
 

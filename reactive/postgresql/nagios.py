@@ -21,7 +21,7 @@ from charmhelpers.contrib.charmsupport.nrpe import NRPE
 from charmhelpers.core import host
 
 from charms import leadership, reactive
-from charms.reactive import hook, only_once, when, when_not
+from charms.reactive import hook, only_once, when, when_any, when_not
 
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
@@ -42,7 +42,7 @@ def upgrade_charm():
 
 
 @when('postgresql.nagios.enabled')
-@when('config.changed')
+@when_any('config.changed', 'leadership.changed.master')
 def update_nagios():
     reactive.set_state('postgresql.nagios.needs_update')
 
