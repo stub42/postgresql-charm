@@ -193,10 +193,10 @@
       "static", 
       "18cda7ddf00ae0e47578d489fc3ebb376b4428cd0559797a87ddbead54360d02"
     ], 
-    "reactive/workloadstatus.py": [
-      "postgresql", 
-      "static", 
-      "ec87dafd476b3ab14e89a0c776c38f3e77cbec3adfda3a43cec8db11ca19fe9b"
+    "wheelhouse/six-1.10.0.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "105f8d68616f8248e24bf0e9372ef04d3cc10104f1980f54d57b2ce73a5ad56a"
     ], 
     "lib/pgclient/hooks/db-admin-relation-joined": [
       "postgresql", 
@@ -356,7 +356,7 @@
     "actions/replication-resume": [
       "postgresql", 
       "static", 
-      "d5cc0041d00122974ceaab3e15d644f34cb5cd5a92d24897a167c952b93595a2"
+      "3db1ea3ffc845709d7f7aab8e4d42e89071f3943d3a729ce04ff4ce099b83474"
     ], 
     "wheelhouse/pyaml-15.8.2.tar.gz": [
       "layer:basic", 
@@ -413,10 +413,10 @@
       "static", 
       "8b9c153a61cc78067af8d016a8fa1c764caad3a40c82bb0b5121fc4c4c6a04f1"
     ], 
-    "wheelhouse/PyYAML-3.11.tar.gz": [
+    "wheelhouse/Tempita-0.5.2.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "c36c938a872e5ff494938b33b14aaa156cb439ec67548fcab3535bb78b0846e8"
+      "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ], 
     "hooks/db-admin-relation-departed": [
       "postgresql", 
@@ -453,10 +453,10 @@
       "static", 
       "518188cb48bd2bb184ddd981360768449cff2b517f2bebb1b8166ff3e5774261"
     ], 
-    "wheelhouse/Tempita-0.5.2.tar.gz": [
-      "layer:basic", 
+    "metadata.yaml": [
+      "postgresql", 
       "dynamic", 
-      "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
+      "aa031717098f9a0ec7f88ba8fc49d9684660cc965b21738db8610e606da741db"
     ], 
     "lib/pgclient/hooks/db-admin-relation-changed": [
       "postgresql", 
@@ -508,6 +508,11 @@
       "dynamic", 
       "unchecked"
     ], 
+    "reactive/workloadstatus.py": [
+      "postgresql", 
+      "static", 
+      "ec87dafd476b3ab14e89a0c776c38f3e77cbec3adfda3a43cec8db11ca19fe9b"
+    ], 
     "hooks/config-changed": [
       "layer:basic", 
       "static", 
@@ -558,11 +563,6 @@
       "static", 
       "eef6c9a38014506c09ec56972475fd41df129a1f616e807a18d626687bed4eae"
     ], 
-    "metadata.yaml": [
-      "postgresql", 
-      "dynamic", 
-      "aa031717098f9a0ec7f88ba8fc49d9684660cc965b21738db8610e606da741db"
-    ], 
     "lib/pgclient/hooks/db-relation-changed": [
       "postgresql", 
       "static", 
@@ -586,7 +586,7 @@
     "actions/actions.py": [
       "postgresql", 
       "static", 
-      "d5cc0041d00122974ceaab3e15d644f34cb5cd5a92d24897a167c952b93595a2"
+      "3db1ea3ffc845709d7f7aab8e4d42e89071f3943d3a729ce04ff4ce099b83474"
     ], 
     "lib/charms/coordinator.py": [
       "layer:coordinator", 
@@ -606,7 +606,7 @@
     "actions/replication-pause": [
       "postgresql", 
       "static", 
-      "d5cc0041d00122974ceaab3e15d644f34cb5cd5a92d24897a167c952b93595a2"
+      "3db1ea3ffc845709d7f7aab8e4d42e89071f3943d3a729ce04ff4ce099b83474"
     ], 
     "lib/pgclient/hooks/config-changed": [
       "postgresql", 
@@ -638,10 +638,10 @@
       "static", 
       "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
     ], 
-    "wheelhouse/six-1.10.0.tar.gz": [
+    "wheelhouse/PyYAML-3.11.zip": [
       "layer:basic", 
       "dynamic", 
-      "105f8d68616f8248e24bf0e9372ef04d3cc10104f1980f54d57b2ce73a5ad56a"
+      "19bb3ac350ef878dda84a62d37c7d5c17a137386dde9c2ce7249c7a21d7f6ac9"
     ], 
     "lib/relations/__init__.py": [
       "postgresql", 
