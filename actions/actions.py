@@ -23,10 +23,15 @@ hooks_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                          '..', 'hooks'))
 if hooks_dir not in sys.path:
     sys.path.append(hooks_dir)
+libs_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                        '..', 'lib'))
+if libs_dir not in sys.path:
+    sys.path.append(libs_dir)
+
 
 from charmhelpers.core import hookenv
 
-import postgresql
+from reactive.postgresql import postgresql
 
 
 def replication_pause(params):
