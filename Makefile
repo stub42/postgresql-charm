@@ -1,9 +1,8 @@
 CHARM_DIR := $(shell pwd)
 TEST_TIMEOUT := 900
-#SERIES := $(shell juju get-environment default-series)
-SERIES := trusty
+SERIES := $(shell juju get-environment default-series 2> /dev/null | juju get-model-config default-series 2> /dev/null | echo trusty)
 HOST_SERIES := $(shell lsb_release -sc)
-JUJU := juju-1
+JUJU := juju
 
 BUILD_ROOT=/home/stub/charms/built
 BUILD_DIR=${BUILD_ROOT}/${SERIES}/postgresql
