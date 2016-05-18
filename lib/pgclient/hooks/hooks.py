@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 
 import os.path
 import re
@@ -20,7 +20,7 @@ PGPASS_DIR = os.path.join(DATA_DIR, 'pgpass')
 
 
 def update_system_path():
-    org_lines = open('/etc/environment', 'rb').readlines()
+    org_lines = open('/etc/environment', 'r').readlines()
     env_lines = []
 
     for line in org_lines:
@@ -33,7 +33,8 @@ def update_system_path():
 
     if org_lines != env_lines:
         content = '\n'.join(env_lines)
-        host.write_file('/etc/environment', content, perms=0o644)
+        host.write_file('/etc/environment', content.encode('UTF8'),
+                        perms=0o644)
 
 
 def all_relations(relation_types=CLIENT_RELATION_TYPES):
@@ -118,7 +119,8 @@ def build_script(script_name, relation):
                     pgpass=pgpass_path)
     log("Generating wrapper {}".format(script_path), INFO)
     host.write_file(
-        script_path, script, owner="ubuntu", group="ubuntu", perms=0o700)
+        script_path, script.encode('UTF8'),
+        owner="ubuntu", group="ubuntu", perms=0o700)
 
     # The wrapper requires access to the password, stored in a .pgpass
     # file so it isn't exposed in an environment variable or on the
@@ -126,7 +128,8 @@ def build_script(script_name, relation):
     pgpass = "*:*:*:{user}:{password}".format(
         user=relation['user'], password=relation['password'])
     host.write_file(
-        pgpass_path, pgpass, owner="ubuntu", group="ubuntu", perms=0o400)
+        pgpass_path, pgpass.encode('UTF8'),
+        owner="ubuntu", group="ubuntu", perms=0o400)
 
 
 hooks = hookenv.Hooks()
@@ -135,7 +138,7 @@ hooks = hookenv.Hooks()
 @hooks.hook()
 def install():
     fetch.apt_install(
-        ['language-pack-en', 'postgresql-client', 'python-psycopg2'],
+        ['language-pack-en', 'postgresql-client', 'python3-psycopg2'],
         fatal=True)
     update_system_path()
 
