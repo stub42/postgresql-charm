@@ -9,3 +9,4 @@ juju-wait
 python-swiftclient
 charms.reactive
 charmhelpers
+juju-deployer
