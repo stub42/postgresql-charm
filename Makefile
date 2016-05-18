@@ -3,6 +3,7 @@ TEST_TIMEOUT := 900
 #SERIES := $(shell juju get-environment default-series)
 SERIES := trusty
 HOST_SERIES := $(shell lsb_release -sc)
+JUJU := juju-1
 
 BUILD_ROOT=/home/stub/charms/built
 BUILD_DIR=${BUILD_ROOT}/${SERIES}/postgresql
@@ -32,10 +33,9 @@ _success_ex:
 	true | ts
 
 
-ifeq ($(HOST_SERIES),xenial)
-    # Juju 1.x is now juju-1 under Xenial, not juju. Work around this.
-    export PATH := /usr/lib/juju-1.25/bin:$(PATH)
-endif
+# Munge the path so the requested version of Juju is found, and thus used
+# by Amulet and juju-deployer.
+export PATH := /usr/lib/juju-$(shell $(JUJU) --version | perl -p -e "s/-.*//")/bin:$(PATH)
 
 
 test: testdeps lint unittest integration
