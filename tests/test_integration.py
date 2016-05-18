@@ -157,8 +157,11 @@ class PGBaseTestCase(object):
         super(PGBaseTestCase, cls).setUpClass()
 
     def _get_config(self):
-        raw = subprocess.check_output(['juju', 'get', 'postgresql'],
-                                      universal_newlines=True)
+        if self.deployment.has_juju_version('2.0'):
+            cmd = ['juju', 'get-config', 'postgresql']
+        else:
+            cmd = ['juju', 'get', 'postgresql']
+        raw = subprocess.check_output(cmd, universal_newlines=True)
         settings = yaml.safe_load(raw)['settings']
         return {k: settings[k]['value'] for k in settings.keys()}
 
@@ -352,7 +355,11 @@ class PGBaseTestCase(object):
                 my_ips.add(m.group(1))
 
         # Connections should work after setting the admin-addresses.
-        subprocess.check_call(['juju', 'set', 'postgresql',
+        if self.deployment.has_juju_version('2.0'):
+            subcmd = 'set-config'
+        else:
+            subcmd = 'set'
+        subprocess.check_call(['juju', subcmd, 'postgresql',
                                'admin_addresses={}'.format(','.join(my_ips))],
                               universal_newlines=True)
         self.deployment.wait()
@@ -514,12 +521,12 @@ class PGMultiBaseTestCase(PGBaseTestCase):
 
 
 class PG91Tests(PGBaseTestCase, unittest.TestCase):
-    test_config = dict(version=(None if SERIES == 'precise' else '9.1'),
+    test_config = dict(version=('' if SERIES == 'precise' else '9.1'),
                        pgdg=(False if SERIES == 'precise' else True))
 
 
 class PG91MultiTests(PGMultiBaseTestCase, unittest.TestCase):
-    test_config = dict(version=(None if SERIES == 'precise' else '9.1'),
+    test_config = dict(version=('' if SERIES == 'precise' else '9.1'),
                        pgdg=(False if SERIES == 'precise' else True))
 
 
@@ -532,7 +539,7 @@ class PG92MultiTests(PGMultiBaseTestCase, unittest.TestCase):
 
 
 class PG93Tests(PGBaseTestCase, unittest.TestCase):
-    test_config = dict(version=(None if SERIES == 'trusty' else '9.3'),
+    test_config = dict(version=('' if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True),
                        max_connections=150)
 
@@ -547,7 +554,7 @@ class PG93Tests(PGBaseTestCase, unittest.TestCase):
 class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     storage_subordinate = True
     nagios_subordinate = True
-    test_config = dict(version=(None if SERIES == 'trusty' else '9.3'),
+    test_config = dict(version=('' if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True))
 
     def test_mount(self):
@@ -575,24 +582,24 @@ class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
 
 
 class PG94Tests(PGBaseTestCase, unittest.TestCase):
-    test_config = dict(version=(None if SERIES == 'wily' else '9.4'),
+    test_config = dict(version=('' if SERIES == 'wily' else '9.4'),
                        pgdg=(False if SERIES == 'wily' else True))
 
 
 class PG94MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     num_units = 3
-    test_config = dict(version=(None if SERIES == 'wily' else '9.4'),
+    test_config = dict(version=('' if SERIES == 'wily' else '9.4'),
                        pgdg=(False if SERIES == 'wily' else True))
 
 
 class PG95Tests(PGBaseTestCase, unittest.TestCase):
-    test_config = dict(version=(None if SERIES == 'xenial' else '9.5'),
+    test_config = dict(version=('' if SERIES == 'xenial' else '9.5'),
                        pgdg=(False if SERIES == 'xenial' else True))
 
 
 class PG95MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     num_units = 3
-    test_config = dict(version=(None if SERIES == 'xenial' else '9.5'),
+    test_config = dict(version=('' if SERIES == 'xenial' else '9.5'),
                        pgdg=(False if SERIES == 'xenial' else True))
 
 
