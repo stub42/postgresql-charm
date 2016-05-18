@@ -15,6 +15,9 @@ description: |
 maintainer: Stuart Bishop <stuart.bishop@canonical.com>
 tags:
     - databases
+series:
+    - xenial
+    - trusty
 provides:
   db:
     interface: pgsql
