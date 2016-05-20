@@ -58,6 +58,9 @@ def master_provides():
                 db_relation_common(rel)
                 ensure_db_relation_resources(rel)
     reactive.set_state('postgresql.client.published')
+    # Now we know the username and database, ensure pg_hba.conf gets
+    # regenerated to match and the clients can actually login.
+    reactive.remove_state('postgresql.cluster.configured')
 
 
 @when('postgresql.replication.master.authorized')
@@ -76,6 +79,9 @@ def mirror_master():
             db_relation_mirror(rel)
             db_relation_common(rel)
     reactive.set_state('postgresql.client.published')
+    # Now we know the username and database, ensure pg_hba.conf gets
+    # regenerated to match and the clients can actually login.
+    reactive.remove_state('postgresql.cluster.configured')
 
 
 def _credential_types(rel):

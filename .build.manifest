@@ -18,6 +18,11 @@
       "static", 
       "dc1e89fc8c1a137a08dda8091eb115c120888e7044220f58946b6aa0d7a6360a"
     ], 
+    "bin/layer_option": [
+      "layer:basic", 
+      "static", 
+      "621b556cd208005e131e9f648859294347da9376609745a73ca2e808dd2032f9"
+    ], 
     "hooks/leader-settings-changed": [
       "layer:coordinator", 
       "static", 
@@ -46,7 +51,7 @@
     "lib/pgclient/hooks/db-admin-relation-broken": [
       "postgresql", 
       "static", 
-      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+      "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
     ], 
     "lib/pgdg.key": [
       "postgresql", 
@@ -61,7 +66,7 @@
     "reactive/postgresql/client.py": [
       "postgresql", 
       "static", 
-      "02adee770a91d2a043be649fe6c1eed82517672ddff7f58b744f3f63ec32703f"
+      "d28c36c79035d9c3d3e32728f312b08cbbef6f23ef3a6dc9cc1813c7c7955d22"
     ], 
     "lib/preflight.py": [
       "postgresql", 
@@ -76,7 +81,7 @@
     "lib/pgclient/hooks/hooks.py": [
       "postgresql", 
       "static", 
-      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+      "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
     ], 
     "actions.yaml": [
       "postgresql", 
@@ -116,7 +121,7 @@
     "requirements.txt": [
       "postgresql", 
       "static", 
-      "d690f4480ec2ab809634d59b7bb0f252bc3dbf96f28442087c8c2363712d5458"
+      "cd74e0b6d11e0811012186814d3e0781e0d8fd968c3235b050806bd961f5ef43"
     ], 
     ".gitignore": [
       "postgresql", 
@@ -181,7 +186,7 @@
     "config.yaml": [
       "postgresql", 
       "dynamic", 
-      "cff7292ea8bfa58b9445cd04eb45cf668cd62906cd7c345fafd0410c6a54453c"
+      "bbd4dd749ed7e702eca83d40bc96be959da854c54098c0548dbab358500b6af6"
     ], 
     "hooks/relations/block-storage/__init__.py": [
       "postgresql", 
@@ -201,17 +206,17 @@
     "lib/pgclient/hooks/db-admin-relation-joined": [
       "postgresql", 
       "static", 
-      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+      "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
     ], 
     "hooks/hook.template": [
       "layer:basic", 
       "static", 
       "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
-    "hooks/relations/local-monitors/provides.py": [
-      "postgresql", 
+    "actions/action.template": [
+      "layer:basic", 
       "static", 
-      "dd81937ffec7f2e0d3eb72beb21421183303856466bd45e0334c502c8e9c7d34"
+      "69c3837affa3e258b45e19419b6419bdbdc52d4340a60af664c04f7a2252f5ee"
     ], 
     "hooks/data-relation-changed": [
       "postgresql", 
@@ -281,7 +286,7 @@
     "lib/pgclient/hooks/install": [
       "postgresql", 
       "static", 
-      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+      "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
     ], 
     ".bzrignore": [
       "postgresql", 
@@ -292,6 +297,11 @@
       "postgresql", 
       "static", 
       "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    ], 
+    "hooks/relations/local-monitors/provides.py": [
+      "postgresql", 
+      "static", 
+      "dd81937ffec7f2e0d3eb72beb21421183303856466bd45e0334c502c8e9c7d34"
     ], 
     "hooks/nrpe-external-master-relation-departed": [
       "postgresql", 
@@ -321,7 +331,7 @@
     "lib/pgclient/hooks/upgrade-charm": [
       "postgresql", 
       "static", 
-      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+      "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
     ], 
     "scripts/pgbackup.py": [
       "postgresql", 
@@ -386,7 +396,7 @@
     "Makefile": [
       "postgresql", 
       "static", 
-      "1f2426da03e9f56e8286d8372a19adadccbc318c2557159d5cb38d975d05f399"
+      "03beab3a7ae429b44b9674cf3f15b170a9afd56277601de4413a4f2d9ec8c671"
     ], 
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
@@ -426,7 +436,7 @@
     "tests/test_integration.py": [
       "postgresql", 
       "static", 
-      "acdd14245a2d72f90e43341ac518bb542236c59de67f97e70582221cbda04c2e"
+      "f2a52573aa73ab8ea5a91717ddeb74f394c5d746094ac01d8098ff3ce66dfeb5"
     ], 
     "reactive/leadership.py": [
       "layer:leadership", 
@@ -441,7 +451,7 @@
     "lib/pgclient/hooks/db-relation-joined": [
       "postgresql", 
       "static", 
-      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+      "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
     ], 
     "files/metrics/postgres_to_statsd.py": [
       "postgresql", 
@@ -456,12 +466,12 @@
     "metadata.yaml": [
       "postgresql", 
       "dynamic", 
-      "aa031717098f9a0ec7f88ba8fc49d9684660cc965b21738db8610e606da741db"
+      "0e5e9e9b5ccc8b767e29b12e6752a3823e74bea9a15728465c8aede412c7496f"
     ], 
     "lib/pgclient/hooks/db-admin-relation-changed": [
       "postgresql", 
       "static", 
-      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+      "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
     ], 
     "hooks/nrpe-external-master-relation-changed": [
       "postgresql", 
@@ -491,7 +501,7 @@
     "lib/pgclient/hooks/db-relation-broken": [
       "postgresql", 
       "static", 
-      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+      "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
     ], 
     "templates/pg_backup_job.tmpl": [
       "postgresql", 
@@ -541,7 +551,7 @@
     "lib/charms/layer/basic.py": [
       "layer:basic", 
       "static", 
-      "ec07861b9d201e9e741ee75d09e4f17cbd02775a969f76f5f8968806cb3dab6e"
+      "82934db7e7ede67224cfd2f6ba4adf459702ab6d884b582b8f3ce5616e8accaa"
     ], 
     "tests/tests.yaml": [
       "postgresql", 
@@ -566,7 +576,7 @@
     "lib/pgclient/hooks/db-relation-changed": [
       "postgresql", 
       "static", 
-      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+      "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
     ], 
     "hooks/relations/__init__.py": [
       "postgresql", 
@@ -576,7 +586,7 @@
     "testing/amuletfixture.py": [
       "postgresql", 
       "static", 
-      "751f6eb12a3d64ad110ade9851c437cfb111233da247d8113f580f9a41b765e6"
+      "5732e0e5734504e1fec36da3610bb2e1618c0d69c32c0205ac2de2d5b1e66860"
     ], 
     "hooks/master-relation-changed": [
       "postgresql", 
@@ -611,7 +621,7 @@
     "lib/pgclient/hooks/config-changed": [
       "postgresql", 
       "static", 
-      "10bb57be61d28fd9b4c8d5207596c24ea30ee1b139a40aeb06055d7efe9b6fe3"
+      "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
     ], 
     "hooks/relations/nrpe-external-master/provides.py": [
       "postgresql", 
@@ -661,7 +671,7 @@
     "lib/charms/apt.py": [
       "layer:apt", 
       "static", 
-      "9ed953bd9411b982561646607212eaa37494f7a8d1696e15832d8ea0ec23c762"
+      "a0ac50a69f3af46b5b89d0e0e39e46313417eee08e24de1f0987b81ec813b3de"
     ]
   }
 }

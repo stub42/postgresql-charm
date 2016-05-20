@@ -44,3 +44,6 @@
     "interface": "coordinator"
   "replication":
     "interface": "pgpeer"
+"series":
+- "xenial"
+- "trusty"

@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from distutils.version import LooseVersion
 import json
 import os
 import shutil
@@ -156,7 +157,7 @@ class AmuletFixture(amulet.Deployment):
             machines = [m for m in status.get('machines', {}).keys()
                         if m != '0']
             if machines:
-                subprocess.call(['juju', 'destroy-machine',
+                subprocess.call(['juju', 'remove-machine',
                                  '--force'] + machines,
                                 stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL)
@@ -239,3 +240,10 @@ class AmuletFixture(amulet.Deployment):
         # infinite recursion.
         shutil.copytree(src_charm_dir, self.charm_dir, symlinks=True,
                         ignore=shutil.ignore_patterns('.bzr', '.tox'))
+
+    def juju_version(self):
+        return subprocess.check_output(['juju', '--version'],
+                                       universal_newlines=True).strip()
+
+    def has_juju_version(self, minver):
+        return LooseVersion(self.juju_version()) >= LooseVersion(minver)
