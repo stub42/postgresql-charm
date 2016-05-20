@@ -640,7 +640,12 @@ class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
         shutil.copytree(cls.deployment.charm_dir, repo_path)
 
         # Upgrade.
-        subprocess.check_call(['juju', 'upgrade-charm', 'postgresql'],
+        if cls.deployment.has_juju_version('2.0'):
+            cmd = ['juju', 'upgrade-charm', '--switch',
+                   cls.deployment.charm_dir, 'postgresql']
+        else:
+            cmd = ['juju', 'upgrade-charm', 'postgresql']
+        subprocess.check_call(cmd,
                               stdout=subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL,
                               universal_newlines=True)
