@@ -466,7 +466,7 @@
     "metadata.yaml": [
       "postgresql", 
       "dynamic", 
-      "aa031717098f9a0ec7f88ba8fc49d9684660cc965b21738db8610e606da741db"
+      "0e5e9e9b5ccc8b767e29b12e6752a3823e74bea9a15728465c8aede412c7496f"
     ], 
     "lib/pgclient/hooks/db-admin-relation-changed": [
       "postgresql", 
