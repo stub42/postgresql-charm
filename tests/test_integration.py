@@ -552,8 +552,11 @@ class PG93Tests(PGBaseTestCase, unittest.TestCase):
 
 
 class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
-    storage_subordinate = True
-    nagios_subordinate = True
+    # Alas, the subordinates do not yet support Xenial so we cannot
+    # test with them.
+    storage_subordinate = True if SERIES == 'trusty' else False
+    nagios_subordinate = True if SERIES == 'trusty' else False
+
     test_config = dict(version=('' if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True))
 
@@ -606,7 +609,8 @@ class PG95MultiTests(PGMultiBaseTestCase, unittest.TestCase):
 class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
     num_units = 2  # Old charm only supported 2 unit initial deploy.
     test_config = dict(version=None)
-    storage_subordinate = True
+    # Storage subordinate does not yet work with Xenial.
+    storage_subordinate = True if SERIES == 'trusty' else False
     nagios_subordinate = False  # Nagios was broken with the old revision.
 
     @classmethod
