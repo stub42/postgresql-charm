@@ -152,3 +152,18 @@ integration_breakup: integration-deps
 test_integration.py%: integration-deps
 	${TIMING_NOSE} tests/$@ 2>&1 | ts
 	@echo OK: $@ tests pass `date`
+
+
+# Push tested git branches. Extract a clean copy of the tested built charm
+# and publish it.
+publish-stable:
+	git push --tags upstream master built
+	git push --tags github master built
+	git push --tags bzr built:master
+	rm -rf .push-built
+	git clone -b built . .push-built
+	charm publish -c stable \
+	    `charm push .push-built cs:~postgresql-charmers/postgresql 2>&1 | \
+	    grep url: | cut -f 2 -d ' '`
+	rm -rf .push-built
+	charm grant cs:~postgresql-charmers/postgresql everyone
