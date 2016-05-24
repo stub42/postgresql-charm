@@ -323,8 +323,10 @@ Juju mailing list or the #juju channel on Freenode IRC.
 
 ## Latest Stable
 
-The latest tested, stable and deployable charm is stored in the 'built'
-branch in the git+ssh://git.launchpad.net/postgresql-charm repository::
+The latest tested, stable release of this charm can be found at
+https://jujucharms.com/postgresql/ and deployed with juju using the
+URI `cs:postgresql`. It is also available as the 'built' git branch
+in the git+ssh://git.launchpad.net/postgresql-charm repository::
 
     mkdir trusty
     git clone -b built \
