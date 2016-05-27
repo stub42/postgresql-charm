@@ -5,3 +5,4 @@
 bzrsync2.sh
 lib/testdeps
 lib/pgclient/hooks/charmhelpers
+.push-built
