@@ -4,12 +4,6 @@ SERIES := $(shell juju get-environment default-series 2> /dev/null | juju get-mo
 HOST_SERIES := $(shell lsb_release -sc)
 JUJU := juju
 
-BUILD_ROOT=/home/stub/charms/built
-BUILD_DIR=${BUILD_ROOT}/${SERIES}/postgresql
-export LAYER_PATH=/home/stub/layers
-export INTERFACE_PATH=/home/stub/interfaces
-
-
 # /!\ Ensure that errors early in pipes cause failures, rather than
 # overridden by the last stage of the pipe. cf. 'test.py | ts'
 SHELL := /bin/bash
@@ -59,29 +53,91 @@ lint:
 	    --exclude=lib/testdeps,lib/pgclient/hooks/charmhelpers,lib/charms,__pycache__,.tox \
 	    hooks actions testing tests reactive lib
 
+
+CHARM_NAME := postgresql
+
+LAYER_BRANCH := master
+DEVEL_BRANCH := test-built
+STABLE_BRANCH := built
+
+JUJU_REPOSITORY := /home/stub/charms/built
+BUILD_DIR := ${JUJU_REPOSITORY}/${SERIES}/postgresql
+CHARM_STORE_URL := cs:~stub/postgresql
+
+export LAYER_PATH=${HOME}/charms/layers
+export INTERFACE_PATH=${HOME}/charms/interfaces
+
+# Create the test-build worktree if it doesn't already exist.
+$(BUILD_DIR):
+	-git branch $(DEVEL_BRANCH) $(LAYER_BRANCH)
+	git worktree add $@ $(DEVEL_BRANCH)
+
+# A quick test build, not to be committed or released. Builds
+# from the working tree including all untracked and uncommitted
+# updates.
+.PHONY: build
+build: | $(BUILD_DIR)
+	charm build -f -o $(JUJU_REPOSITORY) -n $(CHARM_NAME)
+
+# Generate a fresh development build and commit it to $(TEST_BRANCH).
+# Only builds work committed to $(LAYER_BRANCH).
+.PHONY: dev-build
+build-dev: | $(BUILD_DIR)
+	-cd $(BUILD_DIR) && git merge --abort
+	cd $(BUILD_DIR) \
+	    && git reset --hard $(TEST_BRANCH) \
+	    && git clean -ffd \
+	    && git merge --log --no-commit -s ours \
+		-m "charm-build of $(LAYER_BRANCH)" $(LAYER_BRANCH)
+	rm -rf .tmp-repo
+	git clone -b $(LAYER_BRANCH) . .tmp-repo
+	charm build -f -o $(JUJU_REPOSITORY) -n $(CHARM_NAME) .tmp-repo
+	rm -rf .tmp-repo
+	cd $(BUILD_DIR) \
+	    && git add . \
+	    && git commit
+
+# Generate and publish a fresh development build.
+publish-dev: build-dev
+	cd $(BUILD_DIR) && charm publish -c development \
+		`charm push . $(CHARM_STORE_URL) 2>&1 \
+		 | tee /dev/tty | grep url: | cut -f 2 -d ' '`
+	git push --tags upstream master built
+	git push --tags github master built
+	git push --tags bzr built:master
+
+# Publish the latest development build as the stable release in
+# both the charm store and in $(STABLE_BRANCH).
+.PHONY: publish-stable
+publish-stable:
+	-git branch $(STABLE_BRANCH) $(DEVEL_BRANCH)
+	rm -rf .tmp-repo
+	git clone --no-single-branch -b $(STABLE_BRANCH) . .tmp-repo
+	cd .tmp-repo \
+	    && git merge --no-ff origin/$(DEVEL_BRANCH) --log \
+		-m "charm-build of $(LAYER_BRANCH)" \
+	    && export rev=`charm push . $(CHARM_NAME) 2>&1 \
+		| tee /dev/tty | grep url: | cut -f 2 -d ' '` \
+	    && git tag -f -m "$$rev" `echo $$rev | tr -s '~:/' -` \
+	    && git push -f --tags .. $(STABLE_BRANCH) \
+	    && charm publish -c stable $$rev
+	rm -rf .tmp-repo
+	git push --tags upstream master built
+	git push --tags github master built
+	git push --tags bzr built:master
+
 # Clean crud from running tests etc.
-buildclean:
-	rm -rf ${BUILD_DIR}/lib/pgclient/hooks/charmhelpers
-	rm -rf ${BUILD_DIR}/.tox
-	rm -rf ${BUILD_DIR}/.cache
-	rm -rf ${BUILD_DIR}/.unit-state.db
-	rm -rf ${BUILD_DIR}/.coverage
+#buildclean:
+#	cd ${BUILD_DIR} && git reset --hard && git clean -ffd
 
-build: buildclean
-	@echo "Building charm"
-	charm build -o ${BUILD_ROOT} -s ${SERIES}
-
-fbuild: buildclean
-	@echo "Forcefully building charm"
-	charm build -o ${BUILD_ROOT} -s ${SERIES} --force
 
 # Build with a custom charms.reactive
-custombuild: fbuild
-	rm -f ${BUILD_DIR}/wheelhouse/charms.reactive*
-	rsync -rav --delete \
-	    --exclude='*.pyc' --exclude='__pycache__' --exclude='*~' \
-	    ${HOME}/charms/charms.reactive/charms/reactive/ \
-	    ${BUILD_DIR}/lib/charms/reactive/
+# custombuild: fbuild
+# 	rm -f ${BUILD_DIR}/wheelhouse/charms.reactive*
+# 	rsync -rav --delete \
+# 	    --exclude='*.pyc' --exclude='__pycache__' --exclude='*~' \
+# 	    ${HOME}/charms/charms.reactive/charms/reactive/ \
+# 	    ${BUILD_DIR}/lib/charms/reactive/
 
 _co=,
 _empty=
@@ -156,14 +212,14 @@ test_integration.py%: integration-deps
 
 # Push tested git branches. Extract a clean copy of the tested built charm
 # and publish it.
-publish-stable:
-	git push --tags upstream master built
-	git push --tags github master built
-	git push --tags bzr built:master
-	rm -rf .push-built
-	git clone -b built . .push-built
-	charm publish -c stable \
-	    `charm push .push-built cs:~postgresql-charmers/postgresql 2>&1 | \
-	    grep url: | cut -f 2 -d ' '`
-	rm -rf .push-built
-	charm grant cs:~postgresql-charmers/postgresql everyone
+# publish-stable:
+# 	git push --tags upstream master built
+# 	git push --tags github master built
+# 	git push --tags bzr built:master
+# 	rm -rf .push-built
+# 	git clone -b built . .push-built
+# 	charm publish -c stable \
+# 	    `charm push .push-built cs:~postgresql-charmers/postgresql 2>&1 | \
+# 	    grep url: | cut -f 2 -d ' '`
+# 	rm -rf .push-built
+# 	charm grant cs:~postgresql-charmers/postgresql everyone
