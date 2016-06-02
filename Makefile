@@ -104,12 +104,12 @@ build-dev: | $(BUILD_DIR)
 # Generate and publish a fresh development build.
 publish-dev: build-dev
 	cd $(BUILD_DIR) \
-	    && export rev=`charm push . $(CHARM_NAME) 2>&1 \
+	    && export rev=`charm push . $(CHARM_STORE_URL) 2>&1 \
 		| tee /dev/tty | grep url: | cut -f 2 -d ' '` \
 	    && git tag -f -m "$$rev" `echo $$rev | tr -s '~:/' -` \
 	    && charm publish -c development $$rev
-	git push --tags upstream $(LAYER_BRANCH) $(DEVEL_BRANCH)
-	git push --tags github $(LAYER_BRANCH) $(DEVEL_BRANCH)
+	git push -f --tags upstream $(LAYER_BRANCH) $(DEVEL_BRANCH)
+	git push -f --tags github $(LAYER_BRANCH) $(DEVEL_BRANCH)
 
 # Publish the latest development build as the stable release in
 # both the charm store and in $(STABLE_BRANCH).
@@ -121,7 +121,7 @@ publish-stable:
 	cd .tmp-repo \
 	    && git merge --no-ff origin/$(DEVEL_BRANCH) --log \
 		-m "charm-build of $(LAYER_BRANCH)" \
-	    && export rev=`charm push . $(CHARM_NAME) 2>&1 \
+	    && export rev=`charm push . $(CHARM_STORE_URL) 2>&1 \
 		| tee /dev/tty | grep url: | cut -f 2 -d ' '` \
 	    && git tag -f -m "$$rev" `echo $$rev | tr -s '~:/' -` \
 	    && git push -f --tags .. $(STABLE_BRANCH) \
