@@ -88,7 +88,7 @@ def emit_deprecated_option_warnings():
     deprecated = sorted(helpers.deprecated_config_in_use())
     if deprecated:
         hookenv.log('Deprecated configuration settings in use: {}'
-                    ', '.join(deprecated), WARNING)
+                    ''.format(', '.join(deprecated)), WARNING)
 
 
 # emit_deprecated_option_warnings is called at the end of the hook
