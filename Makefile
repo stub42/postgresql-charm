@@ -62,7 +62,7 @@ STABLE_BRANCH := built
 
 JUJU_REPOSITORY := /home/stub/charms/built
 BUILD_DIR := ${JUJU_REPOSITORY}/${SERIES}/postgresql
-CHARM_STORE_URL := cs:~stub/postgresql
+CHARM_STORE_URL := cs:~postgresql-charmers/postgresql
 
 export LAYER_PATH=${HOME}/charms/layers
 export INTERFACE_PATH=${HOME}/charms/interfaces
@@ -93,18 +93,23 @@ build-dev: | $(BUILD_DIR)
 	git clone -b $(LAYER_BRANCH) . .tmp-repo
 	charm build -f -o $(JUJU_REPOSITORY) -n $(CHARM_NAME) .tmp-repo
 	rm -rf .tmp-repo
-	cd $(BUILD_DIR) \
-	    && git add . \
-	    && git commit
+	cd $(BUILD_DIR) && \
+	    if [ -n "`git status --porcelain`" ]; then \
+	        git add . ; \
+		git commit; \
+	    else \
+		echo "No changes"; \
+	    fi
 
 # Generate and publish a fresh development build.
 publish-dev: build-dev
-	cd $(BUILD_DIR) && charm publish -c development \
-		`charm push . $(CHARM_STORE_URL) 2>&1 \
-		 | tee /dev/tty | grep url: | cut -f 2 -d ' '`
-	git push --tags upstream master built
-	git push --tags github master built
-	git push --tags bzr built:master
+	cd $(BUILD_DIR) \
+	    && export rev=`charm push . $(CHARM_NAME) 2>&1 \
+		| tee /dev/tty | grep url: | cut -f 2 -d ' '` \
+	    && git tag -f -m "$$rev" `echo $$rev | tr -s '~:/' -` \
+	    && charm publish -c development $$rev
+	git push --tags upstream $(LAYER_BRANCH) $(DEVEL_BRANCH)
+	git push --tags github $(LAYER_BRANCH) $(DEVEL_BRANCH)
 
 # Publish the latest development build as the stable release in
 # both the charm store and in $(STABLE_BRANCH).
