@@ -596,8 +596,10 @@ class PG94MultiTests(PGMultiBaseTestCase, unittest.TestCase):
 
 
 class PG95Tests(PGBaseTestCase, unittest.TestCase):
+    # checkpoint_segments to test Bug #1588072
     test_config = dict(version=('' if SERIES == 'xenial' else '9.5'),
-                       pgdg=(False if SERIES == 'xenial' else True))
+                       pgdg=(False if SERIES == 'xenial' else True),
+                       checkpoint_segments=10)
 
 
 class PG95MultiTests(PGMultiBaseTestCase, unittest.TestCase):
