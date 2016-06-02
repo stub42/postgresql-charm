@@ -166,7 +166,7 @@
     ".git": [
       "postgresql", 
       "static", 
-      "99ad14a5d5114867fc4071cca9e11010cb5d1c07af6057f2ac2814676e8e4649"
+      "8e30f79386a87b1944ce465d1352427aecad6a78282cd2ed697afef270057704"
     ], 
     "icon.svg": [
       "postgresql", 
@@ -351,7 +351,7 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "000eff3c2c83e6c50cf5d54944610b3c4e781c59bc532c45d552bce912adf7d4"
+      "18743e7a2d8710f9d17556e2e5757b7e4aaf4a59d7f68dd7857bca0cd856cb0f"
     ], 
     "scripts/pgkillidle.py": [
       "postgresql", 
@@ -396,7 +396,7 @@
     "Makefile": [
       "postgresql", 
       "static", 
-      "3eb14f888c60edf5a8d9fea2184c7a80ff4fd160a871664984c6bf975652634d"
+      "4d875f4bf154427385a9b75f0c30c1a41000e816ed061e2f19d83df2f6a5dc7a"
     ], 
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
@@ -436,7 +436,7 @@
     "tests/test_integration.py": [
       "postgresql", 
       "static", 
-      "f2a52573aa73ab8ea5a91717ddeb74f394c5d746094ac01d8098ff3ce66dfeb5"
+      "7d35684f66b191ef0d1dcb440a4616ce69198bc93d9bc1ef33f919ef9d14cd02"
     ], 
     "reactive/leadership.py": [
       "layer:leadership", 
