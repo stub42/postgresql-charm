@@ -543,8 +543,13 @@ def postgresql_conf_deprecated_overrides():
 
     in_use = helpers.deprecated_config_in_use()
 
+    # Some deprecated options no longer exist in more recent PostgreSQL rels.
+    valid_options = set(postgresql.pg_settings_schema().keys())
+
     # The simple deprecated options map directly to postgresql.conf settings.
-    settings = {k: config[k] for k in in_use if k in simple_options}
+    # Strip the deprecated options that no longer exist at all here.
+    settings = {k: config[k] for k in in_use
+                if k in simple_options and k in valid_options}
 
     # The listen_port and collapse_limit options were special.
     config_yaml_options = helpers.config_yaml()['options']
