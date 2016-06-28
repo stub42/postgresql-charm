@@ -1,7 +1,6 @@
 import os
 import sys
 import shutil
-import platform
 from glob import glob
 from subprocess import check_call
 
@@ -51,11 +50,7 @@ def bootstrap_charm_deps():
         # if we're using a venv, set it up
         if cfg.get('use_venv'):
             if not os.path.exists(venv):
-                distname, version, series = platform.linux_distribution()
-                if series in ('precise', 'trusty'):
-                    apt_install(['python-virtualenv'])
-                else:
-                    apt_install(['virtualenv'])
+                apt_install(['python-virtualenv'])
                 cmd = ['virtualenv', '-ppython3', '--never-download', venv]
                 if cfg.get('include_system_packages'):
                     cmd.append('--system-site-packages')

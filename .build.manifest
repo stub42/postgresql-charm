@@ -73,10 +73,10 @@
       "static", 
       "44c7c8e9f5bcca5a7004578d171ee16b42898d9f8d9d6bf4126c6e2c21cdaa56"
     ], 
-    "hooks/data-relation-departed": [
-      "postgresql", 
-      "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    "wheelhouse/charms.reactive-0.4.4.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "97455ce944a85adb2ceb897af81a1b93746f43527e6c4ac44798b193132158c7"
     ], 
     "lib/pgclient/hooks/hooks.py": [
       "postgresql", 
@@ -93,10 +93,10 @@
       "static", 
       "4032724b98ed267185b12b8ec78dd9bcb0423ab1c89a6f0dad99397fd51159d9"
     ], 
-    "templates/recovery.conf.tmpl": [
+    "hooks/data-relation-departed": [
       "postgresql", 
       "static", 
-      "a441d24c1baf969e2db38b94aa7525c5934f8bf3f9687202070d7c41b2df85b2"
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
     ], 
     "testing/__init__.py": [
       "postgresql", 
@@ -181,7 +181,7 @@
     "config.yaml": [
       "postgresql", 
       "dynamic", 
-      "bbd4dd749ed7e702eca83d40bc96be959da854c54098c0548dbab358500b6af6"
+      "a6e5e57d2f1faa71fd7a1fcfa85b0ccffe5d4d77e0345b13aca47ed0c3dca867"
     ], 
     "hooks/relations/block-storage/__init__.py": [
       "postgresql", 
@@ -208,10 +208,10 @@
       "static", 
       "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
-    "hooks/relations/local-monitors/provides.py": [
-      "postgresql", 
+    "actions/action.template": [
+      "layer:basic", 
       "static", 
-      "dd81937ffec7f2e0d3eb72beb21421183303856466bd45e0334c502c8e9c7d34"
+      "703461aaffa3d32cad0c0fb5d3f980fb6d3dc19702ea399bcc7b305a32fd0ddd"
     ], 
     "hooks/data-relation-changed": [
       "postgresql", 
@@ -248,11 +248,6 @@
       "static", 
       "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
     ], 
-    "wheelhouse/pip-8.1.2.tar.gz": [
-      "layer:basic", 
-      "dynamic", 
-      "4d24b03ffa67638a3fa931c09fd9e0273ffa904e95ebebe7d4b1a54c93d7b732"
-    ], 
     "reactive/postgresql/helpers.py": [
       "postgresql", 
       "static", 
@@ -262,11 +257,6 @@
       "postgresql", 
       "static", 
       "c143a138c463fb9cf2540c1039d0db4aa722debe4a870365a22f615c2b3e4482"
-    ], 
-    "wheelhouse/charms.reactive-0.4.3.tar.gz": [
-      "layer:basic", 
-      "dynamic", 
-      "61de97ba63aa0917dc756c95fdd6bfc8725e43e15750ac53ba7a409a819a76b6"
     ], 
     "hooks/update-status": [
       "layer:basic", 
@@ -303,6 +293,11 @@
       "static", 
       "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
     ], 
+    "hooks/relations/local-monitors/provides.py": [
+      "postgresql", 
+      "static", 
+      "dd81937ffec7f2e0d3eb72beb21421183303856466bd45e0334c502c8e9c7d34"
+    ], 
     "hooks/nrpe-external-master-relation-departed": [
       "postgresql", 
       "static", 
@@ -318,10 +313,10 @@
       "static", 
       "8e6411fb6c8e3851fa529b624640a1d98fdc2241e881a843923418559287e258"
     ], 
-    "lib/charms/layer/__init__.py": [
-      "layer:basic", 
+    "hooks/db-relation-changed": [
+      "postgresql", 
       "static", 
-      "4ffd74384bd81d737572acf2d14fe55431eab8f49d6212d9aabedf24e1d992b2"
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
     ], 
     "lib/pg_settings_9.1.json": [
       "postgresql", 
@@ -351,7 +346,7 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "18743e7a2d8710f9d17556e2e5757b7e4aaf4a59d7f68dd7857bca0cd856cb0f"
+      "27be1d772881583fae59aeda1d305798be45bb6281627a30fc108e6f3d71d8ff"
     ], 
     "scripts/pgkillidle.py": [
       "postgresql", 
@@ -383,10 +378,10 @@
       "static", 
       "c0eb4c90e93a14f04d851f78bc6592e093226321fbe328125958633397aed014"
     ], 
-    "hooks/db-relation-changed": [
-      "postgresql", 
-      "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    "wheelhouse/pip-7.1.2.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "ca047986f0528cfa975a14fb9f7f106271d4e0c3fe1ddced6c1db2e7ae57a477"
     ], 
     "tests/test_postgresql.py": [
       "postgresql", 
@@ -396,7 +391,7 @@
     "Makefile": [
       "postgresql", 
       "static", 
-      "4d875f4bf154427385a9b75f0c30c1a41000e816ed061e2f19d83df2f6a5dc7a"
+      "a1e8845c0d79b2efa5ae146e04e06861aec16108cc8f4d8855acc583c5886079"
     ], 
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
@@ -503,6 +498,11 @@
       "static", 
       "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
     ], 
+    "templates/recovery.conf.tmpl": [
+      "postgresql", 
+      "static", 
+      "a441d24c1baf969e2db38b94aa7525c5934f8bf3f9687202070d7c41b2df85b2"
+    ], 
     "templates/pg_backup_job.tmpl": [
       "postgresql", 
       "static", 
@@ -528,6 +528,11 @@
       "static", 
       "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
+    "lib/charms/layer/__init__.py": [
+      "layer:basic", 
+      "static", 
+      "4ffd74384bd81d737572acf2d14fe55431eab8f49d6212d9aabedf24e1d992b2"
+    ], 
     "lib/cache_settings.py": [
       "postgresql", 
       "static", 
@@ -546,7 +551,7 @@
     "lib/charms/layer/basic.py": [
       "layer:basic", 
       "static", 
-      "d52423911fcef803a418025d355ac7c2e6729c2949c68aaf01bb3f8f24b67831"
+      "41821be5a68e9380a3fb6b4efdb433d05ff958da68db766ca7156c0df80482d6"
     ], 
     "tests/tests.yaml": [
       "postgresql", 
@@ -666,7 +671,7 @@
     "lib/charms/apt.py": [
       "layer:apt", 
       "static", 
-      "a0ac50a69f3af46b5b89d0e0e39e46313417eee08e24de1f0987b81ec813b3de"
+      "1f95351be322b40cf6c01fcac128b3fe338516e96cf4314071a89d84a11387c7"
     ]
   }
 }

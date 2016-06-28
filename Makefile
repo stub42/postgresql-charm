@@ -127,9 +127,9 @@ publish-stable:
 	    && git push -f --tags .. $(STABLE_BRANCH) \
 	    && charm publish -c stable $$rev
 	rm -rf .tmp-repo
-	git push --tags upstream master built
-	git push --tags github master built
-	git push --tags bzr built:master
+	git push -f --tags upstream master built
+	git push -f --tags github master built
+	git push -f --tags bzr built:master
 
 # Clean crud from running tests etc.
 #buildclean:

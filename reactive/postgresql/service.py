@@ -590,10 +590,20 @@ def ensure_viable_postgresql_conf(opts):
     if min_wal_senders > int(opts.get('max_wal_senders', 0)):
         force(max_wal_senders=min_wal_senders)
 
+    # We used to calculate a minimum max_connections here, ensuring
+    # that we had at least one per client and enough for replication
+    # and backups. It wasn't much use though, as the major variable
+    # is not the number of clients but how many connections the
+    # clients open (connection pools of 20 or more are not uncommon).
+    # lp:1594667 required the calculation to be synchronized, or just
+    # removed. So removed to avoid complexity for dubious gains.
+    #
     # max_connections. One per client unit, plus replication.
-    max_wal_senders = int(opts.get('max_wal_senders', 0))
-    assert max_wal_senders > 0
-    min_max_connections = max_wal_senders + max(1, num_clients)
+    # max_wal_senders = int(opts.get('max_wal_senders', 0))
+    # assert max_wal_senders > 0
+    # min_max_connections = max_wal_senders + max(1, num_clients)
+    #
+    min_max_connections = 100
     if min_max_connections > int(opts.get('max_connections', 0)):
         force(max_connections=min_max_connections)
 
