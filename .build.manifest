@@ -543,6 +543,11 @@
       "static", 
       "d52423911fcef803a418025d355ac7c2e6729c2949c68aaf01bb3f8f24b67831"
     ], 
+    "hooks/relations/pgsql/provides.py": [
+      "postgresql", 
+      "static", 
+      "28ebc543b89a028b418467b8c3b4b610e3a00bb4021f4c62d0e46228b66dcf85"
+    ], 
     "tests/tests.yaml": [
       "postgresql", 
       "static", 
