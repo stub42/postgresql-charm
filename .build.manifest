@@ -73,10 +73,10 @@
       "static", 
       "44c7c8e9f5bcca5a7004578d171ee16b42898d9f8d9d6bf4126c6e2c21cdaa56"
     ], 
-    "hooks/data-relation-departed": [
-      "postgresql", 
-      "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+    "wheelhouse/charms.reactive-0.4.4.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "97455ce944a85adb2ceb897af81a1b93746f43527e6c4ac44798b193132158c7"
     ], 
     "lib/pgclient/hooks/hooks.py": [
       "postgresql", 
@@ -93,10 +93,10 @@
       "static", 
       "4032724b98ed267185b12b8ec78dd9bcb0423ab1c89a6f0dad99397fd51159d9"
     ], 
-    "templates/recovery.conf.tmpl": [
+    "hooks/data-relation-departed": [
       "postgresql", 
       "static", 
-      "a441d24c1baf969e2db38b94aa7525c5934f8bf3f9687202070d7c41b2df85b2"
+      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
     ], 
     "testing/__init__.py": [
       "postgresql", 
@@ -181,7 +181,7 @@
     "config.yaml": [
       "postgresql", 
       "dynamic", 
-      "bbd4dd749ed7e702eca83d40bc96be959da854c54098c0548dbab358500b6af6"
+      "5d57ca48b37bd2d2faf3e6d8f41f108de5b5454d8f3fcf84213f1684a29e878e"
     ], 
     "hooks/relations/block-storage/__init__.py": [
       "postgresql", 
@@ -262,11 +262,6 @@
       "postgresql", 
       "static", 
       "c143a138c463fb9cf2540c1039d0db4aa722debe4a870365a22f615c2b3e4482"
-    ], 
-    "wheelhouse/charms.reactive-0.4.3.tar.gz": [
-      "layer:basic", 
-      "dynamic", 
-      "61de97ba63aa0917dc756c95fdd6bfc8725e43e15750ac53ba7a409a819a76b6"
     ], 
     "hooks/update-status": [
       "layer:basic", 
@@ -351,17 +346,12 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "18743e7a2d8710f9d17556e2e5757b7e4aaf4a59d7f68dd7857bca0cd856cb0f"
+      "27be1d772881583fae59aeda1d305798be45bb6281627a30fc108e6f3d71d8ff"
     ], 
     "scripts/pgkillidle.py": [
       "postgresql", 
       "static", 
       "eab206ea6846a5f59bb079a336ff2f4ccf3b9467d99626798df6062498d74d65"
-    ], 
-    "wheelhouse/charmhelpers-0.7.0.tar.gz": [
-      "layer:basic", 
-      "dynamic", 
-      "3327d1e3e4bcc5d22aa8cf6748cc1d7e400f8e3781755ac138229dad1390d834"
     ], 
     "actions/replication-resume": [
       "postgresql", 
@@ -396,7 +386,7 @@
     "Makefile": [
       "postgresql", 
       "static", 
-      "4d875f4bf154427385a9b75f0c30c1a41000e816ed061e2f19d83df2f6a5dc7a"
+      "a1e8845c0d79b2efa5ae146e04e06861aec16108cc8f4d8855acc583c5886079"
     ], 
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
@@ -502,6 +492,11 @@
       "postgresql", 
       "static", 
       "136c91eddbcd621104b0c73e596e17adaa2b56164dad3a542226c658712704f6"
+    ], 
+    "templates/recovery.conf.tmpl": [
+      "postgresql", 
+      "static", 
+      "a441d24c1baf969e2db38b94aa7525c5934f8bf3f9687202070d7c41b2df85b2"
     ], 
     "templates/pg_backup_job.tmpl": [
       "postgresql", 
@@ -653,6 +648,11 @@
       "static", 
       "9cd78d4bfba601cad3c1f5b2f7a1efb64b01dbad9f07cfee922d819c673dd2f5"
     ], 
+    "wheelhouse/charmhelpers-0.8.0.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "355c2632049621474c50cfee6a6f7014a863f6f3bac1134ed409479cbe99b102"
+    ], 
     "hooks/relations/local-monitors/__init__.py": [
       "postgresql", 
       "static", 
@@ -666,7 +666,7 @@
     "lib/charms/apt.py": [
       "layer:apt", 
       "static", 
-      "a0ac50a69f3af46b5b89d0e0e39e46313417eee08e24de1f0987b81ec813b3de"
+      "1f95351be322b40cf6c01fcac128b3fe338516e96cf4314071a89d84a11387c7"
     ]
   }
 }

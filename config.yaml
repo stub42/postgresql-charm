@@ -65,7 +65,7 @@
       # Additional service specific postgresql.conf settings.
       listen_addresses='*'
       ssl=true
-      log_timezone=UTC
+      # log_timezone=UTC  Bug #1580331
       log_checkpoints=true
       log_connections=true
       log_disconnections=true
@@ -74,7 +74,7 @@
       archive_mode=on
       archive_command='/bin/true'
       hot_standby=true
-      max_wal_senders=80
+      max_wal_senders=10
       # max_wal_senders=num_units * 2 + 5
       # wal_level=hot_standby (<9.4) or logical (>=9.4)
       # shared_buffers=total_ram*0.25
