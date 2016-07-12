@@ -60,8 +60,8 @@ LAYER_BRANCH := master
 DEVEL_BRANCH := test-built
 STABLE_BRANCH := built
 
-JUJU_REPOSITORY := /home/stub/charms/built
-BUILD_DIR := ${JUJU_REPOSITORY}/${SERIES}/postgresql
+BUILD_ROOT := $(HOME)/charms
+BUILD_DIR := $(BUILD_ROOT)/builds/$(CHARM_NAME)
 CHARM_STORE_URL := cs:~postgresql-charmers/postgresql
 
 export LAYER_PATH=${HOME}/charms/layers
@@ -77,7 +77,7 @@ $(BUILD_DIR):
 # updates.
 .PHONY: build
 build: | $(BUILD_DIR)
-	charm build -f -o $(JUJU_REPOSITORY) -n $(CHARM_NAME)
+	charm build -f -o $(BUILD_ROOT) -n $(CHARM_NAME)
 
 # Generate a fresh development build and commit it to $(TEST_BRANCH).
 # Only builds work committed to $(LAYER_BRANCH).
