@@ -16,6 +16,7 @@
 
 from contextlib import contextmanager
 import os
+import re
 import shutil
 import stat
 import tempfile
@@ -24,6 +25,7 @@ import yaml
 
 from charmhelpers import context
 from charmhelpers.core import hookenv, host
+from charmhelpers.core.hookenv import WARNING
 
 
 def distro_codename():
@@ -118,3 +120,24 @@ def backups_dir():
 
 def backups_log_path():
     return os.path.join(logs_dir(), 'backups.log')
+
+
+def split_extra_pg_auth(raw_extra_pg_auth):
+    '''Yield the extra_pg_auth stanza line by line.
+
+    Uses the input as a multi-line string if valid, or falls
+    back to comma separated for backwards compatibility.
+    '''
+    # Lines in a pg_hba.conf file must be comments, whitespace, or begin
+    # with 'local' or 'host'.
+    valid_re = re.compile(r'^\s*(host.*|local.*|#.*)?\s*$')
+
+    def valid_line(l):
+        return valid_re.search(l) is not None
+
+    lines = list(raw_extra_pg_auth.split(','))
+    if all(valid_line(l) for l in lines):
+        hookenv.log('Falling back to comma separated extra_pg_auth', WARNING)
+        return lines
+    else:
+        return raw_extra_pg_auth.splitlines()

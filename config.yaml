@@ -96,12 +96,11 @@
   "extra_pg_auth":
     "type": "string"
     "default": ""
-    "description": "A comma separated extra pg_hba.conf auth rules. This will be written\
-      \ to the pg_hba.conf file, one line per rule. Note that this should not be needed\
-      \ as db relations already create those rules the right way. Only use this if\
-      \ you really need too (e.g. on a development environment), or are connecting\
-      \ juju managed databases to external managed systems, or configuring replication\
-      \ between unrelated PostgreSQL services using the manual_replication option.\n"
+    "description": "A extra pg_hba.conf auth rules. This will be included as-is into\
+      \ the pg_hba.conf file. Note that this should not be needed as db relations\
+      \ already create those rules the right way. Use this feature to allow clients\
+      \ to connect from outside the environment, or to configure replication between\
+      \ unrelated PostgreSQL services using the manual_replication option.\n"
   "idle_reap_secs":
     "type": "int"
     "default": !!int "900"
