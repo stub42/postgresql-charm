@@ -17,6 +17,7 @@ from collections import defaultdict
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 sys.path.insert(1, ROOT)
@@ -51,16 +52,17 @@ class RelationData(dict):
         self.local = defaultdict(str)
 
 
+@patch('charmhelpers.core.hookenv.log')
 class TestPgHbaConf(unittest.TestCase):
 
-    def test_no_relations_or_config(self):
+    def test_no_relations_or_config(self, log):
         content = generate_pg_hba_conf('', defaultdict(str), Relations())
         self.assertIn('local all postgres peer map=juju_charm', content)
         self.assertIn('local all all peer', content)
         self.assertIn('local all all reject', content)
         self.assertIn('host all all all reject', content)
 
-    def test_peer_relation(self):
+    def test_peer_relation(self, log):
         rels = Relations()
         rels.peer = {
             'unit/1': {'private-address': '1.2.3.4'},
@@ -69,7 +71,7 @@ class TestPgHbaConf(unittest.TestCase):
         self.assertIn('host replication _juju_repl "1.2.3.4/32" md5', content)
         self.assertIn('host postgres _juju_repl "1.2.3.4/32" md5', content)
 
-    def test_db_relation(self):
+    def test_db_relation(self, log):
         rels = Relations()
         rels['db'].add_unit('unit/1', local={
             'user': 'user',
@@ -81,13 +83,13 @@ class TestPgHbaConf(unittest.TestCase):
         self.assertIn(
             'host "database" "schema_user" "1.2.3.4/32" md5', content)
 
-    def test_db_admin_relation(self):
+    def test_db_admin_relation(self, log):
         rels = Relations()
         rels['db-admin'].add_unit('unit/1', local=({'user': 'user'}))
         content = generate_pg_hba_conf('', defaultdict(str), rels)
         self.assertIn('host all all "1.2.3.4/32" md5', content)
 
-    def test_master_relation(self):
+    def test_master_relation(self, log):
         rels = Relations()
         rels['master'].add_unit('unit/1', local=({
             'user': 'user',
@@ -97,7 +99,7 @@ class TestPgHbaConf(unittest.TestCase):
         self.assertIn('host replication "user" "1.2.3.4/32" md5', content)
         self.assertIn('host "database" "user" "1.2.3.4/32" md5', content)
 
-    def test_admin_addresses_config(self):
+    def test_admin_addresses_config(self, log):
         rels = Relations()
         config = defaultdict(str)
         config['admin_addresses'] = '192.168.1.0/24,10.0.0.0/8,1.2.3.4'
@@ -106,10 +108,30 @@ class TestPgHbaConf(unittest.TestCase):
         self.assertIn('host all all "10.0.0.0/8" md5', content)
         self.assertIn('host all all "1.2.3.4/32" md5', content)
 
-    def test_extra_pg_auth(self):
+    def test_extra_pg_auth(self, log):
+        rels = Relations()
+        config = defaultdict(str)
+        config['extra_pg_auth'] = 'local all sso md5\nlocal all ssoadmin md5'
+        content = generate_pg_hba_conf('', config, rels)
+        self.assertIn('\nlocal all sso md5', content)
+        self.assertIn('\nlocal all ssoadmin md5', content)
+        self.assertFalse(log.called)
+
+    def test_extra_pg_auth_fallback(self, log):
         rels = Relations()
         config = defaultdict(str)
         config['extra_pg_auth'] = 'local all sso md5,local all ssoadmin md5'
         content = generate_pg_hba_conf('', config, rels)
         self.assertIn('\nlocal all sso md5', content)
+        msg = 'Falling back to comma separated extra_pg_auth'
+        log.assert_any_call(msg, 'WARNING')
+
+    def test_extra_pg_auth_ml_fallback(self, log):
+        rels = Relations()
+        config = defaultdict(str)
+        config['extra_pg_auth'] = 'local all sso md5,\nlocal all ssoadmin md5'
+        content = generate_pg_hba_conf('', config, rels)
+        self.assertIn('\nlocal all sso md5', content)
         self.assertIn('\nlocal all ssoadmin md5', content)
+        msg = 'Falling back to comma separated extra_pg_auth'
+        log.assert_any_call(msg, 'WARNING')
