@@ -362,7 +362,7 @@ def generate_pg_hba_conf(pg_hba, config, rels):
                 'md5', '# admin_addresses config')
 
     # And anything-goes rules, if specified by the operator.
-    for line in config['extra_pg_auth'].split(','):
+    for line in helpers.split_extra_pg_auth(config['extra_pg_auth']):
         add(line + ' # extra_pg_auth config')
 
     # Deny everything else

@@ -181,7 +181,7 @@
     "config.yaml": [
       "postgresql", 
       "dynamic", 
-      "5d57ca48b37bd2d2faf3e6d8f41f108de5b5454d8f3fcf84213f1684a29e878e"
+      "2e002fb09c57a3822464198ef712450613f064256d2e81fb80a057fd57cb767c"
     ], 
     "hooks/relations/block-storage/__init__.py": [
       "postgresql", 
@@ -256,7 +256,7 @@
     "reactive/postgresql/helpers.py": [
       "postgresql", 
       "static", 
-      "f9698479eddd59ce1f1033a6bcba35126cc0fb84312401c2fcefef7226bd01ee"
+      "ed643b60be24d40386a9f2eaefb19a9bcba34db634e987f15daa321b9d8023cc"
     ], 
     "reactive/postgresql/nagios.py": [
       "postgresql", 
@@ -346,7 +346,7 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "27be1d772881583fae59aeda1d305798be45bb6281627a30fc108e6f3d71d8ff"
+      "c9e7b03e00997c9875bacfc06b7bff20008c17e113a50d99ca7c5ead70aa0713"
     ], 
     "scripts/pgkillidle.py": [
       "postgresql", 
@@ -386,7 +386,7 @@
     "Makefile": [
       "postgresql", 
       "static", 
-      "a1e8845c0d79b2efa5ae146e04e06861aec16108cc8f4d8855acc583c5886079"
+      "ce0ad1f56b50c66d9b05d25e51563eb5f60fcd846955ddfe68b8ab812b4506ff"
     ], 
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
@@ -666,7 +666,7 @@
     "tests/test_pg_hba_conf.py": [
       "postgresql", 
       "static", 
-      "c1636786ad8d3a8a721faa5633afebb105abe58f9bbfd83e20632abac6bdfa4f"
+      "4b329cbbdd90c27e99ba2521a2403453836a98eca3a2acda20c021ddba69ae27"
     ], 
     "lib/charms/apt.py": [
       "layer:apt", 
