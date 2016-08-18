@@ -50,21 +50,18 @@ provides:
 peers:
   replication:
     interface: pgpeer
-
-# It would be nice to use native Juju storage with Juju 1.24
-# (experimental), but it does not allow us to upgrade existing
-# deployments. Wait for Juju to support charm upgrades which add
-# non-optional storage.
-#
-# storage:
-#   data:
-#     type: filesystem
-#     description: >
-#         Database data files. Stores all of your data and indexes. Mainly
-#         random access reads and writes.
-#     shared: false
-#     read-only: false
-#     location: /srv/data
+storage:
+  pgdata:
+    type: filesystem
+    description: >
+      Database data files (ie. $PGDATA). Stores all of your data and
+      indexes. Mainly random access reads and writes.
+    # We need a small minimum-size for testing.
+    minimum-size: 5M
+    location: /srv/pgdata
+    # Bug #1504658 means only optional storage.
+    multiple:
+      range: 0-1
 #   wal:
 #     type: filesystem
 #     description: >

@@ -17,7 +17,7 @@
 from charms import reactive
 
 
-class ReplicationPeer(reactive.relations.RelationBase):
+class PgPeerPeer(reactive.relations.RelationBase):
     '''Dead chicken, sacrificed for charms.reactive.
 
     https://github.com/juju-solutions/charms.reactive/issues/48
