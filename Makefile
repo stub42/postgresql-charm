@@ -48,7 +48,7 @@ lint:
 	@echo "Charm Proof"
 	@charm proof
 	@echo "Lint check (flake8)"
-	@flake8 -v \
+	@flake8 \
             --ignore=E402 \
 	    --exclude=lib/testdeps,lib/pgclient/hooks/charmhelpers,lib/charms,__pycache__,.tox \
 	    hooks actions testing tests reactive lib

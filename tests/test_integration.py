@@ -28,6 +28,7 @@ import time
 import unittest
 import uuid
 
+import amulet
 import psycopg2
 import yaml
 
@@ -116,7 +117,7 @@ class PGBaseTestCase(object):
 
         # Add the nagios subordinate to exercise the nrpe hooks.
         if cls.nagios_subordinate:
-            deployment.add('nrpe', 'cs:trusty/nrpe')
+            deployment.add('nrpe', 'cs:nrpe')
             deployment.relate('postgresql:nrpe-external-master',
                               'nrpe:nrpe-external-master')
 
@@ -145,10 +146,24 @@ class PGBaseTestCase(object):
 
         try:
             cls.deployment.deploy(keep=cls.keep)
+            if not cls.storage_subordinate:
+                cls.add_juju_storage()
         except Exception:
             with suppress(Exception):
                 cls.deployment.tearDown()
             raise
+
+    @classmethod
+    def add_juju_storage(cls):
+        if cls.deployment.has_juju_version('2.0'):
+            cmd = ['add-storage']
+        else:
+            cmd = ['storage', 'add']
+
+        for sentry in cls.deployment.sentry['postgresql']:
+            unit = sentry.info['unit_name']
+            amulet.helpers.juju(cmd + [unit, 'pgdata=5M'])
+        cls.deployment.wait()
 
     @classmethod
     def tearDownClass(cls):
@@ -542,6 +557,8 @@ class PG93Tests(PGBaseTestCase, unittest.TestCase):
     test_config = dict(version=('' if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True),
                        max_connections=150)
+    storage_subordinate = True if SERIES == 'trusty' else False
+    nagios_subordinate = True if SERIES == 'trusty' else False
 
     def test_deprecated_overrides(self):
         con = self.connect()
@@ -600,6 +617,7 @@ class PG95Tests(PGBaseTestCase, unittest.TestCase):
     test_config = dict(version=('' if SERIES == 'xenial' else '9.5'),
                        pgdg=(False if SERIES == 'xenial' else True),
                        checkpoint_segments=10)
+    nagios_subordinate = True if SERIES == 'xenial' else False
 
 
 class PG95MultiTests(PGMultiBaseTestCase, unittest.TestCase):
