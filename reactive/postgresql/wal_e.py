@@ -20,10 +20,8 @@ from urllib.parse import urlparse
 
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import ERROR
-from charms import reactive
+from charms import apt, reactive
 from charms.reactive import hook, when, when_not
-
-from reactive import apt
 
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
