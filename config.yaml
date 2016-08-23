@@ -147,6 +147,12 @@ options:
     description: >
         A comma-separated list of nagios servicegroups.
         If left empty, the nagios_context will be used as the servicegroup
+  install_sources:
+    default: |
+      - ppa:stub/pgcharm
+  install_keys:
+    default: |
+      - null
   pgdg:
     description: >
         Enable the PostgreSQL Global Development Group APT repository

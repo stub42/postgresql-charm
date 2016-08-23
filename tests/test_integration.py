@@ -497,8 +497,9 @@ class PGMultiBaseTestCase(PGBaseTestCase):
                        'OS_USERNAME', 'OS_PASSWORD'])
         for os_key in os_keys:
             config[os_key.lower()] = os.environ[os_key]
-        config['install_sources'] = '["ppa:stub/pgcharm"]'
-        config['install_keys'] = '[null]'
+        # Required PPA listed by default in config.yaml.
+        # config['install_sources'] = '["ppa:stub/pgcharm"]'
+        # config['install_keys'] = '[null]'
 
         # The swift command line tool uses the same environment variables
         # as this test suite.
