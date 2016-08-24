@@ -147,6 +147,12 @@ options:
     description: >
         A comma-separated list of nagios servicegroups.
         If left empty, the nagios_context will be used as the servicegroup
+  install_sources:
+    default: |
+      - ppa:postgresql-charmers/charm
+  install_keys:
+    default: |
+      - null
   pgdg:
     description: >
         Enable the PostgreSQL Global Development Group APT repository
@@ -253,11 +259,7 @@ options:
   advisory_lock_restart_key:
     default: 765
     type: int
-    description: >
-        DEPRECATED AND IGNORED.
-        An advisory lock key used internally by the charm. You do not need
-        to change it unless it happens to conflict with an advisory lock key
-        being used by your applications.
+    description: DEPRECATED and ignored.
   extra-packages:
     default: ""
     type: string
@@ -265,43 +267,27 @@ options:
   listen_port:
     default: -1
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Port to listen on. Default is automatically assigned.
+    description: DEPRECATED. Use extra_pg_conf.
   max_connections:
     default: 100
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Maximum number of connections to allow to the PG database
+    description: DEPRECATED. Use extra_pg_conf.
   max_prepared_transactions:
     default: 0
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Maximum number of prepared two phase commit transactions, waiting
-        to be committed. Defaults to 0. as using two phase commit without
-        a process to monitor and resolve lost transactions is dangerous.
+    description: DEPRECATED. Use extra_pg_conf.
   ssl:
     default: "True"
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Whether PostgreSQL should talk SSL
+    description: DEPRECATED. Use extra_pg_conf.
   log_min_duration_statement:
     default: -1
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        -1 is disabled, 0 logs all statements
-        and their durations, > 0 logs only
-        statements running at least this number
-        of milliseconds
+    description: DEPRECATED. Use extra_pg_conf.
   log_checkpoints:
     default: False
     type: boolean
-    description: >
-        DEPRECATED. Use extra_pg_conf.
+    description: DEPRECATED. Use extra_pg_conf.
   log_connections:
     default: False
     type: boolean
@@ -313,36 +299,11 @@ options:
   log_temp_files:
     default: "-1"
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Log creation of temporary files larger than the threshold.
-        -1 disables the feature, 0 logs all temporary files, or specify
-        the threshold size with an optional unit (eg. "512KB", default
-        unit is kilobytes).
+    description: DEPRECATED. Use extra_pg_conf.
   log_line_prefix:
     default: "%t [%p]: [%l-1] db=%d,user=%u "
     type: string
-    description: |
-        DEPRECATED. Use extra_pg_conf.
-        special values:
-          %a = application name
-          %u = user name
-          %d = database name
-          %r = remote host and port
-          %h = remote host
-          %p = process ID
-          %t = timestamp without milliseconds
-          %m = timestamp with milliseconds
-          %i = command tag
-          %e = SQL state
-          %c = session ID
-          %l = session line number
-          %s = session start timestamp
-          %v = virtual transaction ID
-          %x = transaction ID (0 if none)
-          %q = stop here in non-session processes
-          %% = '%'
-        e.g. '<%u%%%d> '
+    description: DEPRECATED. Use extra_pg_conf.
   log_lock_waits:
     default: False
     type: boolean
@@ -354,242 +315,132 @@ options:
   autovacuum:
     default: True
     type: boolean
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Autovacuum should almost always be running. If you want to turn this
-        off, you are probably following out of date documentation.
+    description: DEPRECATED. Use extra_pg_conf.
   log_autovacuum_min_duration:
     default: -1
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        -1 disables, 0 logs all actions and their durations, > 0 logs only
-        actions running at least this number of milliseconds.
+    description: DEPRECATED. Use extra_pg_conf.
   autovacuum_analyze_threshold:
     default: 50
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        min number of row updates before analyze
+    description: DEPRECATED. Use extra_pg_conf.
   autovacuum_vacuum_scale_factor:
     default: 0.2
     type: float
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Fraction of table size before vacuum
+    description: DEPRECATED. Use extra_pg_conf.
   autovacuum_analyze_scale_factor:
     default: 0.1  
     type: float
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Fraction of table size before analyze
+    description: DEPRECATED. Use extra_pg_conf.
   autovacuum_vacuum_cost_delay:
     default: "20ms"
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Default vacuum cost delay for autovacuum, in milliseconds;
-        -1 means use vacuum_cost_delay
+    description: DEPRECATED. Use extra_pg_conf.
   search_path:
     default: "\"$user\",public"
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Comma separated list of schema names for
-        the default SQL search path.
+    description: DEPRECATED. Use extra_pg_conf.
   standard_conforming_strings:
     default: True
     type: boolean
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Standard conforming strings
+    description: DEPRECATED. Use extra_pg_conf.
   hot_standby:
     default: False
     type: boolean
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Hot standby or warm standby. When True, queries can be run against
-        the database when in recovery or standby mode (ie. replicated).
-        Overridden when service contains multiple units.
+    description: DEPRECATED. Use extra_pg_conf.
   hot_standby_feedback:
     default: False
     type: boolean
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Hot standby feedback, informing a master about in progress
-        transactions on a streaming hot standby and allowing the master to
-        defer cleanup and avoid query cancelations on the hot standby.
+    description: DEPRECATED. Use extra_pg_conf.
   wal_level:
     default: minimal
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        'minimal', 'archive', 'hot_standby' or 'logical'. Defines how much
-        information is written to the WAL. Set to 'minimal' for stand alone
-        databases and 'hot_standby' for replicated setups. Overridden by
-        juju when replication is used.
+    description: DEPRECATED. Use extra_pg_conf.
   max_wal_senders:
     default: 0
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Maximum number of hot standbys that can connect using
-        streaming replication. Set this to the expected maximum number of
-        hot standby units to avoid unnecessary blocking and database restarts.
-        Overridden by juju if necessary.
+    description: DEPRECATED. Use extra_pg_conf.
   wal_keep_segments:
     default: 0
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Number of old WAL files to keep, providing a larger buffer for
-        streaming hot standbys to catch up from when lagged. Each WAL file
-        is 16MB in size. The WAL files are the buffer of how far a
-        hot standby can lag behind the master, and replication fails if
-        this buffer is overrun. When this service is replicated, the larger
-        value of wal_keep_segments and replicated_wal_keep_segments is used.
+    description: DEPRECATED. Use extra_pg_conf.
   replicated_wal_keep_segments:
     default: 5000
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Value of wal_keep_segments used when this service is replicated.
-        This setting only exists to provide a sane default when replication
-        is requested (so it doesn't fail) and nobody bothered to change the
-        wal_keep_segments setting.
+    description: DEPRECATED. Use extra_pg_conf.
   archive_mode:
     default: False
     type: boolean
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Enable archiving of WAL files using the command specified by
-        archive_command. If archive_mode is enabled and archive_command not
-        set, then archiving is deferred until archive_command is set and the
-        WAL files will accumulate.
+    description: DEPRECATED. Use extra_pg_conf.
   archive_command:
     default: ""
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Command used to archive WAL files when archive_mode is set and
-        wal_level > minimal.
+    description: DEPRECATED. Use extra_pg_conf.
   work_mem:
     default: "1MB"
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf. Working Memory.
-        Ignored unless 'performance_tuning' is set to 'manual'.
+    description: DEPRECATED. Use extra_pg_conf.
   maintenance_work_mem:
     default: "1MB"
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf. Maintenance working memory.
-        Ignored unless 'performance_tuning' is set to 'manual'.
+    description: DEPRECATED. Use extra_pg_conf.
   kernel_shmall:
     default: 0
     type: int
-    description: >
-        DEPRECATED and ignored. 
-        Total amount of shared memory available, in bytes.
+    description: DEPRECATED and ignored. 
   kernel_shmmax:
     default: 0
     type: int
-    description: >
-        DEPRECATED and ignored.
-        The maximum size, in bytes, of a shared memory segment.
+    description: DEPRECATED and ignored.
   shared_buffers:
     default: ""
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        The amount of memory the database server uses for shared memory
-        buffers. This string should be of the format '###MB'.
-        Ignored unless 'performance_tuning' is set to 'manual'.
+    description: DEPRECATED. Use extra_pg_conf.
   effective_cache_size:
     default: ""
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Effective cache size is an estimate of how much memory is available for
-        disk caching within the database. (50% to 75% of system memory). This
-        string should be of the format '###MB'. Ignored unless
-        'performance_tuning' is set to 'manual'.
+    description: DEPRECATED. Use extra_pg_conf.
   default_statistics_target:
     default: -1
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Sets the default statistics target for table columns without a
-        column-specific target set via ALTER TABLE SET STATISTICS.
-        Leave unchanged to use the server default, which in recent
-        releases is 100. Ignored unless 'performance_tuning' is 'manual'.
-        Larger values increase the time needed to do ANALYZE, but
-        might improve the quality of the planner's estimates.
+    description: DEPRECATED. Use extra_pg_conf.
   collapse_limit:
     default: -1 
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Sets the from_collapse_limit and join_collapse_limit query planner
-        options, controlling the maximum number of tables that can be joined
-        before the turns off the table collapse query optimization.
+    description: DEPRECATED. Use extra_pg_conf.
   temp_buffers:
     default: "1MB"
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        The maximum number of temporary buffers used by each database session.
+    description: DEPRECATED. Use extra_pg_conf.
   wal_buffers:
     default: "-1"
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        min 32kB, -1 sets based on shared_buffers (change requires restart).
-        Ignored unless 'performance_tuning' is set to 'manual'.
+    description: DEPRECATED. Use extra_pg_conf.
   checkpoint_segments:
     default: 10 
     type: int
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        in logfile segments, min 1, 16MB each.
-        Ignored unless 'performance_tuning' is set to 'manual'.
+    description: DEPRECATED. Use extra_pg_conf.
   checkpoint_completion_target:
     default: 0.9
     type: float
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        checkpoint target duration time, as a fraction of checkpoint_timeout.
-        Range [0.0, 1.0].
+    description: DEPRECATED. Use extra_pg_conf.
   checkpoint_timeout:
     default: ""
     type: string
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Maximum time between automatic WAL checkpoints. range '30s-1h'.
-        If left empty, the default postgresql value will be used.
+    description: DEPRECATED. Use extra_pg_conf.
   fsync:
     type: boolean
     default: True
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Turns forced synchronization on/off. If fsync is turned off, database
-        failures are likely to involve database corruption and require
-        recreating the unit
+    description: DEPRECATED. Use extra_pg_conf.
   synchronous_commit:
     type: boolean
     default: True
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Immediate fsync after commit.
+    description: DEPRECATED. Use extra_pg_conf.
   full_page_writes:
     type: boolean
     default: True
-    description: >
-        DEPRECATED. Use extra_pg_conf.
-        Recover from partial page writes.
+    description: DEPRECATED. Use extra_pg_conf.
   random_page_cost:
     default: 4.0
     type: float
-    description: >
-        DEPRECATED. Use extra_pg_conf. Random page cost
-
+    description: DEPRECATED. Use extra_pg_conf.

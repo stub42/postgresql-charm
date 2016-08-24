@@ -20,10 +20,8 @@ from urllib.parse import urlparse
 
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import ERROR
-from charms import reactive
+from charms import apt, reactive
 from charms.reactive import hook, when, when_not
-
-from reactive import apt
 
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
@@ -41,10 +39,10 @@ def main():
 @when('postgresql.wal_e.enabled')
 @when_not('apt.installed.wal_e')
 def install():
-    # WAL-E is currently only available from a PPA. This charm and this
-    # PPA are maintained by the same person.
-    hookenv.log('Adding ppa:stub/pgcharm for wal-e packages')
-    apt.add_source('ppa:stub/pgcharm')
+    # WAL-E is currently only available from a PPA, ppa:stub/pgcharm.
+    # This charm and this PPA are maintained by the same person.
+    # Ensure that this PPA or another containing the 'wal-e' package
+    # is included as an install_source.
     apt.queue_install(['daemontools', 'wal-e'])
 
 
