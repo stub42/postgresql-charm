@@ -1,8 +1,9 @@
 flake8
-nose
-nose-cov
-nose-timer
-# pytest
+# nose
+# nose-cov
+# nose-timer
+pytest
+pytest-progress
 amulet
 jinja2
 juju-wait
@@ -10,3 +11,4 @@ python-swiftclient
 charms.reactive
 charmhelpers
 juju-deployer
+pip<8.1.2
