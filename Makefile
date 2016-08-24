@@ -168,10 +168,10 @@ integration: integration-deps
 	@echo OK: Integration tests pass `date`
 
 # These targets are to separate the test output in the Charm CI system
-# eg. 'make integration:PG93Tests'
+# eg. make integration:"PG95 and Multi and replication'
 integration\:%: integration-deps
 	@echo START: $@ tests `date`
-	${NOSE} -k $(word 2, $(subst :, ,$@)) 2>&1 | ts
+	${NOSE} -k \"$(subst integration:,,$@)\" 2>&1 | ts
 	@echo OK: $@ tests pass `date`
 
 

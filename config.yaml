@@ -149,7 +149,7 @@ options:
         If left empty, the nagios_context will be used as the servicegroup
   install_sources:
     default: |
-      - ppa:stub/pgcharm
+      - ppa:postgresql-charmers/charm
   install_keys:
     default: |
       - null
