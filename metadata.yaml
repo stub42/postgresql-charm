@@ -47,3 +47,12 @@
 "series":
 - "xenial"
 - "trusty"
+"storage":
+  "pgdata":
+    "type": "filesystem"
+    "description": "Database data files (ie. $PGDATA). Stores all of your data and\
+      \ indexes. Mainly random access reads and writes.\n"
+    "minimum-size": "5M"
+    "location": "/srv/pgdata"
+    "multiple":
+      "range": "0-1"

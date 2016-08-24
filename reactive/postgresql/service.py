@@ -191,6 +191,7 @@ def update_kernel_settings():
 @when('apt.installed.postgresql-common')
 @when_not('postgresql.cluster.inhibited')
 @when_not('postgresql.cluster.created')
+@when_not('postgresql.cluster.destroyed')
 def create_cluster():
     '''Sets the postgresql.cluster.created state.'''
     assert not os.path.exists(postgresql.postgresql_conf_path()), \
@@ -424,6 +425,7 @@ def stop():
 
 
 @when_not('postgresql.cluster.is_running')
+@when_not('postgresql.cluster.destroyed')
 @when('postgresql.cluster.configured')
 @when('postgresql.replication.has_master')
 @when('postgresql.replication.cloned')

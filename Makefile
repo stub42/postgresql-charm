@@ -1,6 +1,6 @@
 CHARM_DIR := $(shell pwd)
 TEST_TIMEOUT := 900
-SERIES := $(shell juju get-environment default-series 2> /dev/null | juju get-model-config default-series 2> /dev/null | echo trusty)
+SERIES := $(shell juju get-environment default-series 2> /dev/null | juju get-model-config default-series 2> /dev/null | echo xenial)
 HOST_SERIES := $(shell lsb_release -sc)
 JUJU := juju
 
@@ -36,22 +36,13 @@ test: testdeps lint unittest integration
 testdeps:
 ifeq ($(HOST_SERIES),trusty)
 	sudo apt-get install -y python-tox python3-psycopg2 bzr moreutils \
-	    software-properties-common python3-flake8
+	    software-properties-common
 else
 	sudo apt-get install -y tox python3-psycopg2 bzr moreutils \
-	    software-properties-common python3-flake8
+	    software-properties-common
 endif
 	sudo add-apt-repository -y ppa:juju/stable
 	sudo apt-get install charm-tools
-
-lint:
-	@echo "Charm Proof"
-	@charm proof
-	@echo "Lint check (flake8)"
-	@flake8 -v \
-            --ignore=E402 \
-	    --exclude=lib/testdeps,lib/pgclient/hooks/charmhelpers,lib/charms,__pycache__,.tox \
-	    hooks actions testing tests reactive lib
 
 
 CHARM_NAME := postgresql
@@ -144,41 +135,19 @@ publish-stable:
 # 	    ${HOME}/charms/charms.reactive/charms/reactive/ \
 # 	    ${BUILD_DIR}/lib/charms/reactive/
 
-_co=,
-_empty=
-_sp=$(_empty) $(_empty)
+#_co=,
+#_empty=
+#_sp=$(_empty) $(_empty)
+#TESTFILES=$(filter-out %/test_integration.py,$(wildcard tests/test_*.py))
+#PACKAGES=$(subst $(_sp),$(_co),$(notdir $(basename $(wildcard hooks/*.py))))
 
-TESTFILES=$(filter-out %/test_integration.py,$(wildcard tests/test_*.py))
-PACKAGES=$(subst $(_sp),$(_co),$(notdir $(basename $(wildcard hooks/*.py))))
+lint:
+	tox -e lint
 
-tox: .tox/testenv/bin/python3
 
-.tox/testenv/bin/python3: requirements.txt
-	tox --notest -r
-
-# Put the testenv on the PATH so the juju-wait plugin is found.
-export PATH := .tox/testenv/bin:$(PATH)
-
-NOSE := .tox/testenv/bin/nosetests -sv
-TIMING_NOSE := ${NOSE} --with-timer
-
-unittest: tox
-	${NOSE} ${TESTFILES}
+unittest:
+	tox -e unittest
 	@echo OK: Unit tests pass `date`
-
-# Coverage broken?
-#
-# unittest: tox
-# 	${NOSE} ${TESTFILES} --cover-package=${PACKAGES} \
-# 	    --with-coverage --cover-branches
-# 	@echo OK: Unit tests pass `date`
-# 
-# coverage: tox
-# 	${NOSE} ${TESTFILES} --cover-package=${PACKAGES} \
-# 	    --with-coverage --cover-branches \
-# 	    --cover-erase --cover-html --cover-html-dir=coverage \
-# 	    --cover-min-percentage=100 || \
-# 		(gnome-open coverage/index.html; false)
 
 
 # We need to unpack charmhelpers so the old non-reactive test client
@@ -188,30 +157,21 @@ client-charmhelpers:
            -f wheelhouse/charmhelpers-*.tar.gz \
            -C lib/pgclient/hooks --wildcards '*/charmhelpers'
 
-integration-deps: tox client-charmhelpers
+integration-deps: client-charmhelpers
+
+
+NOSE := tox -e integration --
 
 integration: integration-deps
-	${TIMING_NOSE} tests/test_integration.py 2>&1 | ts
-
-# More overheads, but better progress reporting
-integration_breakup: integration-deps
-	${NOSE} tests/test_integration.py:PG93Tests 2>&1 | ts
-	${NOSE} tests/test_integration.py:PG93MultiTests 2>&1 | ts
-	${NOSE} tests/test_integration.py:UpgradedCharmTests 2>&1 | ts
-	${NOSE} tests/test_integration.py:PG91Tests 2>&1 | ts
-	${NOSE} tests/test_integration.py:PG91MultiTests 2>&1 | ts
-	${NOSE} tests/test_integration.py:PG95Tests 2>&1 | ts
-	${NOSE} tests/test_integration.py:PG95MultiTests 2>&1 | ts
-	${NOSE} tests/test_integration.py:PG94Tests 2>&1 | ts
-	${NOSE} tests/test_integration.py:PG94MultiTests 2>&1 | ts
-	${NOSE} tests/test_integration.py:PG92Tests 2>&1 | ts
-	${NOSE} tests/test_integration.py:PG92MultiTests 2>&1 | ts
+	@echo START: $@ tests `date`
+	${NOSE} 2>&1
 	@echo OK: Integration tests pass `date`
 
 # These targets are to separate the test output in the Charm CI system
-# eg. 'make test_integration.py:PG93Tests'
-test_integration.py%: integration-deps
-	${TIMING_NOSE} tests/$@ 2>&1 | ts
+# eg. make integration:"PG95 and Multi and replication'
+integration\:%: integration-deps
+	@echo START: $@ tests `date`
+	${NOSE} -k \"$(subst integration:,,$@)\" 2>&1 | ts
 	@echo OK: $@ tests pass `date`
 
 
