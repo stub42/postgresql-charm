@@ -151,7 +151,7 @@ and recreated after the PITR recovery.
   will create it if necessary. If your charm sets this, then it must wait
   until a matching `database` value is presented on the PostgreSQL side of
   the relation (ie. `relation-get database` returns the value you set).
-- `roles`: Deprecated. A comma separated list of database roles to grant the
+- `roles`: A comma separated list of database roles to grant the
   database user. Typically these roles will have been granted permissions to
   access the tables and other database objects.
 - `extensions`: Optional. A comma separated list of required postgresql
