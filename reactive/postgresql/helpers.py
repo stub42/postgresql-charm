@@ -67,7 +67,8 @@ def makedirs(path, mode=0o750, user='root', group='root'):
     if os.path.exists(path):
         assert os.path.isdir(path), '{} is not a directory'
     else:
-        os.makedirs(path, mode=mode)
+        # Don't specify mode here, to ensure parent dirs are traversable.
+        os.makedirs(path)
     shutil.chown(path, user, group)
     os.chmod(path, mode)
 
