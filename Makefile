@@ -1,5 +1,4 @@
 CHARM_DIR := $(shell pwd)
-TEST_TIMEOUT := 900
 SERIES := $(shell juju get-environment default-series 2> /dev/null | juju get-model-config default-series 2> /dev/null | echo xenial)
 HOST_SERIES := $(shell lsb_release -sc)
 JUJU := juju
@@ -8,6 +7,8 @@ JUJU := juju
 # overridden by the last stage of the pipe. cf. 'test.py | ts'
 SHELL := /bin/bash
 export SHELLOPTS:=errexit:pipefail
+
+export AMULET_TIMEOUT := 1800
 
 
 default:
