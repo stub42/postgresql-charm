@@ -134,7 +134,11 @@ class AmuletFixture(amulet.Deployment):
             print(x.output)
             raise
         if raw:
-            return json.loads(raw)
+            status = json.loads(raw)
+            # Quick hack for Juju 1->Juju 2 compatibility.
+            if 'services' not in status:
+                status['services'] = status['applications']
+            return status
         return None
 
     def wait(self, timeout=None):
@@ -176,7 +180,11 @@ class AmuletFixture(amulet.Deployment):
                     continue
 
                 if service.get('life', '') not in ('dying', 'dead'):
-                    subprocess.call(['juju', 'destroy-service', service_name],
+                    if self.has_juju_version('2.0'):
+                        cmd = ['juju', 'remove-application', service_name]
+                    else:
+                        cmd = ['juju', 'destroy-service', service_name]
+                    subprocess.call(cmd,
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT)
 

@@ -173,7 +173,7 @@ class PGBaseTestCase(object):
 
     def _get_config(self):
         if self.deployment.has_juju_version('2.0'):
-            cmd = ['juju', 'get-config', 'postgresql']
+            cmd = ['juju', 'config', 'postgresql']
         else:
             cmd = ['juju', 'get', 'postgresql']
         raw = subprocess.check_output(cmd, universal_newlines=True)
@@ -371,7 +371,7 @@ class PGBaseTestCase(object):
 
         # Connections should work after setting the admin-addresses.
         if self.deployment.has_juju_version('2.0'):
-            subcmd = 'set-config'
+            subcmd = 'config'
         else:
             subcmd = 'set'
         subprocess.check_call(['juju', subcmd, 'postgresql',
