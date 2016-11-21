@@ -850,6 +850,11 @@ def set_active():
         status_set('blocked', 'PostgreSQL unexpectedly shut down')
 
 
+@when('apt.installed.postgresql-common')
+def set_version():
+    hookenv.application_version_set(postgresql.point_version())
+
+
 @when('postgresql.cluster.created')
 def install_administrative_scripts():
     scripts_dir = helpers.scripts_dir()

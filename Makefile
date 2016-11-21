@@ -1,5 +1,4 @@
 CHARM_DIR := $(shell pwd)
-TEST_TIMEOUT := 900
 SERIES := $(shell juju get-environment default-series 2> /dev/null | juju get-model-config default-series 2> /dev/null | echo xenial)
 HOST_SERIES := $(shell lsb_release -sc)
 JUJU := juju
@@ -8,6 +7,8 @@ JUJU := juju
 # overridden by the last stage of the pipe. cf. 'test.py | ts'
 SHELL := /bin/bash
 export SHELLOPTS:=errexit:pipefail
+
+export AMULET_TIMEOUT := 1800
 
 
 default:
@@ -98,7 +99,7 @@ publish-dev: build-dev
 	    && export rev=`charm push . $(CHARM_STORE_URL) 2>&1 \
 		| tee /dev/tty | grep url: | cut -f 2 -d ' '` \
 	    && git tag -f -m "$$rev" `echo $$rev | tr -s '~:/' -` \
-	    && charm publish -c development $$rev
+	    && charm release -c development $$rev
 	git push -f --tags upstream $(LAYER_BRANCH) $(DEVEL_BRANCH)
 	git push -f --tags github $(LAYER_BRANCH) $(DEVEL_BRANCH)
 
@@ -116,7 +117,7 @@ publish-stable:
 		| tee /dev/tty | grep url: | cut -f 2 -d ' '` \
 	    && git tag -f -m "$$rev" `echo $$rev | tr -s '~:/' -` \
 	    && git push -f --tags .. $(STABLE_BRANCH) \
-	    && charm publish -c stable $$rev
+	    && charm release -c stable $$rev
 	rm -rf .tmp-repo
 	git push -f --tags upstream master built
 	git push -f --tags github master built
