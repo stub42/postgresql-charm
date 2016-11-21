@@ -9,6 +9,8 @@
     "include_system_packages": !!bool "false"
   "leadership": {}
   "postgresql": {}
+  "apt":
+    "packages": []
 "includes":
 - "layer:basic"
 - "layer:basic"

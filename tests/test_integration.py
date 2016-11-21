@@ -173,7 +173,7 @@ class PGBaseTestCase(object):
 
     def _get_config(self):
         if self.deployment.has_juju_version('2.0'):
-            cmd = ['juju', 'get-config', 'postgresql']
+            cmd = ['juju', 'config', 'postgresql']
         else:
             cmd = ['juju', 'get', 'postgresql']
         raw = subprocess.check_output(cmd, universal_newlines=True)
@@ -371,7 +371,7 @@ class PGBaseTestCase(object):
 
         # Connections should work after setting the admin-addresses.
         if self.deployment.has_juju_version('2.0'):
-            subcmd = 'set-config'
+            subcmd = 'config'
         else:
             subcmd = 'set'
         subprocess.check_call(['juju', subcmd, 'postgresql',
@@ -627,6 +627,15 @@ class PG95MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     num_units = 3
     test_config = dict(version=('' if SERIES == 'xenial' else '9.5'),
                        pgdg=(False if SERIES == 'xenial' else True))
+
+
+class PG96Tests(PGBaseTestCase, unittest.TestCase):
+    test_config = dict(version='9.6', pgdg=True)
+
+
+class PG96MultiTests(PGMultiBaseTestCase, unittest.TestCase):
+    num_units = 2
+    test_config = dict(version='9.6', pgdg=True)
 
 
 class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):

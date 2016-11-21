@@ -8,12 +8,12 @@ makefile:
     - testdeps
     - lint
     - unittest
-    - test_integration.py:PG91Tests
-    - test_integration.py:PG91MultiTests
-    - test_integration.py:PG92Tests
-    - test_integration.py:PG92MultiTests
-    - test_integration.py:PG93Tests
-    - test_integration.py:PG93MultiTests
-    - test_integration.py:PG94Tests
-    - test_integration.py:PG94MultiTests
-    - test_integration.py:UpgradedCharmTests
+    - integration:PG91Tests
+    - integration:PG91MultiTests
+    - integration:PG93Tests
+    - integration:PG93MultiTests
+    - integration:PG95Tests
+    - integration:PG95MultiTests
+    - integration:PG96Tests
+    - integration:PG96MultiTests
+    - integration:UpgradedCharmTests

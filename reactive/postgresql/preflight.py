@@ -45,7 +45,7 @@ def block_on_invalid_config():
     valid = True
     config = hookenv.config()
 
-    enums = dict(version=set(['', '9.1', '9.2', '9.3', '9.4', '9.5']),
+    enums = dict(version=set(['', '9.1', '9.2', '9.3', '9.4', '9.5', '9.6']),
                  package_status=set(['install', 'hold']))
     for key, vals in enums.items():
         config[key] = config[key].lower()  # Rewrite to lower case.
