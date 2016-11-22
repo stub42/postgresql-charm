@@ -78,7 +78,7 @@ build-dev: | $(BUILD_DIR)
 	-cd $(BUILD_DIR) && git merge --abort
 	cd $(BUILD_DIR) \
 	    && git reset --hard $(TEST_BRANCH) \
-	    && git clean -ffd \
+	    && git clean -fxd \
 	    && git merge --log --no-commit -s ours \
 		-m "charm-build of $(LAYER_BRANCH)" $(LAYER_BRANCH)
 	rm -rf .tmp-repo
@@ -143,11 +143,11 @@ publish-stable:
 #PACKAGES=$(subst $(_sp),$(_co),$(notdir $(basename $(wildcard hooks/*.py))))
 
 lint:
-	tox -e lint
+	tox -v -e lint
 
 
 unittest:
-	tox -e unittest
+	tox -v -e unittest
 	@echo OK: Unit tests pass `date`
 
 
@@ -161,7 +161,7 @@ client-charmhelpers:
 integration-deps: client-charmhelpers
 
 
-NOSE := tox -e integration --
+NOSE := tox -v -e integration --
 
 integration: integration-deps
 	@echo START: $@ tests `date`
@@ -172,7 +172,7 @@ integration: integration-deps
 # eg. make integration:"PG95 and Multi and replication'
 integration\:%: integration-deps
 	@echo START: $@ tests `date`
-	${NOSE} -k \"$(subst integration:,,$@)\" 2>&1 | ts
+	${NOSE} -k "\"$(subst integration:,,$@)\"" 2>&1 | ts
 	@echo OK: $@ tests pass `date`
 
 
