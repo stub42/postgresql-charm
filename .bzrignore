@@ -1,9 +1,0 @@
-_trial_temp
-hooks/_trial_temp
-hooks/local_state.pickle
-lib/pgclient/hooks/charmhelpers/
-lib/testdeps
-coverage
-.coverage
-.unit-state.db
-.tox
