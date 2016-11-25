@@ -1,5 +1,6 @@
 *~
 *.pyc
+.git
 .coverage
 .unit-state.db
 bzrsync2.sh

@@ -172,7 +172,7 @@ integration: integration-deps
 # eg. make integration:"PG95 and Multi and replication'
 integration\:%: integration-deps
 	@echo START: $@ tests `date`
-	${NOSE} -k "\"$(subst integration:,,$@)\"" 2>&1 | ts
+	${NOSE} -k "$(subst integration:,,$@)" 2>&1 | ts
 	@echo OK: $@ tests pass `date`
 
 
