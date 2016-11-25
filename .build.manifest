@@ -13,20 +13,15 @@
       "dynamic", 
       "unchecked"
     ], 
-    ".bzrignore": [
-      "postgresql", 
-      "static", 
-      "0add588743632fea5f0753d45d9b2f1d78c47689cf48d67744a3c3af55548404"
-    ], 
     ".gitignore": [
       "postgresql", 
       "static", 
-      "a1b916ace6256223c5fb992a9b1658b73753f4aa892dfee3fa47bd954f1af449"
+      "4502b8bbfb3dbc9a99bb59f935cf26aa64247347a6a5949d1da41b5f44bd95f8"
     ], 
     "Makefile": [
       "postgresql", 
       "static", 
-      "0deb5ee3434fee9f72ae29592c664cbbf0d16339dfbfb7217665208aced01e52"
+      "1beafb3048bf807a951f225c239001b3734b52580cc03413f7c6a2dbdf7b88bb"
     ], 
     "README.md": [
       "postgresql", 
@@ -641,7 +636,7 @@
     "tox.ini": [
       "postgresql", 
       "static", 
-      "0dae4263a9d96137aede508f5ebde2a318e48037099adbbc42cbd05b02e89971"
+      "6deb1f36c476cb872c521e26fa2df643647d3aa92631edd5e3f9a72562b31788"
     ], 
     "unit_tests/test_pg_hba_conf.py": [
       "postgresql", 
