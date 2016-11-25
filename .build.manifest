@@ -18,11 +18,6 @@
       "static", 
       "0add588743632fea5f0753d45d9b2f1d78c47689cf48d67744a3c3af55548404"
     ], 
-    ".git": [
-      "postgresql", 
-      "static", 
-      "8e30f79386a87b1944ce465d1352427aecad6a78282cd2ed697afef270057704"
-    ], 
     ".gitignore": [
       "postgresql", 
       "static", 
