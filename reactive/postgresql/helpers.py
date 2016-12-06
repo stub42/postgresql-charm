@@ -137,7 +137,7 @@ def split_extra_pg_auth(raw_extra_pg_auth):
         return valid_re.search(l) is not None
 
     lines = list(raw_extra_pg_auth.split(','))
-    if all(valid_line(l) for l in lines):
+    if lines and all(valid_line(l) for l in lines):
         hookenv.log('Falling back to comma separated extra_pg_auth', WARNING)
         return lines
     else:

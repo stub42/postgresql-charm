@@ -3,6 +3,7 @@ includes:
     - layer:apt
     - layer:leadership
     - layer:coordinator
+    - interface:pgsql
 options:
     basic:
         packages:
