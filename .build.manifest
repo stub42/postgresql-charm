@@ -291,7 +291,7 @@
     "layer.yaml": [
       "postgresql", 
       "dynamic", 
-      "f479e41ae3dc6f8661c560a8b7c7174d6dc61f2051c9445904921e52245ec0c1"
+      "1a39b7a44f828b781c065f9dbcf999f5b2bd878dd4003cae1eae61c9cd590b2b"
     ], 
     "lib/cache_settings.py": [
       "postgresql", 
@@ -306,7 +306,7 @@
     "lib/charms/apt.py": [
       "layer:apt", 
       "static", 
-      "7fdd7d4c00259d579a0b1c01423c95a083fd2d957046c6c76668a1438a68fd1d"
+      "f074d981409c3860547f8c45cde9c3ce4a80985a5ee94755981cd10117dc76e4"
     ], 
     "lib/charms/coordinator.py": [
       "layer:coordinator", 
@@ -321,7 +321,7 @@
     "lib/charms/layer/basic.py": [
       "layer:basic", 
       "static", 
-      "d52423911fcef803a418025d355ac7c2e6729c2949c68aaf01bb3f8f24b67831"
+      "3544977fe725801ce6112fb9c7c1983c3e960d01496ce16c57456fe81e752746"
     ], 
     "lib/charms/layer/execd.py": [
       "layer:basic", 
@@ -476,7 +476,7 @@
     "reactive/apt.py": [
       "layer:apt", 
       "static", 
-      "3220c73e827e4de9fcad61415ebe01640c57ae60f99b79113bac532129d32aba"
+      "6dad3fc2032bc4367b3669def96a45609222a745fd28763992725e377d7c974c"
     ], 
     "reactive/coordinator.py": [
       "layer:coordinator", 
@@ -541,7 +541,7 @@
     "reactive/postgresql/storage.py": [
       "postgresql", 
       "static", 
-      "549d963cc4bc1564da8e1fd7a8022d0ca846c41b680e41734ccd120947a834ba"
+      "f240a6a64a1a1f4d3e73ab46eb30d30c8e6f980aaea7ea7edcef75670ebc994c"
     ], 
     "reactive/postgresql/syslog.py": [
       "postgresql", 
@@ -648,10 +648,10 @@
       "static", 
       "cf42e17660498f46345801303e6af6a1722b01eae39a5cd80fb794e13d1977f1"
     ], 
-    "wheelhouse/Jinja2-2.8.tar.gz": [
+    "wheelhouse/Jinja2-2.8.1.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "bc1ff2ff88dbfacefde4ddde471d1417d3b304e8df103a7a9437d47269201bf4"
+      "35341f3a97b46327b3ef1eb624aadea87a535b8f50863036e085e7c426ac5891"
     ], 
     "wheelhouse/MarkupSafe-0.23.tar.gz": [
       "layer:basic", 
@@ -688,10 +688,10 @@
       "dynamic", 
       "4d24b03ffa67638a3fa931c09fd9e0273ffa904e95ebebe7d4b1a54c93d7b732"
     ], 
-    "wheelhouse/pyaml-16.11.4.tar.gz": [
+    "wheelhouse/pyaml-16.12.2.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "890d76cc3b25f41df952d804ae4604bec2730e258608b06da7adb6830d1736be"
+      "b865e4f53a85f4d8a092e7701f759a3237fb3ee8a928627401914aafadc00907"
     ], 
     "wheelhouse/six-1.10.0.tar.gz": [
       "layer:basic", 

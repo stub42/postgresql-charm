@@ -47,16 +47,18 @@ def attach():
     # check is here for the future.
     existingdb = os.path.exists(pgdata)
 
-    required_space = shutil.disk_usage(postgresql.data_dir()).used
-    free_space = shutil.disk_usage(mount).free
+    if os.path.exists(postgresql.data_dir()):
+        required_space = shutil.disk_usage(postgresql.data_dir()).used
+        free_space = shutil.disk_usage(mount).free
 
-    if required_space > free_space and not existingdb:
-        hookenv.status_set('blocked',
-                           'Not enough free space in pgdata storage')
-    else:
-        apt.queue_install(['rsync'])
-        coordinator.acquire('restart')
-        reactive.set_state('postgresql.storage.pgdata.attached')
+        if required_space > free_space and not existingdb:
+            hookenv.status_set('blocked',
+                               'Not enough free space in pgdata storage')
+        return
+
+    apt.queue_install(['rsync'])
+    coordinator.acquire('restart')
+    reactive.set_state('postgresql.storage.pgdata.attached')
 
 
 @hook('pgdata-storage-detaching')
