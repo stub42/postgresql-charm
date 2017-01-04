@@ -10,7 +10,9 @@
   "leadership": {}
   "postgresql": {}
   "apt":
+    "version_package": ""
     "packages": []
+    "full_version": !!bool "false"
 "includes":
 - "layer:basic"
 - "layer:basic"
