@@ -121,7 +121,6 @@ publish-stable:
 	rm -rf .tmp-repo
 	git push -f --tags upstream master built
 	git push -f --tags github master built
-	git push -f --tags bzr built:master
 
 # Clean crud from running tests etc.
 #buildclean:
