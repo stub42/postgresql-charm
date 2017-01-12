@@ -5,6 +5,7 @@
     "layer:leadership", 
     "layer:coordinator", 
     "postgresql", 
+    "interface:pgsql", 
     "build"
   ], 
   "signatures": {
@@ -21,7 +22,7 @@
     "Makefile": [
       "postgresql", 
       "static", 
-      "1beafb3048bf807a951f225c239001b3734b52580cc03413f7c6a2dbdf7b88bb"
+      "73aa44d5137450a1626af535139246c18b115b8bee3547ea4c5ae04c4b2060ca"
     ], 
     "README.md": [
       "postgresql", 
@@ -91,37 +92,57 @@
     "hooks/data-relation-changed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/data-relation-departed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
+    ], 
+    "hooks/db-admin-relation-broken": [
+      "interface:pgsql", 
+      "dynamic", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/db-admin-relation-changed": [
-      "postgresql", 
-      "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "interface:pgsql", 
+      "dynamic", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/db-admin-relation-departed": [
-      "postgresql", 
-      "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "interface:pgsql", 
+      "dynamic", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
+    ], 
+    "hooks/db-admin-relation-joined": [
+      "interface:pgsql", 
+      "dynamic", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
+    ], 
+    "hooks/db-relation-broken": [
+      "interface:pgsql", 
+      "dynamic", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/db-relation-changed": [
-      "postgresql", 
-      "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "interface:pgsql", 
+      "dynamic", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/db-relation-departed": [
-      "postgresql", 
-      "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "interface:pgsql", 
+      "dynamic", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
+    ], 
+    "hooks/db-relation-joined": [
+      "interface:pgsql", 
+      "dynamic", 
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/defaulthook.py": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/hook.template": [
       "layer:basic", 
@@ -146,32 +167,32 @@
     "hooks/local-monitors-relation-changed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/local-monitors-relation-departed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/master-relation-changed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/master-relation-departed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/nrpe-external-master-relation-changed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/nrpe-external-master-relation-departed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/pgdata-storage-attached": [
       "postgresql", 
@@ -228,10 +249,260 @@
       "static", 
       "bcfa7eb6ab990dbd3bc87926b7950f22961a978394b8d7f8e90309d3884cf3b4"
     ], 
-    "hooks/relations/pgsql/provides.py": [
-      "postgresql", 
+    "hooks/relations/pgsql/.cache/v/cache/lastfailed": [
+      "interface:pgsql", 
       "static", 
-      "28ebc543b89a028b418467b8c3b4b610e3a00bb4021f4c62d0e46228b66dcf85"
+      "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    ], 
+    "hooks/relations/pgsql/.gitignore": [
+      "interface:pgsql", 
+      "static", 
+      "ac2b014e426da13ceb24a4854c3f5de636cd357c3e5edbb21019e7596175977a"
+    ], 
+    "hooks/relations/pgsql/Makefile": [
+      "interface:pgsql", 
+      "static", 
+      "3ddb71f84b7a9763910d3aee4bf960c1e893082fd32e87106c61a8e62cfed003"
+    ], 
+    "hooks/relations/pgsql/README.md": [
+      "interface:pgsql", 
+      "static", 
+      "c18bc9c64085645e67e8275877a58842733f50354f996bf54e4115a04d6d30c5"
+    ], 
+    "hooks/relations/pgsql/__init__.py": [
+      "interface:pgsql", 
+      "static", 
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ], 
+    "hooks/relations/pgsql/copyright": [
+      "interface:pgsql", 
+      "static", 
+      "60418020fdb24346ea19d977d18e7064dee06de227731ae4c16cb3edd3df2bc9"
+    ], 
+    "hooks/relations/pgsql/docs/Makefile": [
+      "interface:pgsql", 
+      "static", 
+      "3a809dc407c194c4669d5ac731fd45135ce62b5cdc8609563826b5b31999b69d"
+    ], 
+    "hooks/relations/pgsql/docs/__pycache__/foo": [
+      "interface:pgsql", 
+      "static", 
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/.buildinfo": [
+      "interface:pgsql", 
+      "static", 
+      "d6fae62bf6f8179b2c7bdf609cc0c24a25808e940d215231777387cebb82bd50"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/.doctrees/environment.pickle": [
+      "interface:pgsql", 
+      "static", 
+      "4fc14f42ca5f9a262500bc5b068cb6765812ea8e05f08430fced14e6c8f7f8ae"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/.doctrees/index.doctree": [
+      "interface:pgsql", 
+      "static", 
+      "317adb993a478331db940d114f77db0f8ff1744cd0f6b77193da90113d7a12d1"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/.doctrees/requires.doctree": [
+      "interface:pgsql", 
+      "static", 
+      "f1907294b79ef313e2f99697cbb2158d40c047e96a4da549306ec036c36a565e"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_sources/index.txt": [
+      "interface:pgsql", 
+      "static", 
+      "a9d4dab8284dab71f2dcf9c4c3cae9ce7d52873d076484a5eb6b9987799933ae"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_sources/requires.txt": [
+      "interface:pgsql", 
+      "static", 
+      "bc974dd0eec56a5b9008e42f2b84656c780b7846c556df28b0a2d1544d9d1f69"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/ajax-loader.gif": [
+      "interface:pgsql", 
+      "static", 
+      "5d045fd991ddf2b208dd9bf39a591f50e6ec793416e2867f54e8c6c7e89b68c2"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/alabaster.css": [
+      "interface:pgsql", 
+      "static", 
+      "2c70bf25ee56251ae162b9cc488d4484d6e7b7115e907a754775be192deb7d88"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/basic.css": [
+      "interface:pgsql", 
+      "static", 
+      "e7f4e44ed8026589ee1abb3c81d69d0d1ff6407b5ca20acf2c9d8013c4105b61"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/comment-bright.png": [
+      "interface:pgsql", 
+      "static", 
+      "fbf050c2a28e6cee57d0cc9611371951519946dd4997fe16f22e5645034ba9ab"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/comment-close.png": [
+      "interface:pgsql", 
+      "static", 
+      "3ea320043e367d66516cb66f175a015c64199b44af409b83d91209019ee9c530"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/comment.png": [
+      "interface:pgsql", 
+      "static", 
+      "d3eb24bb509cbc6bc987d9ee2df98dab9150931aafe02046f040dd042764e605"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/doctools.js": [
+      "interface:pgsql", 
+      "static", 
+      "3657736c3918116d8ca3652ab30195db8f60f93f69b85732366d6bb5edb5ecd7"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/down-pressed.png": [
+      "interface:pgsql", 
+      "static", 
+      "052328d9223ad2a5113aeeabdb47bea711d893c6fa23044fd799490a1a1d18fa"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/down.png": [
+      "interface:pgsql", 
+      "static", 
+      "00421ec6cdeb678923a5cf2bf4adbc5146bac6bfbd8aaacf7bab40299983686a"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/file.png": [
+      "interface:pgsql", 
+      "static", 
+      "080654dc5fae35bcb98999b3205ef6998d474bfbf7b4c9c2d80eefc87b6e0b16"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/jquery.js": [
+      "interface:pgsql", 
+      "static", 
+      "3226c7af4dc7043e3544337a49521fcefd3807aed678f47c1ca77d35586c2a67"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/minus.png": [
+      "interface:pgsql", 
+      "static", 
+      "f02b592053e6673342cf0b0cb77d9b0227c7f11013f7d8a9445cd769f1e775ce"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/plus.png": [
+      "interface:pgsql", 
+      "static", 
+      "3c46c24e4208c15d43518a3a4b334c75ad5e12534e9d1d2b814b9d05ecd31b56"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/pygments.css": [
+      "interface:pgsql", 
+      "static", 
+      "59820ff8f6d8a9e10b21fece0486fbbd71bd5d326b9253fef4bb7e6cd60b1044"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/searchtools.js": [
+      "interface:pgsql", 
+      "static", 
+      "a483019bf3c63fe164fa8c0dcd8fb731c0aa6eb96b34eafd4b5f90cbc9eef415"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/underscore.js": [
+      "interface:pgsql", 
+      "static", 
+      "53596846ab864b5bc4e4605181ad18feac56662185de74eff3373e98508cf0eb"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/up-pressed.png": [
+      "interface:pgsql", 
+      "static", 
+      "31475775d3649f37f56ad175b7d5d4707405f9d0929cee2f34587afa628bb9fd"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/up.png": [
+      "interface:pgsql", 
+      "static", 
+      "f8a294cdb7ee9cadfe036ca70aa852b83b4d4ce820d153b4d63f5d0252045fbd"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/_static/websupport.js": [
+      "interface:pgsql", 
+      "static", 
+      "2891839c0ab6ad9521a9af92a7222d7bcdfc365918deec802714171ccde63d98"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/genindex.html": [
+      "interface:pgsql", 
+      "static", 
+      "4eb918bfedd2e8829eee22f84648c51bf4bf789dcd8272dd272facb597a9e038"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/index.html": [
+      "interface:pgsql", 
+      "static", 
+      "4a5157154cb69cb4bf54ef8553181b9fefc3a336a2a4bd67b88fce1d1cc65359"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/objects.inv": [
+      "interface:pgsql", 
+      "static", 
+      "4566efee987097379ab46e9a90a513dadec09e6ac6fd915e93aa8fa7e606fbe0"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/requires.html": [
+      "interface:pgsql", 
+      "static", 
+      "09cedb9c0e29dff575c85f1e0c1e6c571549cf2c1d1aac63d10c210d6a2cbdec"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/search.html": [
+      "interface:pgsql", 
+      "static", 
+      "6692ee989ece8c4e97bb96a67f6c9e05287c9397a70bacdab384847b19b6ec42"
+    ], 
+    "hooks/relations/pgsql/docs/source/_build/html/searchindex.js": [
+      "interface:pgsql", 
+      "static", 
+      "1553696aafdd631c2ccb903df5d65c8a0e9d2a7543e1371e5634c6df5f234b5f"
+    ], 
+    "hooks/relations/pgsql/docs/source/conf.py": [
+      "interface:pgsql", 
+      "static", 
+      "bf0b2b1b2eab5e80f3e907b0d411d98740f2aaee5d68a3c9b04a7ed15b1023a2"
+    ], 
+    "hooks/relations/pgsql/docs/source/index.rst": [
+      "interface:pgsql", 
+      "static", 
+      "a9d4dab8284dab71f2dcf9c4c3cae9ce7d52873d076484a5eb6b9987799933ae"
+    ], 
+    "hooks/relations/pgsql/docs/source/requires.rst": [
+      "interface:pgsql", 
+      "static", 
+      "bc974dd0eec56a5b9008e42f2b84656c780b7846c556df28b0a2d1544d9d1f69"
+    ], 
+    "hooks/relations/pgsql/interface.yaml": [
+      "interface:pgsql", 
+      "static", 
+      "253cd5cce72e778f061dff37b9905b77ab64dd45b5e963010595300c1cf6b0c6"
+    ], 
+    "hooks/relations/pgsql/provides.py": [
+      "interface:pgsql", 
+      "static", 
+      "22506dcef3aa822166248182e882d6c2831604c5f9add5ffcac126e90632b4e8"
+    ], 
+    "hooks/relations/pgsql/requires.py": [
+      "interface:pgsql", 
+      "static", 
+      "4e8b92d97399c9e3b2e1f1d2d785f6baaa71c3bd2ae0762131bdf80c006428bd"
+    ], 
+    "hooks/relations/pgsql/setup.py": [
+      "interface:pgsql", 
+      "static", 
+      "f6ff2610d3704c00b0e3e6c51600cef7df613dc03d0fc5aab2c48dd61dcc7065"
+    ], 
+    "hooks/relations/pgsql/test_requirements.txt": [
+      "interface:pgsql", 
+      "static", 
+      "a19de27b977f4e098f8135dcf39b1cdcf4673635bd4bbf4a1636f0d27e705251"
+    ], 
+    "hooks/relations/pgsql/tox.ini": [
+      "interface:pgsql", 
+      "static", 
+      "cef433d316148fbcd78368710e7c4ee4a2133a701a9436732a349a00e89d90c9"
+    ], 
+    "hooks/relations/pgsql/unit_tests/main.pth": [
+      "interface:pgsql", 
+      "static", 
+      "e8e2bfb9088b7dec0ac16ade695749de33d1d6c2cd492ca888ee688f5b9399d4"
+    ], 
+    "hooks/relations/pgsql/unit_tests/test_connectionstring.py": [
+      "interface:pgsql", 
+      "static", 
+      "4bb584e4183ed21a6d5c2fa3239cc706554b107776a88082c28609e29b7b128b"
+    ], 
+    "hooks/relations/pgsql/unit_tests/test_requires.py": [
+      "interface:pgsql", 
+      "static", 
+      "c280c093ab5d2418051d1d864e6ffc19bea670bd72b0ed2935fee4206c8ae6eb"
     ], 
     "hooks/relations/syslog/__init__.py": [
       "postgresql", 
@@ -246,12 +517,12 @@
     "hooks/replication-relation-changed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/replication-relation-departed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/start": [
       "layer:basic", 
@@ -266,12 +537,12 @@
     "hooks/syslog-relation-changed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/syslog-relation-departed": [
       "postgresql", 
       "static", 
-      "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
+      "3a854a5fd180c5bacbb80b501d968a8d8bdc1468361e7123ea4022a1e0363c9a"
     ], 
     "hooks/update-status": [
       "layer:basic", 
@@ -291,7 +562,7 @@
     "layer.yaml": [
       "postgresql", 
       "dynamic", 
-      "1a39b7a44f828b781c065f9dbcf999f5b2bd878dd4003cae1eae61c9cd590b2b"
+      "f24dcfdb77afd5481b9c54787b53f535a339f8bd6943c9c27634be20b2209681"
     ], 
     "lib/cache_settings.py": [
       "postgresql", 
@@ -501,12 +772,12 @@
     "reactive/postgresql/client.py": [
       "postgresql", 
       "static", 
-      "d28c36c79035d9c3d3e32728f312b08cbbef6f23ef3a6dc9cc1813c7c7955d22"
+      "33db402995d51a6b6fbb9114f30c5b3e93b04b04d8013bd9daf7db8a3019a92f"
     ], 
     "reactive/postgresql/helpers.py": [
       "postgresql", 
       "static", 
-      "1bc1315c72bbf1de49d329a0fd8696ba31846c3ffd6f2778868f6c09c993ddc5"
+      "cf3e067d7746b566bf80ee081709e49b3f7206fbe3c402e4396e5c721d8c2de6"
     ], 
     "reactive/postgresql/metrics.py": [
       "postgresql", 
@@ -648,10 +919,10 @@
       "static", 
       "cf42e17660498f46345801303e6af6a1722b01eae39a5cd80fb794e13d1977f1"
     ], 
-    "wheelhouse/Jinja2-2.8.1.tar.gz": [
+    "wheelhouse/Jinja2-2.9.4.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "35341f3a97b46327b3ef1eb624aadea87a535b8f50863036e085e7c426ac5891"
+      "aab8d8ca9f45624f1e77f2844bf3c144d180e97da8824c2a6d7552ad039b5442"
     ], 
     "wheelhouse/MarkupSafe-0.23.tar.gz": [
       "layer:basic", 

@@ -20,5 +20,6 @@
 - "layer:apt"
 - "layer:leadership"
 - "layer:coordinator"
+- "interface:pgsql"
 "repo": "git+ssh://git.launchpad.net/postgresql-charm"
 "is": "postgresql"
