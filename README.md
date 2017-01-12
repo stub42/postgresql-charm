@@ -29,31 +29,31 @@ terabytes of data.
 This charm can deploy a single standalone PostgreSQL unit, or a service
 containing a single master unit and one or more replicas.
 
-To setup a single 'standalone' service::
+To setup a single 'standalone' service:
 
     juju deploy postgresql pg-a
 
 
 ## Scale Out Usage
 
-To add a replica to an existing service::
+To add a replica to an existing service:
 
     juju add-unit pg-a
 
-To deploy a new service containing a master and two hot standby replicas::
+To deploy a new service containing a master and two hot standby replicas:
 
     juju deploy -n 3 postgresql pg-b
 
 You can remove units as normal. If the master unit is removed, failover occurs
 and the most up to date hot standby is promoted to the master.  The
 'db-relation-changed' and 'db-admin-relation-changed' hooks are fired,
-letting clients adjust::
+letting clients adjust:
 
     juju remove-unit pg-b/0
 
 
 To setup a client using a PostgreSQL database, in this case a vanilla Django
-installation listening on port 8080::
+installation listening on port 8080:
 
     juju deploy postgresql
     juju deploy python-django
@@ -63,27 +63,46 @@ installation listening on port 8080::
     juju expose python-django
 
 
-## Known Limitations and Issues
-
-⚠ Do not attempt to relate client charms to a PostgreSQL service containing
-  multiple units unless you know the charm supports a replicated service.
-
-⚠ To host multiple units on a single server, you must use an lxc
-container.
-
-
 # Interacting with the Postgresql Service
 
-At a minimum, you just need to join a the `db` relation, and a user and
-database will be created for you.  For more complex environments, you can
-provide the `database` name allowing multiple services to share the same
-database. A client may also wish to defer its setup until the unit name is
-listed in `allowed-units`, to avoid attempting to connect to a database before
-it has been authorized.
+## Client Charms
 
-The `db-admin` relation may be used similarly to the `db` relation.  The
-automatically generated user for `db-admin` relations is a PostgreSQL
-superuser.
+Python client charms should be composed using `interface:pgsql`, which
+provides an easy way of navigating the complexities of the client
+interface. See http://interface-pgsql.readthedocs.io for details.
+
+The PostgreSQL charm provides two client relations. The `db` relation
+provides a normal account to the requested database. The database
+may be shared with other Juju Applications, allowing data to be shared.
+The `db-admin` relation provides administrative access to all databases
+on the PostgreSQL units.
+
+Note that due to the asynchronous nature of Juju and the relation model,
+you may be provided connection strings to PostgreSQL units that are not
+yet ready to accept connections from your client. Your charm and application
+should handle connection failures and retry later, like it would any other
+network outage.
+
+
+### Non-Python Client Charms
+
+Your charm may optionally set the following attributes on the `db`
+and `db-admin` relations in the relation-joined hook:
+
+* `database` - The requested database name
+* `roles` - A comma separated list of PostgreSQL roles to grant this
+  relation's user. Roles will be created if they do not already exist.
+* `extensions` - A comma separated list of PostgreSQL extensions to install
+  into the requested database.
+
+The PostgreSQL units will eventually provide the following attributes on
+the `db` and `db-admin` relations:
+
+* `master` - The libpq connection string to the master database
+* `standbys` - A newline separted list of libpq connection strings to
+  the standby databases. This will be empty if there is only a single
+  master unit.
+
 
 ## Database Permissions and Disaster Recovery
 
@@ -143,129 +162,6 @@ If there are any hot standby units, they will need to be destroyed
 and recreated after the PITR recovery.
 
 
-## During db-relation-joined
-
-### the client service provides:
-
-- `database`: Optional. The name of the database to use. The postgresql service
-  will create it if necessary. If your charm sets this, then it must wait
-  until a matching `database` value is presented on the PostgreSQL side of
-  the relation (ie. `relation-get database` returns the value you set).
-- `roles`: A comma separated list of database roles to grant the
-  database user. Typically these roles will have been granted permissions to
-  access the tables and other database objects.
-- `extensions`: Optional. A comma separated list of required postgresql
-  extensions.
-
-## During db-relation-changed
-
-### the postgresql service provides:
-
-- `host`: the host to contact.
-- `database`: a regular database.
-- `port`: the port PostgreSQL is listening on.
-- `user`: a regular user authorized to read the database.
-- `password`: the password for `user`.
-- `state`: 'standalone', 'master' or 'hot standby'.
-- `allowed-units`: space separated list of allowed clients (unit name).  You
-  should check this to determine if you can connect to the database yet.
-
-## During db-admin-relation-changed
-
-### the postgresql service provides:
-
-- `host`: the host to contact
-- `port`: the port PostgreSQL is listening on
-- `user`: a created super user
-- `password`: the password for `user`
-- `state`: 'standalone', 'master' or 'hot standby'
-- `allowed-units`: space separated list of allowed clients (unit name).  You
-  should check this to determine if you can connect to the database yet.
-
-## During syslog-relation-changed
-
-### the postgresql service provides:
-
-- `programname`: the syslog 'programname' identifying this unit's
-  PostgreSQL logs.
-- `log_line_prefix`: the `log_line_prefix` setting for the PostgreSQL
-  service.
-
-
-## For replicated database support
-
-A PostgreSQL service may contain multiple units (a single master, and
-optionally one or more hot standbys). The client charm can tell which
-unit in a relation is the master and which are hot standbys by
-inspecting the 'state' property on the relation.
-
-The 'standalone' state is deprecated, and when a unit advertises itself
-as 'standalone' you should treat it like a 'master'. The state only exists
-for backwards compatibility and will be removed soon.
-
-Writes must go to the unit identifying itself as 'master' or 'standalone'.
-If you sent writes to a 'hot standby', they will fail.
-
-Reads may go to any unit. Ideally they should be load balanced over
-the 'hot standby' units. If you need to ensure consistency, you may
-need to read from the 'master'.
-
-Units in any other state, including no state, should not be used and
-connections to them will likely fail. These units may still be setting
-up, or performing a maintenance operation such as a failover.
-
-The client charm needs to watch for state changes in its
-relation-changed hook. During failover, one of the existing 'hot standby' 
-units will change into a 'master'.
-
-
-## Example client hooks
-
-Python::
-
-    import sys
-    from charmhelpers.core.hookenv import (
-        Hooks, config, relation_set, relation_get,
-        local_unit, related_units, remote_unit)
-
-    hooks = Hooks()
-    hook = hooks.hook
-
-    @hook
-    def db_relation_joined():
-        relation_set('database', config('database'))  # Explicit database name
-
-    @hook('db-relation-changed', 'db-relation-departed')
-    def db_relation_changed():
-        # Rather than try to merge in just this particular database
-        # connection that triggered the hook into our existing connections,
-        # it is easier to iterate over all active related databases and
-        # reset the entire list of connections.
-        conn_str_tmpl = "dbname={dbname} user={user} host={host} port={port}"
-        master_conn_str = None
-        slave_conn_strs = []
-        for db_unit in related_units():
-            if relation_get('database', db_unit) != config('database'):
-                continue  # Not yet acknowledged requested database name.
-
-            allowed_units = relation_get('allowed-units') or ''  # May be None
-            if local_unit() not in allowed_units.split():
-                continue  # Not yet authorized.
-
-            conn_str = conn_str_tmpl.format(**relation_get(unit=db_unit)
-            remote_state = relation_get('state', db_unit)
-
-            if remote_state in ('master', 'standalone'):
-                master_conn_str = conn_str
-            elif relation_state == 'hot standby':
-                slave_conn_strs.append(conn_str)
-
-        update_my_db_config(master=master_conn_str, slaves=slave_conn_strs)
-
-    if __name__ == '__main__':
-        hooks.execute(sys.argv)
-
-
 # Point In Time Recovery
 
 The PostgreSQL charm has support for log shipping and point in time
@@ -289,7 +185,7 @@ units can be added and client services related to the new database
 service.
 
 To enable the experimental wal-e support with Swift, you will need to
-and set the service configuration settings similar to the following::
+and set the service configuration settings similar to the following:
 
     postgresql:
         wal_e_storage_uri: swift://mycontainer
@@ -326,7 +222,7 @@ Juju mailing list or the #juju channel on Freenode IRC.
 The latest tested, stable release of this charm can be found at
 https://jujucharms.com/postgresql/ and deployed with juju using the
 URI `cs:postgresql`. It is also available as the 'built' git branch
-in the git+ssh://git.launchpad.net/postgresql-charm repository::
+in the git+ssh://git.launchpad.net/postgresql-charm repository:
 
     mkdir trusty
     git clone -b built \
