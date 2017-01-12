@@ -13,6 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import uuid
 
 from charmhelpers import context
 from charmhelpers.core import hookenv, host
@@ -21,6 +22,7 @@ from charms.reactive import not_unless, when, when_not
 
 from reactive.postgresql import replication
 from reactive.postgresql import postgresql
+from relations.pgsql.requires import ConnectionString
 
 from everyhook import everyhook
 
@@ -94,6 +96,8 @@ def _credential_types(rel):
 def db_relation_master(rel):
     '''The master generates credentials and negotiates resources.'''
     master = rel.local
+    org_master = dict(master)
+
     # Pick one remote unit as representative. They should all converge.
     for remote in rel.values():
         break
@@ -133,6 +137,10 @@ def db_relation_master(rel):
     if not replication:
         master['roles'] = remote.get('roles')
         master['extensions'] = remote.get('extensions')
+
+    # If things have changed, ping peers so they can remirror.
+    if dict(master) != org_master:
+        ping_standbys()
 
 
 def db_relation_mirror(rel):
@@ -190,6 +198,44 @@ def db_relation_common(rel):
     # before we have had a chance to grant it access.
     local['allowed-units'] = ' '.join(unit for unit, relinfo in rel.items()
                                       if 'private-address' in relinfo)
+
+    # v2 protocol. Publish connection strings for this unit and its peers.
+    # Clients should use these connection strings in favour of the old
+    # host, port, database settings. A single proxy unit can thus
+    # publish several end points to clients.
+    master = replication.get_master()
+    if replication.is_master():
+        master_relinfo = local
+    else:
+        master_relinfo = rel.peers.get(master)
+    local['master'] = relinfo_to_cs(master_relinfo)
+    if rel.peers:
+        all_relinfo = rel.peers.values()
+    all_relinfo = list(rel.peers.values()) if rel.peers else []
+    all_relinfo.append(rel.local)
+    standbys = filter(None,
+                      [relinfo_to_cs(relinfo)
+                       for relinfo in all_relinfo
+                       if relinfo.unit != master])
+    local['standbys'] = '\n'.join(sorted(standbys)) or None
+
+
+def relinfo_to_cs(relinfo):
+    """Generate a ConnectionString from :class:``context.RelationInfo``"""
+    if not relinfo:
+        return None
+    d = dict(host=relinfo.get('host'),
+             port=relinfo.get('port'),
+             dbname=relinfo.get('database'),
+             user=relinfo.get('user'),
+             password=relinfo.get('password'))
+    if not all(d.values()):
+        return None
+    return ConnectionString(**d)
+
+
+def ping_standbys():
+    context.Relations().peer.local['ping'] = str(uuid.uuid4())
 
 
 @not_unless('postgresql.replication.is_primary')
