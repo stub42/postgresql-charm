@@ -1,13 +1,14 @@
 includes:
-    - layer:basic
-    - layer:apt
-    - layer:leadership
-    - layer:coordinator
-    - interface:pgsql
+  - layer:basic
+  - layer:apt
+  - layer:snap
+  - layer:leadership
+  - layer:coordinator
+  - interface:pgsql
 options:
-    basic:
-        packages:
-            - python3-psycopg2
-    coordinator:
-        log_level: debug
+  basic:
+    packages:
+      - python3-psycopg2
+  coordinator:
+    log_level: debug
 repo: git+ssh://git.launchpad.net/postgresql-charm

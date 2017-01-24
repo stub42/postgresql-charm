@@ -80,3 +80,8 @@ storage:
 #     shared: false
 #     read-only: false
 #     location: /srv/backups
+resources:
+  wal-e:
+    type: file
+    filename: wal-e.snap
+    description: WAL-E Snap Package
