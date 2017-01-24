@@ -1,8 +1,19 @@
 replication-pause:
-    description: Pause replication replay on a hot standby unit.
+  description: Pause replication replay on a hot standby unit.
+    
 replication-resume:
-    description: Resume replication replay on a hot standby unit.
-        
+  description: Resume replication replay on a hot standby unit.
+
+switchover:
+  description: >
+    Promote a specific unit to master. Must be run on the leader unit.
+  params:
+    master:
+      type: string
+      description: Unit to promote to master (eg. postgresql/3).
+  required:
+    - master
+
 # Revisit this when actions are more mature. Per Bug #1483525, it seems
 # impossible to return filenames in our results.
 # backup:

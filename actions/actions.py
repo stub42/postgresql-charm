@@ -30,6 +30,7 @@ if libs_dir not in sys.path:
 
 
 from charmhelpers.core import hookenv
+from charms import reactive
 
 from reactive.postgresql import postgresql
 
@@ -102,6 +103,11 @@ def replication_resume(params):
 #     hookenv.action_set(dict(backups=backups))
 
 
+def reactive_action(state):
+    reactive.set_state(state)
+    reactive.main()
+
+
 def main(argv):
     action = os.path.basename(argv[0])
     params = hookenv.action_get()
@@ -110,6 +116,8 @@ def main(argv):
             replication_pause(params)
         elif action == 'replication-resume':
             replication_resume(params)
+        elif action == 'switchover':
+            reactive_action('actions.switchover')
         else:
             hookenv.action_fail('Action {} not implemented'.format(action))
     except Exception:

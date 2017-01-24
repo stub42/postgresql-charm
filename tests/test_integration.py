@@ -1,4 +1,4 @@
-# Copyright 2015 Canonical Ltd.
+# Copyright 2015-2017 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -224,6 +224,14 @@ class PGBaseTestCase(object):
     def units(self):
         status = self.deployment.get_status()
         return set(status['services']['postgresql']['units'].keys())
+
+    @property
+    def leader(self):
+        status = self.deployment.get_status()
+        for unit, d in status['services']['postgresql']['units'].items():
+            if d.get('leader'):
+                return unit
+        return None
 
     def connect(self, unit=None, admin=False, database=None,
                 user=None, password=None):
@@ -461,27 +469,23 @@ class PGMultiBaseTestCase(PGBaseTestCase):
 
         self._replication_test()
 
-    @unittest.skip('Bug #1511659')
-    def test_failover_harsh(self):
-        # Destroy the master at the same time as adding a new unit.
-        self.deployment.destroy_unit(self.master)
-        self.deployment.add_unit('postgresql')
+    def test_switchover(self):
+        # The switchover action is run on the leader
+        leader = self.leader
+        self.assertIsNotNone(leader)
+        new_master = self.secondary
+        self.assertIsNotNone(new_master)
 
-        # It can take some time after destroying the leader for a new
-        # leader to be appointed. We need to wait enough time for the
-        # hooks to kick in.
-        time.sleep(60)
-        self.deployment.wait()
-        timeout = time.time() + 300
-        while timeout > time.time():
-            try:
-                self.master
-                break
-            except AssertionError:
-                time.sleep(3)
-        self.deployment.wait()
-        self.master  # Asserts there is a master db
+        action_id = amulet.actions.run_action(leader, 'switchover',
+                                              dict(master=new_master))
+        result = amulet.actions.get_action_output(action_id,
+                                                  raise_on_timeout=True)
+        self.assertEqual(result['result'],
+                         'Initiated switchover of master to {}'
+                         ''.format(new_master))
 
+        self.deployment.wait()
+        self.assertEqual(self.master, new_master)
         self._replication_test()
 
     @skip_if_swift_is_unavailable
@@ -686,7 +690,7 @@ class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
         # charm to the units before the hooks get invoked, and this takes
         # some time. During this period, the system looks completely idle
         # and 'juju wait' will consider the environment quiescent.
-        time.sleep(30)
+        time.sleep(10)
 
         # Now wait for the upgrade and fallout to finish, having hopefully
         # left enough time for the upgrade to actually start.

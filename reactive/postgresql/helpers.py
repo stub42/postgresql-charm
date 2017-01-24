@@ -1,4 +1,4 @@
-# Copyright 2015 Canonical Ltd.
+# Copyright 2015-2017 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -13,19 +13,20 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
 from contextlib import contextmanager
 import os
 import re
 import shutil
 import stat
 import tempfile
+import uuid
 
 import yaml
 
-from charmhelpers import context
 from charmhelpers.core import hookenv, host
 from charmhelpers.core.hookenv import WARNING
+
+import context
 
 
 def distro_codename():
@@ -33,9 +34,19 @@ def distro_codename():
     return host.lsb_release()['DISTRIB_CODENAME']
 
 
+def get_peer_relation():
+    '''Return the peer class:`context.Relation`
+
+    We can't use context.Relations().peer to find the peer relation,
+    because with multiple peer relations the one it returns is unstable.
+    '''
+    for rel in context.Relations()['replication'].values():
+        return rel
+
+
 def peers():
     '''Return the set of peers, not including the local unit.'''
-    rel = context.Relations().peer
+    rel = get_peer_relation()
     return frozenset(rel.keys()) if rel else frozenset()
 
 
@@ -147,3 +158,9 @@ def split_extra_pg_auth(raw_extra_pg_auth):
         return lines
     else:
         return raw_extra_pg_auth.splitlines()
+
+
+def ping_peers():
+    peer_rel = get_peer_relation()
+    if peer_rel:
+        peer_rel.local['ping'] = str(uuid.uuid4())

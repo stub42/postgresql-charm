@@ -1,4 +1,4 @@
-# Copyright 2015 Canonical Ltd.
+# Copyright 2015-2017 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -26,9 +26,9 @@ sys.path.insert(1, ROOT)
 sys.path.insert(2, os.path.join(ROOT, 'lib'))
 sys.path.insert(3, os.path.join(ROOT, 'lib', 'testdeps'))
 
-from charmhelpers import context
 from charmhelpers.core import hookenv
 
+import context
 from reactive import workloadstatus
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql

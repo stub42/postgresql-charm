@@ -1,4 +1,4 @@
-# Copyright 2015 Canonical Ltd.
+# Copyright 2015-2017 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -16,13 +16,14 @@
 
 import os.path
 
-from charmhelpers import context
-from charmhelpers.core import hookenv, host
+from charmhelpers.core import hookenv, host, unitdata
 from charms import reactive
 from charms.reactive import hook
 
+import context
 from reactive import leadership
 from reactive import workloadstatus
+from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
 from reactive.postgresql import replication
 
@@ -38,8 +39,9 @@ def upgrade_charm():
         master = replication.get_master()
         if not master:
             master = hookenv.local_unit()
-            if rels.peer:
-                for peer_relinfo in rels.peer.values():
+            peer_rel = helpers.get_peer_relation()
+            if peer_rel:
+                for peer_relinfo in peer_rel.values():
                     if peer_relinfo.get('state') == 'master':
                         master = peer_relinfo.unit
                         break
@@ -95,6 +97,14 @@ def upgrade_charm():
     # Set the postgresql.replication.cloned flag, so we don't rebuild
     # standbys when upgrading the charm from a pre-reactive version.
     reactive.set_state('postgresql.replication.cloned')
+
+    # Publish which node we are following
+    peer_rel = helpers.get_peer_relation()
+    if peer_rel and 'following' not in peer_rel.local:
+        following = unitdata.kv().get('postgresql.replication.following')
+        if following is None and not replication.is_master():
+            following = replication.get_master()
+        peer_rel.local['following'] = following
 
 
 def migrate_user(old_username, new_username, password, superuser=False):
