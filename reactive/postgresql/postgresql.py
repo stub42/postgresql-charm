@@ -1,4 +1,4 @@
-# Copyright 2015 Canonical Ltd.
+# Copyright 2015-2017 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -28,8 +28,8 @@ from textwrap import dedent
 
 import psycopg2
 import psycopg2.extensions
+import psycopg2.extras
 
-from charmhelpers import context
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charms import reactive
@@ -80,7 +80,7 @@ def version():
 
     # If the version wasn't set, we are using the default version for
     # the distro release.
-    version_map = dict(precise='9.1', trusty='9.3', xenial='9.5')
+    version_map = dict(trusty='9.3', xenial='9.5')
     return version_map[helpers.distro_codename()]
 
 
@@ -104,7 +104,7 @@ def connect(user='postgres', database='postgres', unit=None):
         host = None
         port_ = port()
     else:
-        relinfo = context.Relations().peer[unit]
+        relinfo = helpers.get_peer_relation()[unit]
         if 'host' not in relinfo or 'port' not in relinfo:
             raise InvalidConnection('{} has not published connection details'
                                     ''.format(unit))
@@ -202,6 +202,12 @@ def pg_ctl_path():
 
 def postgres_path():
     return '/usr/lib/postgresql/{}/bin/postgres'.format(version())
+
+
+def pg_rewind_path():
+    if has_version('9.5'):
+        return '/usr/lib/postgresql/{}/bin/pg_rewind'.format(version())
+    return None
 
 
 def pid_path():
@@ -439,13 +445,10 @@ def is_running():
                               stdout=subprocess.DEVNULL)
         return True
     except subprocess.CalledProcessError as x:
-        if x.returncode == 3 and has_version('9.2'):
-            return False  # PostgreSQL not running, PG 9.2+
+        if x.returncode == 3:
+            return False  # PostgreSQL not running
         elif x.returncode == 4 and has_version('9.4'):
             return False  # $DATA_DIR inaccessible, PG 9.4+
-        elif x.returncode == 1 and (not has_version('9.2') and
-                                    not os.path.exists(pid_path())):
-            return False  # Use pid file existance for old PG versions.
         raise  # Unexpected failure.
 
 
@@ -710,3 +713,18 @@ def promote():
         # like the newer 'promote' code path above.
         stop()
         start()
+
+
+def is_replicating(parent, ip=None, user=None):
+    '''Return True if the ip address is replicating from the parent unit'''
+    if ip is None:
+        ip = hookenv.unit_private_ip()
+    con = connect(user=user, unit=parent)
+    cur = con.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cur.execute('SELECT * FROM pg_stat_replication WHERE client_addr=%s',
+                (ip,))
+    found = False
+    for row in cur.fetchall():
+        hookenv.log('Replication details: {}'.format(row), DEBUG)
+        found = True
+    return found

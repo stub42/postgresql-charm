@@ -1,4 +1,4 @@
-# Copyright 2015-2016 Canonical Ltd.
+# Copyright 2015-2017 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -21,7 +21,6 @@ import time
 
 import psycopg2
 
-from charmhelpers import context
 from charmhelpers.core import host, hookenv, templating, unitdata
 from charmhelpers.core.hookenv import DEBUG, ERROR, WARNING
 from charms import coordinator, reactive
@@ -89,8 +88,17 @@ def update_replication_states():
 
             The unit is writable. It is either the master or manual
             replication mode is in effect.
+
+        postgresql.replication.switchover
+
+            In switchover to a new master. A switchover is a controlled
+            failover, where the existing master is available.
+
+        postgresql.replication.is_anointed
+
+            In switchover and this unit is anointed to be the new master.
     '''
-    peers = context.Relations().peer
+    peers = helpers.get_peer_relation()
     reactive.toggle_state('postgresql.replication.has_peers', peers)
     if peers:
         reactive.set_state('postgresql.replication.had_peers')
@@ -109,6 +117,13 @@ def update_replication_states():
              reactive.is_state('postgresql.replication.master.authorized'))
     reactive.toggle_state('postgresql.replication.has_master', ready)
 
+    anointed = get_anointed()
+    reactive.toggle_state('postgresql.replication.switchover',
+                          anointed is not None and anointed != master)
+    reactive.toggle_state('postgresql.replication.is_anointed',
+                          anointed is not None and anointed != master and
+                          anointed == hookenv.local_unit())
+
     reactive.toggle_state('postgresql.replication.is_primary',
                           postgresql.is_primary())
 
@@ -117,6 +132,9 @@ def update_replication_states():
             # If the unit is a primary and the master, it is on the master
             # timeline by definition and gets the 'cloned' state.
             reactive.set_state('postgresql.replication.cloned')
+        elif reactive.is_state('postgresql.replication.is_anointed'):
+            # The anointed unit retains its 'cloned' state.
+            pass
         else:
             # If the unit is a primary and not the master, it is on a
             # divered timeline and needs to lose the 'cloned' state.
@@ -129,7 +147,7 @@ def authorized_by(unit):
     # connection details is needed in case we are upgrading from an
     # older charm and the remote unit has not yet run its upgrade-charm
     # hook and provided the necessary information.
-    peer = context.Relations().peer
+    peer = helpers.get_peer_relation()
     if peer is None or unit not in peer:
         return False
     authorized = set(peer[unit].get('allowed-units', '').split())
@@ -156,7 +174,7 @@ def wait_for_master():
 
 
 def get_master():
-    '''Return the appointed master unit.'''
+    '''Return the master unit.'''
     if reactive.is_state('manual_replication'):
         return None
     return leader_get('master')
@@ -170,6 +188,22 @@ def set_master(master):
 
 def is_master():
     return get_master() == hookenv.local_unit()
+
+
+def get_anointed():
+    if reactive.is_state('manual_replication'):
+        return None
+    anointed = leader_get('anointed_master')
+    if anointed == hookenv.local_unit():
+        return anointed
+    peer_rel = helpers.get_peer_relation()
+    if peer_rel and anointed in peer_rel:
+        return anointed
+    # If this unit is being torn down, there is the perverse
+    # case where the anointed master is no longer in the
+    # peer relation. This probably will never happen outside
+    # of test suites.
+    return None
 
 
 @when('leadership.is_leader')
@@ -198,7 +232,7 @@ def standalone_unit_appoint_master():
 def failover():
     '''The master has been destroyed. Trigger the failover process.'''
     master = get_master()
-    rel = context.Relations().peer
+    rel = helpers.get_peer_relation()
 
     hookenv.log('Master {} is gone'.format(master), WARNING)
 
@@ -270,7 +304,7 @@ def create_replication_user():
 @when('postgresql.replication.has_peers')
 @when_not('postgresql.replication.manual')
 def publish_replication_details():
-    peer = context.Relations().peer
+    peer = helpers.get_peer_relation()
     if peer is not None:
         peer.local['host'] = hookenv.unit_private_ip()
         peer.local['port'] = str(postgresql.port())
@@ -318,7 +352,7 @@ def diverged_timeline():
 @when_not('postgresql.replication.manual')
 def clone_master():
     master = get_master()
-    peer_rel = context.Relations().peer
+    peer_rel = helpers.get_peer_relation()
     master_relinfo = peer_rel[master]
 
     # Be paranoid since we are about to destroy data.
@@ -363,7 +397,7 @@ def clone_master():
         raise SystemExit(0)
 
     ensure_ssl_certs()
-    update_recovery_conf()
+    update_recovery_conf(follow=master)
 
     reactive.set_state('postgresql.replication.cloned')
     update_replication_states()
@@ -394,48 +428,73 @@ def ensure_ssl_certs():
 @when('postgresql.cluster.is_running')
 @when_not('postgresql.replication.is_primary')
 @when_not('postgresql.replication.manual')
+@when_not('postgresql.replication.switchover')
 def promote_to_master():
     status_set('maintenance', 'Promoting to master')
     postgresql.promote()
+
+    unitdata.kv().set('postgresql.replication.following', None)
+    publish_following()
 
     while postgresql.is_in_recovery():
         status_set('maintenance', 'Waiting for startup')
         time.sleep(1)
 
+    assert not os.path.exists(postgresql.recovery_conf_path()), \
+        'recovery.conf still exists after promotion'
+
     update_replication_states()
+    helpers.ping_peers()
 
 
 @when('postgresql.replication.master.authorized')
 @when('postgresql.replication.cloned')
+@when_not('postgresql.replication.switchover')
 @when_not('postgresql.replication.manual')
-def update_recovery_conf():
-    master = get_master()
-    assert master != hookenv.local_unit()
+def follow_master():
+    update_recovery_conf(follow=get_master())
+
+
+@when('postgresql.replication.switchover')
+@when('postgresql.replication.cloned')
+@when_not('postgresql.replication.is_anointed')
+@when_not('postgresql.replication.manual')
+def follow_anointed():
+    anointed = get_anointed()
+    if anointed is not None:
+        update_recovery_conf(follow=anointed)
+    switchover_status()
+
+
+def update_recovery_conf(follow):
+    assert follow != hookenv.local_unit()
 
     path = postgresql.recovery_conf_path()
 
-    peer_rel = context.Relations().peer
-    master_relinfo = peer_rel.get(master)
+    peer_rel = helpers.get_peer_relation()
+    follow_relinfo = peer_rel.get(follow)
+    assert follow_relinfo is not None, 'Invalid upstream {}'.format(follow)
 
-    following = unitdata.kv().get('postgresql.replication.following')
-    leader = context.Leader()
-    config = hookenv.config()
+    current_follow = unitdata.kv().get('postgresql.replication.following')
 
-    if master != following:
-        status_set('maintenance', 'Following new master {}'.format(master))
-        unitdata.kv().set('postgresql.replication.following', master)
+    if follow != current_follow:
+        status_set('maintenance', 'Following new unit {}'.format(follow))
+        unitdata.kv().set('postgresql.replication.following', follow)
+        reactive.set_state('postgresql.replication.publish_following')
 
     else:
         # Even though the master is unchanged, we still regenerate
         # recovery.conf in case connection details such as IP addresses
         # have changed.
-        hookenv.log('Continuing to follow {}'.format(master))
+        hookenv.log('Continuing to follow {}'.format(follow))
+
+    config = hookenv.config()
 
     data = dict(streaming_replication=config['streaming_replication'],
-                host=master_relinfo['host'],
-                port=master_relinfo['port'],
+                host=follow_relinfo['host'],
+                port=follow_relinfo['port'],
                 user=replication_username(),
-                password=leader['replication_password'])
+                password=leader_get('replication_password'))
 
     if reactive.helpers.is_state('postgresql.wal_e.enabled'):
         data['restore_command'] = wal_e.wal_e_restore_command()
@@ -447,6 +506,101 @@ def update_recovery_conf():
     # Use @when_file_changed for this when Issue #44 is resolved.
     if reactive.helpers.any_file_changed([path]):
         reactive.set_state('postgresql.cluster.needs_restart')
+        if reactive.is_state('postgresql.replication.cloned'):
+            reactive.set_state('postgresql.replication.check_following')
+
+
+@when('postgresql.replication.publish_following')
+@when_not('postgresql.cluster.needs_restart')
+def publish_following():
+    # Advertise the unit we are following, in the hook that we actually
+    # restart and this change actually takes effect. This pings any
+    # anointed master during switchover, allowing it to proceed onto
+    # the promotion step.
+    peer_rel = helpers.get_peer_relation()
+    following = unitdata.kv().get('postgresql.replication.following')
+    if peer_rel is not None:
+        peer_rel.local['following'] = following
+        reactive.remove_state('postgresql.replication.publish_following')
+    if following is None:
+        reactive.remove_state('postgresql.replication.check_following')
+    if reactive.is_state('postgresql.replication.switchover'):
+        switchover_status()
+
+
+@when('postgresql.replication.check_following')
+@when('coordinator.granted.restart')
+@when_not('postgresql.cluster.needs_restart')
+def check_following():
+    peer_rel = helpers.get_peer_relation()
+    following = unitdata.kv().get('postgresql.replication.following')
+    if peer_rel is None or following is None:
+        reactive.remove_state('postgresql.replication.check_following')
+        return
+    if postgresql.is_replicating(following, user=replication_username()):
+        hookenv.log('Replication of {} is confirmed'.format(following))
+        reactive.remove_state('postgresql.replication.check_following')
+    else:
+        status_set('blocked',
+                   'Replication of {} has failed'.format(following))
+
+
+@when('postgresql.replication.is_anointed')
+@when('postgresql.cluster.is_running')
+@when_not('postgresql.replication.is_primary')
+@when_not('postgresql.replication.manual')
+@when_not('coordinator.requested.restart')
+@when_not('coordinator.granted.restart')
+def drain_master_and_promote_anointed():
+    # Wait until this anointed unit is fully in-sync with the
+    # master, and then promote it to master. But first we
+    # need to ensure that the master is following us, and that we
+    # have no outstanding requests on the restart lock to avoid deadlocking
+    # the cluster.
+    peer_rel = helpers.get_peer_relation()
+    master = get_master()
+    if peer_rel is None or master is None:
+        return  # Peers all gone? Other handlers will promote.
+
+    if peer_rel[master].get('following') != hookenv.local_unit():
+        status_set('waiting',
+                   'Waiting for master to follow me, its anointed successor')
+        return  # Try again next hook
+
+    # Drain the master
+    while True:
+        local_offset = postgresql.wal_received_offset(postgresql.connect())
+        if local_offset is None:
+            # Huh? Should not happen unless the server was unexpectedly
+            # restarted.
+            break
+
+        try:
+            remote_con = postgresql.connect(user=replication_username(),
+                                            unit=master)
+            remote_offset = postgresql.wal_received_offset(remote_con)
+            if remote_offset is None:
+                # Huh? Should not happen either, since the master published
+                # that it is following us.
+                break
+        except (psycopg2.Error, postgresql.InvalidConnection) as x:
+            status_set('waiting',
+                       'Waiting to query replication state of {}: {}'
+                       ''.format(master, x))
+            time.sleep(1)
+            continue
+
+        if local_offset >= remote_offset:
+            break  # In sync. Proceed to promotion.
+
+        status_set('waiting',
+                   '{} bytes to sync before promotion'
+                   ''.format(remote_offset - local_offset))
+        time.sleep(1)
+
+    # Promote the anointed to master
+    promote_to_master()
+    switchover_status()
 
 
 @not_unless('leadership.is_leader')
@@ -459,7 +613,7 @@ def elect_master():
     data from the previous master, or we may end up with diverged
     timelines.
     '''
-    rel = context.Relations().peer
+    rel = helpers.get_peer_relation()
     local_unit = hookenv.local_unit()
 
     # The unit with the most advanced WAL offset should be the new master.
@@ -488,3 +642,105 @@ def elect_master():
         raise SystemExit(0)
     elected_master = offsets[0][1]
     return elected_master
+
+
+@when('actions.switchover')
+@when_not('leadership.is_leader')
+def switchover_action_requires_leader():
+    hookenv.action_fail("switchover must be run on the leader unit")
+    reactive.remove_state('actions.switchover')
+
+
+@when('actions.switchover')
+@when('leadership.is_leader')
+@when('leadership.set.anointed_master')
+def switchover_in_progress():
+    hookenv.action_fail("switchover to {} already in progress"
+                        "".format(get_anointed()))
+    reactive.remove_state('actions.switchover')
+
+
+@when('actions.switchover')
+@when('leadership.is_leader')
+@when_not('leadership.set.anointed_master')
+def switchover_action():
+    try:
+        params = hookenv.action_get()
+        anointed = params['master']
+        master = get_master()
+
+        if not master:
+            hookenv.action_fail("There is no master. Cannot switchover")
+            return
+
+        if not anointed:
+            hookenv.action_fail("anointed master was not specified")
+            return
+
+        if master == anointed:
+            hookenv.action_set(dict(result='{} is already master'
+                                           ''.format(anointed)))
+            return
+
+        peer_rel = helpers.get_peer_relation()
+        if anointed != hookenv.local_unit() and anointed not in peer_rel:
+            hookenv.action_fail("Invalid unit name {}".format(anointed))
+            return
+
+        leader_set(anointed_master=anointed)
+        update_replication_states()
+
+        switchover_status()
+
+        hookenv.action_set(dict(result='Initiated switchover of master to {}'
+                                       ''.format(anointed)))
+
+    finally:
+        reactive.remove_state('actions.switchover')
+
+
+@when('leadership.is_leader')
+@when('leadership.set.anointed_master')
+def check_switchover_complete():
+    peer_rel = helpers.get_peer_relation()
+    anointed = get_anointed()
+
+    if anointed is None:
+        # switchover target is gone. Hopefully the service
+        # is being torn down, because this otherwise shouldn't happen.
+        # Reverting to the existing master should work
+        leader_set(anointed_master=None)
+        update_replication_states()
+        return
+
+    if anointed == hookenv.local_unit():
+        anointed_relinfo = peer_rel.local
+    else:
+        anointed_relinfo = peer_rel[anointed]
+    if anointed_relinfo.get('following') is None:
+        leader_set(master=anointed, anointed_master=None)
+        hookenv.log('Switchover to {} complete'.format(anointed))
+        update_replication_states()
+    else:
+        hookenv.log('Switchover to {} continues'.format(anointed))
+
+    switchover_status()
+
+
+@when('postgresql.replication.switchover')
+def switchover_status():
+    update_replication_states()
+    anointed = get_anointed()
+
+    # From the peer relation, to match what is published after restart.
+    # unitdata copy is set before restart.
+    peer_rel = helpers.get_peer_relation()
+    following = peer_rel.local.get('following')
+
+    mode = ('Primary'
+            if reactive.is_state('postgresql.replication.is_primary')
+            else 'Secondary')
+
+    hookenv.status_set('maintenance',
+                       'Switchover to {}. {} following {}'
+                       ''.format(anointed, mode, str(following)))

@@ -1,4 +1,4 @@
-# Copyright 2015 Canonical Ltd.
+# Copyright 2015-2017 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -24,12 +24,12 @@ import os.path
 import subprocess
 import time
 
-from charmhelpers import context
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charms import apt, coordinator, reactive
 from charms.reactive import hook, when
 
+import context
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
 from reactive.postgresql import service

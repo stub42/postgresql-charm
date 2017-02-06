@@ -196,6 +196,9 @@ and set the service configuration settings similar to the following:
         install_sources: |
             - ppa:stub/pgcharm
             - cloud:icehouse
+        install_keys: |
+            - null
+            - null
 
 
 # Development and Contributions

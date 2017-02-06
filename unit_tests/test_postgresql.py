@@ -1,4 +1,4 @@
-# Copyright 2015 Canonical Ltd.
+# Copyright 2015-2017 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -26,9 +26,9 @@ sys.path.insert(1, ROOT)
 sys.path.insert(2, os.path.join(ROOT, 'lib'))
 sys.path.insert(3, os.path.join(ROOT, 'lib', 'testdeps'))
 
-from charmhelpers import context
 from charmhelpers.core import hookenv
 
+import context
 from reactive import workloadstatus
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
@@ -42,14 +42,15 @@ class TestPostgresql(unittest.TestCase):
         config.return_value = {'version': sentinel.version}
         self.assertEqual(postgresql.version(), sentinel.version)
 
-        # Precise fallback
-        config.return_value = {}
-        codename.return_value = 'precise'
-        self.assertEqual(postgresql.version(), '9.1')
+        config.return_value = {'version': ''}
 
-        # Trusty fallback
+        # Trusty default
         codename.return_value = 'trusty'
         self.assertEqual(postgresql.version(), '9.3')
+
+        # Xenial default
+        codename.return_value = 'xenial'
+        self.assertEqual(postgresql.version(), '9.5')
 
         # No other fallbacks, yet.
         codename.return_value = 'whatever'
@@ -73,10 +74,10 @@ class TestPostgresql(unittest.TestCase):
         self.assertFalse(postgresql.has_version('9.5'))
 
     @patch.object(hookenv, 'local_unit')
-    @patch.object(context, 'Relations')
+    @patch.object(helpers, 'get_peer_relation')
     @patch.object(postgresql, 'port')
     @patch('psycopg2.connect')
-    def test_connect(self, psycopg2_connect, port, rels, local_unit):
+    def test_connect(self, psycopg2_connect, port, peer_rel, local_unit):
         psycopg2_connect.return_value = sentinel.connection
         port.return_value = sentinel.local_port
 
@@ -88,10 +89,11 @@ class TestPostgresql(unittest.TestCase):
 
         psycopg2_connect.reset_mock()
         local_unit.return_value = sentinel.local_unit
-        rels().peer = {sentinel.local_unit: {'host': sentinel.local_host,
-                                             'port': sentinel.local_port},
-                       sentinel.remote_unit: {'host': sentinel.remote_host,
-                                              'port': sentinel.remote_port}}
+        peer_rel.return_value = {
+            sentinel.local_unit: {'host': sentinel.local_host,
+                                  'port': sentinel.local_port},
+            sentinel.remote_unit: {'host': sentinel.remote_host,
+                                   'port': sentinel.remote_port}}
 
         self.assertEqual(postgresql.connect(sentinel.user, sentinel.db,
                                             sentinel.local_unit),
@@ -490,15 +492,9 @@ class TestPostgresql(unittest.TestCase):
                                            universal_newlines=True,
                                            stdout=subprocess.DEVNULL)
 
-        # Exit code 3 is pg_ctl(1) speak for 'not running', PG9.2+
-        version.return_value = '9.2'
+        # Exit code 3 is pg_ctl(1) speak for 'not running'
         check_call.side_effect = subprocess.CalledProcessError(3, 'whoops')
         self.assertFalse(postgresql.is_running())
-        version.return_value = '9.1'
-        check_call.side_effect = subprocess.CalledProcessError(3, 'whoops')
-        with self.assertRaises(subprocess.CalledProcessError) as x:
-            postgresql.is_running()
-        self.assertEqual(x.exception.returncode, 3)
 
         # Exit code 4 is pg_ctl(1) speak for 'wtf is the $DATADIR', PG9.4+
         version.return_value = '9.4'
@@ -509,43 +505,6 @@ class TestPostgresql(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError) as x:
             postgresql.is_running()
         self.assertEqual(x.exception.returncode, 4)
-
-        # Other failures bubble up, not that they should occur.
-        check_call.side_effect = subprocess.CalledProcessError(42, 'whoops')
-        with self.assertRaises(subprocess.CalledProcessError) as x:
-            postgresql.is_running()
-        self.assertEqual(x.exception.returncode, 42)
-
-    @patch.object(postgresql, 'pid_path')
-    @patch.object(postgresql, 'version')
-    @patch.object(postgresql, 'data_dir')
-    @patch.object(postgresql, 'pg_ctl_path')
-    @patch('subprocess.check_call')
-    def test_is_running_91(self, check_call, pg_ctl_path, data_dir, version,
-                           pid_path):
-        version.return_value = '9.1'
-        pg_ctl_path.return_value = '/path/to/pg_ctl'
-        data_dir.return_value = '/path/to/DATADIR'
-        self.assertTrue(postgresql.is_running())
-        check_call.assert_called_once_with(['sudo', '-u', 'postgres',
-                                            '/path/to/pg_ctl', 'status',
-                                            '-D', '/path/to/DATADIR'],
-                                           universal_newlines=True,
-                                           stdout=subprocess.DEVNULL)
-
-        # Exit code 1 is all we get from pg_ctl(1) with PostgreSQL 9.1
-        check_call.side_effect = subprocess.CalledProcessError(1, 'whoops')
-
-        # If the pid file exists, and pg_ctl failed, the failure is raised.
-        with tempfile.NamedTemporaryFile() as f:
-            pid_path.return_value = f.name
-            with self.assertRaises(subprocess.CalledProcessError) as x:
-                postgresql.is_running()
-            self.assertEqual(x.exception.returncode, 1)
-
-        # If the pid file does not exist, and pg_ctl failed, we assume
-        # PostgreSQL is not running.
-        self.assertFalse(postgresql.is_running())
 
         # Other failures bubble up, not that they should occur.
         check_call.side_effect = subprocess.CalledProcessError(42, 'whoops')

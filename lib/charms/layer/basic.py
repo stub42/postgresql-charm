@@ -1,7 +1,6 @@
 import os
 import sys
 import shutil
-import platform
 from glob import glob
 from subprocess import check_call
 
@@ -25,7 +24,12 @@ def bootstrap_charm_deps():
     vpip = os.path.join(vbin, 'pip')
     vpy = os.path.join(vbin, 'python')
     if os.path.exists('wheelhouse/.bootstrapped'):
-        activate_venv()
+        from charms import layer
+        cfg = layer.options('basic')
+        if cfg.get('use_venv') and '.venv' not in sys.executable:
+            # activate the venv
+            os.environ['PATH'] = ':'.join([vbin, os.environ['PATH']])
+            reload_interpreter(vpy)
         return
     # bootstrap wheelhouse
     if os.path.exists('wheelhouse'):
@@ -46,11 +50,7 @@ def bootstrap_charm_deps():
         # if we're using a venv, set it up
         if cfg.get('use_venv'):
             if not os.path.exists(venv):
-                distname, version, series = platform.linux_distribution()
-                if series in ('precise', 'trusty'):
-                    apt_install(['python-virtualenv'])
-                else:
-                    apt_install(['virtualenv'])
+                apt_install(['python-virtualenv'])
                 cmd = ['virtualenv', '-ppython3', '--never-download', venv]
                 if cfg.get('include_system_packages'):
                     cmd.append('--system-site-packages')
@@ -84,34 +84,6 @@ def bootstrap_charm_deps():
         # Non-namespace-package libs (e.g., charmhelpers) are available
         # without having to reload the interpreter. :/
         reload_interpreter(vpy if cfg.get('use_venv') else sys.argv[0])
-
-
-def activate_venv():
-    """
-    Activate the venv if enabled in ``layer.yaml``.
-
-    This is handled automatically for normal hooks, but actions might
-    need to invoke this manually, using something like:
-
-        # Load modules from $CHARM_DIR/lib
-        import sys
-        sys.path.append('lib')
-
-        from charms.layer.basic import activate_venv
-        activate_venv()
-
-    This will ensure that modules installed in the charm's
-    virtual environment are available to the action.
-    """
-    venv = os.path.abspath('../.venv')
-    vbin = os.path.join(venv, 'bin')
-    vpy = os.path.join(vbin, 'python')
-    from charms import layer
-    cfg = layer.options('basic')
-    if cfg.get('use_venv') and '.venv' not in sys.executable:
-        # activate the venv
-        os.environ['PATH'] = ':'.join([vbin, os.environ['PATH']])
-        reload_interpreter(vpy)
 
 
 def reload_interpreter(python):
@@ -157,7 +129,7 @@ def init_config_states():
     config_yaml = os.path.join(hookenv.charm_dir(), 'config.yaml')
     if os.path.exists(config_yaml):
         with open(config_yaml) as fp:
-            config_defs = yaml.safe_load(fp).get('options', {})
+            config_defs = yaml.load(fp).get('options', {})
             config_defaults = {key: value.get('default')
                                for key, value in config_defs.items()}
     for opt in config_defs.keys():
