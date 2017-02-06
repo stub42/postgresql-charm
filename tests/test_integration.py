@@ -542,24 +542,6 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         self.assertTrue(table_found, "Replication not replicating")
 
 
-class PG91Tests(PGBaseTestCase, unittest.TestCase):
-    test_config = dict(version=('' if SERIES == 'precise' else '9.1'),
-                       pgdg=(False if SERIES == 'precise' else True))
-
-
-class PG91MultiTests(PGMultiBaseTestCase, unittest.TestCase):
-    test_config = dict(version=('' if SERIES == 'precise' else '9.1'),
-                       pgdg=(False if SERIES == 'precise' else True))
-
-
-class PG92Tests(PGBaseTestCase, unittest.TestCase):
-    test_config = dict(version='9.2', pgdg=True)
-
-
-class PG92MultiTests(PGMultiBaseTestCase, unittest.TestCase):
-    test_config = dict(version='9.2', pgdg=True)
-
-
 class PG93Tests(PGBaseTestCase, unittest.TestCase):
     test_config = dict(version=('' if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True),

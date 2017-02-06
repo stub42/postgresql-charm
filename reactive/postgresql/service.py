@@ -264,7 +264,7 @@ def update_pg_hba_conf():
         reactive.set_state('postgresql.cluster.needs_reload')
 
 
-def generate_pg_hba_conf(pg_hba, config, rels):
+def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
     '''Update the pg_hba.conf file (host based authentication).'''
     rules = []  # The ordered list, as tuples.
 
@@ -288,9 +288,12 @@ def generate_pg_hba_conf(pg_hba, config, rels):
     add('local', 'all', nagios.nagios_username(), 'password')
     add('local', 'all', 'all', 'peer')
 
+    if _peer_rel is None:
+        _peer_rel = helpers.get_peer_relation()
+
     # Peers need replication access as the charm replication user.
-    if helpers.get_peer_relation():
-        for peer, relinfo in helpers.get_peer_relation().items():
+    if _peer_rel:
+        for peer, relinfo in _peer_rel.items():
             if 'private-address' not in relinfo:
                 continue  # Other end not yet provisioned?
             addr = postgresql.addr_to_range(relinfo['private-address'])

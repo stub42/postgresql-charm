@@ -80,7 +80,7 @@ def version():
 
     # If the version wasn't set, we are using the default version for
     # the distro release.
-    version_map = dict(precise='9.1', trusty='9.3', xenial='9.5')
+    version_map = dict(trusty='9.3', xenial='9.5')
     return version_map[helpers.distro_codename()]
 
 
@@ -445,13 +445,10 @@ def is_running():
                               stdout=subprocess.DEVNULL)
         return True
     except subprocess.CalledProcessError as x:
-        if x.returncode == 3 and has_version('9.2'):
-            return False  # PostgreSQL not running, PG 9.2+
+        if x.returncode == 3:
+            return False  # PostgreSQL not running
         elif x.returncode == 4 and has_version('9.4'):
             return False  # $DATA_DIR inaccessible, PG 9.4+
-        elif x.returncode == 1 and (not has_version('9.2') and
-                                    not os.path.exists(pid_path())):
-            return False  # Use pid file existance for old PG versions.
         raise  # Unexpected failure.
 
 
