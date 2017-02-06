@@ -14,6 +14,11 @@
       "dynamic", 
       "unchecked"
     ], 
+    ".git": [
+      "postgresql", 
+      "static", 
+      "2b3d190d2084ebd79ae4be992f398bf025a33fac868a34f6461c19abb536dc8b"
+    ], 
     ".gitignore": [
       "postgresql", 
       "static", 
@@ -27,27 +32,37 @@
     "README.md": [
       "postgresql", 
       "static", 
-      "84cb55bd95027a893a0e4c49a1b93b6fec3546b369c052b53308b82c2ac91fca"
+      "1b65f8d875b755cb1193007a20ba5b42d9294d21f2d5008160bcc18a17d2effa"
     ], 
     "actions.yaml": [
       "postgresql", 
       "dynamic", 
-      "346e163cf643fa15e7f8d17dfcbf0a555fefc0ad82af6aec8575eeced58b356a"
+      "ac6d45c831217a1aa03cf8887618adb8e1fab63aed83483e3c71015dbe7115f8"
+    ], 
+    "actions/action.template": [
+      "layer:basic", 
+      "static", 
+      "703461aaffa3d32cad0c0fb5d3f980fb6d3dc19702ea399bcc7b305a32fd0ddd"
     ], 
     "actions/actions.py": [
       "postgresql", 
       "static", 
-      "3db1ea3ffc845709d7f7aab8e4d42e89071f3943d3a729ce04ff4ce099b83474"
+      "e5c4154610cbec45545dc7c9e796504ef5266583f851554b08d40d42e1720f88"
     ], 
     "actions/replication-pause": [
       "postgresql", 
       "static", 
-      "3db1ea3ffc845709d7f7aab8e4d42e89071f3943d3a729ce04ff4ce099b83474"
+      "e5c4154610cbec45545dc7c9e796504ef5266583f851554b08d40d42e1720f88"
     ], 
     "actions/replication-resume": [
       "postgresql", 
       "static", 
-      "3db1ea3ffc845709d7f7aab8e4d42e89071f3943d3a729ce04ff4ce099b83474"
+      "e5c4154610cbec45545dc7c9e796504ef5266583f851554b08d40d42e1720f88"
+    ], 
+    "actions/switchover": [
+      "postgresql", 
+      "static", 
+      "e5c4154610cbec45545dc7c9e796504ef5266583f851554b08d40d42e1720f88"
     ], 
     "bin/layer_option": [
       "layer:basic", 
@@ -62,7 +77,7 @@
     "config.yaml": [
       "postgresql", 
       "dynamic", 
-      "c2c1dceb2d9855e837d50cffdb0855d6d099d39a68d237b62a258e4a0423782d"
+      "5fd98b81f2765e55e631cd3c38153f1211332023d060f63a61e798f11c91e0b6"
     ], 
     "copyright": [
       "postgresql", 
@@ -477,7 +492,7 @@
     "hooks/relations/pgsql/setup.py": [
       "interface:pgsql", 
       "static", 
-      "f6ff2610d3704c00b0e3e6c51600cef7df613dc03d0fc5aab2c48dd61dcc7065"
+      "d10ecf6275aa8d1d8557e1cd305d3c18d9e8f48b59490f4feb9f171d1763e1c2"
     ], 
     "hooks/relations/pgsql/test_requirements.txt": [
       "interface:pgsql", 
@@ -562,7 +577,7 @@
     "layer.yaml": [
       "postgresql", 
       "dynamic", 
-      "f24dcfdb77afd5481b9c54787b53f535a339f8bd6943c9c27634be20b2209681"
+      "bb5bafbb7270fc2e83bfa576fa9f8c29a114ef62c444c5eac6cbbb964930a322"
     ], 
     "lib/cache_settings.py": [
       "postgresql", 
@@ -592,7 +607,7 @@
     "lib/charms/layer/basic.py": [
       "layer:basic", 
       "static", 
-      "3544977fe725801ce6112fb9c7c1983c3e960d01496ce16c57456fe81e752746"
+      "41821be5a68e9380a3fb6b4efdb433d05ff958da68db766ca7156c0df80482d6"
     ], 
     "lib/charms/layer/execd.py": [
       "layer:basic", 
@@ -604,6 +619,11 @@
       "static", 
       "12b52fa768c3e9072556ac6f46f68129dc762f89eb806d8dee921c86497f6707"
     ], 
+    "lib/context.py": [
+      "postgresql", 
+      "static", 
+      "b8cab79eb7da6e40501f7266e18489407759e8463d588b47b5bae13cbbe677d7"
+    ], 
     "lib/everyhook.py": [
       "postgresql", 
       "static", 
@@ -613,16 +633,6 @@
       "postgresql", 
       "static", 
       "b33d9d4c0ae65b8b0084854fe1a22c468646699179fc7b25710b2b637dc7b1ba"
-    ], 
-    "lib/pg_settings_9.1.json": [
-      "postgresql", 
-      "static", 
-      "cf8d3deb211c752dd747f19305399a0a27863a013a78dbd417c51dec818fd6d4"
-    ], 
-    "lib/pg_settings_9.2.json": [
-      "postgresql", 
-      "static", 
-      "aa4b49cb48f3ae388bc685c31ddb7f6befc55e74baa9317f80eb117cec7d03a2"
     ], 
     "lib/pg_settings_9.3.json": [
       "postgresql", 
@@ -737,7 +747,7 @@
     "metadata.yaml": [
       "postgresql", 
       "dynamic", 
-      "5a5957072c4e9acb7b91dda5ced4c71fcb5ed030278e516790459b7d66746c06"
+      "32869068bfbac6cafd5152c26db7844944f7d54cb5d25cedab7b86736f8e0af2"
     ], 
     "reactive/__init__.py": [
       "postgresql", 
@@ -767,17 +777,17 @@
     "reactive/postgresql/bsbstorage.py": [
       "postgresql", 
       "static", 
-      "cb79a7fc0ccd693df9ebca94dda8f3da77c06cd6679770db6ef38eb81bb434e5"
+      "218001ad89a74a1c97542db4388fc9327e87156435b51674537700bd387ce420"
     ], 
     "reactive/postgresql/client.py": [
       "postgresql", 
       "static", 
-      "33db402995d51a6b6fbb9114f30c5b3e93b04b04d8013bd9daf7db8a3019a92f"
+      "57394922a9dd114fa00575b9614fd9ad104648f2ceb4943601d6a1f5e5c39baf"
     ], 
     "reactive/postgresql/helpers.py": [
       "postgresql", 
       "static", 
-      "cf3e067d7746b566bf80ee081709e49b3f7206fbe3c402e4396e5c721d8c2de6"
+      "f5bcba358e542b44c5e1a3a789a1cdae0517771d6dc8c002da27a53025d79d44"
     ], 
     "reactive/postgresql/metrics.py": [
       "postgresql", 
@@ -787,27 +797,27 @@
     "reactive/postgresql/nagios.py": [
       "postgresql", 
       "static", 
-      "c143a138c463fb9cf2540c1039d0db4aa722debe4a870365a22f615c2b3e4482"
+      "deceeca49312748e25586fa0851e39c1d11a33e6f3ee67e912f455db393978cc"
     ], 
     "reactive/postgresql/postgresql.py": [
       "postgresql", 
       "static", 
-      "07a075b92affebd0f227136ced36e5ea6240c894de543a1cf6abf7925e16a648"
+      "7c9973be71415edd1609f5018407956281d9af6ce0c6f2cdedeb459a0720f184"
     ], 
     "reactive/postgresql/preflight.py": [
       "postgresql", 
       "static", 
-      "83c057d2942ab21053c9192e07bb7bc83ab069d18e0354e95bf2379ef56ef337"
+      "b8fcf650c060b015fe684c4333cc5835a2167ece328968a836ced58b2120d95d"
     ], 
     "reactive/postgresql/replication.py": [
       "postgresql", 
       "static", 
-      "8e6411fb6c8e3851fa529b624640a1d98fdc2241e881a843923418559287e258"
+      "32bc9565bb0fbc45be398b1161c32eec51dd8be5c70d82b73b7b0fd4b0392f08"
     ], 
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "5f13799a1a49a8d55edc620cf08d13c2c181e1fe1078b197ee2ad2d5516cbcc4"
+      "6d29d938af0661bdd29b17ac5362732325f288a06bd3204cb129e3b0e0dde28a"
     ], 
     "reactive/postgresql/storage.py": [
       "postgresql", 
@@ -822,7 +832,7 @@
     "reactive/postgresql/upgrade.py": [
       "postgresql", 
       "static", 
-      "b17288705c3075e18340822a64ccd5aea50ca2e108f10ecaf5b1f9aa20be2b0f"
+      "7d6da6bf41d602662629992d9809c115be8f4b5609d716a479c5fc80add4619e"
     ], 
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
@@ -887,7 +897,7 @@
     "testing/amuletfixture.py": [
       "postgresql", 
       "static", 
-      "f1c3cf2423adc9e6a1fe55844579a9edb1eeee0e4e68fb9e269a057dbb26469a"
+      "3d2a24f59f553c9af4d15c97bcc19f9bb0b6ac3cf0257fe31ed3c8314a5bb25b"
     ], 
     "tests/conftest.py": [
       "postgresql", 
@@ -897,7 +907,7 @@
     "tests/test_integration.py": [
       "postgresql", 
       "static", 
-      "58c9305605fdb94ad9933c54453f453839a0fbb6b9bd770f029ef09b6decd093"
+      "84e989fbd029cea467feb8986ac5a78abc45cc0e1b980a10ee352cad0d02b7eb"
     ], 
     "tests/tests.yaml": [
       "postgresql", 
@@ -907,22 +917,22 @@
     "tox.ini": [
       "postgresql", 
       "static", 
-      "6deb1f36c476cb872c521e26fa2df643647d3aa92631edd5e3f9a72562b31788"
+      "11fccc686d487c08a8b41a9f60e172fd83cb2c9e2a160767adc67b1ff4a3ce34"
     ], 
     "unit_tests/test_pg_hba_conf.py": [
       "postgresql", 
       "static", 
-      "4b329cbbdd90c27e99ba2521a2403453836a98eca3a2acda20c021ddba69ae27"
+      "83e2d181ee4a634b260bf5650074e60870aeb691e80e1eeddd873dbd5d3f16bf"
     ], 
     "unit_tests/test_postgresql.py": [
       "postgresql", 
       "static", 
-      "cf42e17660498f46345801303e6af6a1722b01eae39a5cd80fb794e13d1977f1"
+      "adc611c072e0e64e6306b9415ad5051714ad2e02d4006a431385605cb84bf328"
     ], 
-    "wheelhouse/Jinja2-2.9.4.tar.gz": [
+    "wheelhouse/Jinja2-2.9.5.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "aab8d8ca9f45624f1e77f2844bf3c144d180e97da8824c2a6d7552ad039b5442"
+      "702a24d992f856fa8d5a7a36db6128198d0c21e1da34448ca236c42e92384825"
     ], 
     "wheelhouse/MarkupSafe-0.23.tar.gz": [
       "layer:basic", 
@@ -939,25 +949,25 @@
       "dynamic", 
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ], 
-    "wheelhouse/charmhelpers-0.10.0.tar.gz": [
+    "wheelhouse/charmhelpers-0.12.0.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "4d2ae29bdc925d3cf9be8d50d85e32a6b65e5b718bd383bd4899769b288ed512"
+      "4a54cfadd3b69cbf9d96033c2e7daa25ff2c439e91372f6f209e443e5430b73e"
     ], 
     "wheelhouse/charms.reactive-0.4.5.tar.gz": [
       "layer:basic", 
       "dynamic", 
       "b2a475aff349a1c6532de0f9b4df5ee456b97a1e1755695afd8747dbc51bb710"
     ], 
-    "wheelhouse/netaddr-0.7.18.tar.gz": [
+    "wheelhouse/netaddr-0.7.19.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "a1f5c9fcf75ac2579b9995c843dade33009543c04f218ff7c007b3c81695bd19"
+      "38aeec7cdd035081d3a4c306394b19d677623bf76fa0913f6695127c7753aefd"
     ], 
-    "wheelhouse/pip-8.1.2.tar.gz": [
+    "wheelhouse/pip-7.1.2.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "4d24b03ffa67638a3fa931c09fd9e0273ffa904e95ebebe7d4b1a54c93d7b732"
+      "ca047986f0528cfa975a14fb9f7f106271d4e0c3fe1ddced6c1db2e7ae57a477"
     ], 
     "wheelhouse/pyaml-16.12.2.tar.gz": [
       "layer:basic", 

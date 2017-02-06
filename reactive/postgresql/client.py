@@ -1,4 +1,4 @@
-# Copyright 2015 Canonical Ltd.
+# Copyright 2015-2017 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -13,13 +13,12 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-import uuid
-
-from charmhelpers import context
 from charmhelpers.core import hookenv, host
 from charms import reactive
 from charms.reactive import not_unless, when, when_not
 
+import context
+from reactive.postgresql import helpers
 from reactive.postgresql import replication
 from reactive.postgresql import postgresql
 from relations.pgsql.requires import ConnectionString
@@ -222,7 +221,7 @@ def db_relation_common(rel):
 
 def relinfo_to_cs(relinfo):
     """Generate a ConnectionString from :class:``context.RelationInfo``"""
-    if not relinfo:
+    if relinfo is None:
         return None
     d = dict(host=relinfo.get('host'),
              port=relinfo.get('port'),
@@ -235,7 +234,7 @@ def relinfo_to_cs(relinfo):
 
 
 def ping_standbys():
-    context.Relations().peer.local['ping'] = str(uuid.uuid4())
+    helpers.ping_peers()
 
 
 @not_unless('postgresql.replication.is_primary')

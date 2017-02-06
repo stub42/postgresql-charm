@@ -60,8 +60,8 @@
     "default": ""
     "type": "string"
     "description": "Version of PostgreSQL that we want to install. Supported versions\
-      \ are \"9.1\", \"9.2\", \"9.3\", \"9.4\" & \"9.5\". The default version for\
-      \ the deployed Ubuntu release is used when the version is unspecified.\n"
+      \ are \"9.3\", \"9.4\", \"9.5\" and \"9.6\". The default version for the deployed\
+      \ Ubuntu release is used when the version is unspecified.\n"
   "extra_pg_conf":
     "default": |
       # Additional service specific postgresql.conf settings.

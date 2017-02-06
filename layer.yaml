@@ -15,8 +15,6 @@
     "full_version": !!bool "false"
 "includes":
 - "layer:basic"
-- "layer:basic"
-- "layer:basic"
 - "layer:apt"
 - "layer:leadership"
 - "layer:coordinator"

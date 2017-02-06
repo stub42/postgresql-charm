@@ -1,4 +1,4 @@
-# Copyright 2011-2016 Canonical Ltd.
+# Copyright 2011-2017 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -21,21 +21,20 @@ import time
 
 import yaml
 
-from charmhelpers import context
 from charmhelpers.core import hookenv, host, sysctl, templating, unitdata
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charms import apt, coordinator, reactive
 from charms.reactive import hook, when, when_not
 
-from reactive.workloadstatus import status_set
+import context
+from everyhook import everyhook
 
+from reactive.workloadstatus import status_set
 from reactive.postgresql import helpers
 from reactive.postgresql import nagios
 from reactive.postgresql import postgresql
 from reactive.postgresql import replication
 from reactive.postgresql import wal_e
-
-from everyhook import everyhook
 
 
 @hook('install')
@@ -80,8 +79,10 @@ def main():
 
 def log_states():
     '''Log active states to aid debugging'''
+    blacklist = ['config.', 'apt.']
     for state in sorted(reactive.helpers.get_states().keys()):
-        hookenv.log('Reactive state: {}'.format(state), DEBUG)
+        if not any(map(state.startswith, blacklist)):
+            hookenv.log('Reactive state: {}'.format(state), DEBUG)
 
 
 def emit_deprecated_option_warnings():
@@ -263,7 +264,7 @@ def update_pg_hba_conf():
         reactive.set_state('postgresql.cluster.needs_reload')
 
 
-def generate_pg_hba_conf(pg_hba, config, rels):
+def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
     '''Update the pg_hba.conf file (host based authentication).'''
     rules = []  # The ordered list, as tuples.
 
@@ -287,9 +288,12 @@ def generate_pg_hba_conf(pg_hba, config, rels):
     add('local', 'all', nagios.nagios_username(), 'password')
     add('local', 'all', 'all', 'peer')
 
+    if _peer_rel is None:
+        _peer_rel = helpers.get_peer_relation()
+
     # Peers need replication access as the charm replication user.
-    if rels.peer:
-        for peer, relinfo in rels.peer.items():
+    if _peer_rel:
+        for peer, relinfo in _peer_rel.items():
             if 'private-address' not in relinfo:
                 continue  # Other end not yet provisioned?
             addr = postgresql.addr_to_range(relinfo['private-address'])
@@ -577,7 +581,7 @@ def ensure_viable_postgresql_conf(opts):
     rels = context.Relations()
 
     # Number of standby units - count peers and 'master' relations.
-    num_standbys = len(rels.peer or {})
+    num_standbys = len(helpers.get_peer_relation() or {})
     for rel in rels['master'].values():
         num_standbys += len(rel)
 
@@ -835,6 +839,7 @@ def open_ports(old_port, new_port):
 @when('postgresql.replication.has_master')
 @when_not('postgresql.cluster.needs_restart')
 @when_not('postgresql.cluster.needs_reload')
+@when_not('postgresql.replication.switchover')
 def set_active():
     if postgresql.is_running():
         if replication.is_master():

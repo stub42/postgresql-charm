@@ -12,9 +12,9 @@ else:
 
 if __name__ == '__main__':
     setup(name='interface-pgsql',
-        version='1.0.0',
-        author='Stuart Bishop',
-        author_email='stuart.bishop@canonical.com',
-        license='GPL3',
-        py_modules=['requires'],
-        install_requires=reqs)
+          version='2.0.0',
+          author='Stuart Bishop',
+          author_email='stuart.bishop@canonical.com',
+          license='GPL3',
+          py_modules=['requires'],
+          install_requires=reqs)
