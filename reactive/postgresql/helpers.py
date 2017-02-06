@@ -58,6 +58,11 @@ def write(path, content, mode=0o640, user='root', group='root'):
             shutil.chown(f.name, user, group)
             os.chmod(f.name, mode)
             shutil.move(f.name, path)
+            # shutil.move fails to preserve ownership if crossing
+            # filesystem bounaries, so reset the ownership here.
+            # We also do it above to remove the race condition for
+            # the normal case.
+            shutil.chown(path, user, group)
         finally:
             if os.path.exists(f.name):
                 os.unlink(f.name)
