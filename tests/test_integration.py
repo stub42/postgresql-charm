@@ -45,30 +45,29 @@ CLIENT_CHARMDIR = os.path.abspath(os.path.join(ROOT, 'lib', 'pgclient'))
 assert os.path.isdir(CLIENT_CHARMDIR)
 
 
-def skip_if_swift_is_unavailable(f):
+def has_swift():
     os_keys = set(['OS_TENANT_NAME', 'OS_AUTH_URL',
-                   'OS_USERNAME', 'OS_PASSWORD'])
+                    'OS_USERNAME', 'OS_PASSWORD'])
     for os_key in os_keys:
         if os_key not in os.environ:
-            return unittest.skip('Swift is unavailable - '
-                                 '{} envvar is unset'.format(os_key))
-    return f
+            return False
+    return True
 
 
-def skip_if_s3_is_unavailable(f):
+def has_s3():
     os_keys = set(['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'])
     for os_key in os_keys:
         if os_key not in os.environ:
-            return unittest.skip('S3 is unavailable')
-    return f
+            return False
+    return True
 
 
-def skip_if_wabs_is_unavailable(f):
+def has_wabs():
     os_keys = set(['WABS_ACCOUNT_NAME', 'WABS_ACCESS_KEY'])
     for os_key in os_keys:
         if os_key not in os.environ:
-            return unittest.skip('WABS is unavailable')
-    return f
+            return False
+    return True
 
 
 class PGBaseTestCase(object):
@@ -445,7 +444,6 @@ class PGMultiBaseTestCase(PGBaseTestCase):
     def test_replication(self):
         self._replication_test()
 
-    # @unittest.skip('Bug #1511659')
     def test_failover(self):
         # Destroy the master in a stable environment.
         self.deployment.add_unit('postgresql')
@@ -488,7 +486,7 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         self.assertEqual(self.master, new_master)
         self._replication_test()
 
-    @skip_if_swift_is_unavailable
+    @unittest.skipUnless(has_swift(), 'Swift storage is unavailable')
     def test_wal_e_swift_logshipping(self):
         now = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
         container = '_juju_pg_tests'

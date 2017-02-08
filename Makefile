@@ -1,5 +1,5 @@
 CHARM_DIR := $(shell pwd)
-SERIES := $(shell juju get-environment default-series 2> /dev/null | juju get-model-config default-series 2> /dev/null | echo xenial)
+export SERIES := $(shell juju get-environment default-series 2> /dev/null | juju get-model-config default-series 2> /dev/null | echo xenial)
 HOST_SERIES := $(shell lsb_release -sc)
 JUJU := juju
 

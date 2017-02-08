@@ -1,4 +1,4 @@
-# Copyright 2015 Canonical Ltd.
+# Copyright 2015-2017 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -22,9 +22,11 @@ from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import ERROR
 from charms import apt, reactive
 from charms.reactive import hook, when, when_not
+from charms.layer import snap
 
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
+from reactive.workloadstatus import status_set
 
 
 @hook('config-changed')
@@ -37,13 +39,13 @@ def main():
 
 
 @when('postgresql.wal_e.enabled')
-@when_not('apt.installed.wal_e')
+@when_not('snap.installed.wal-e')
 def install():
-    # WAL-E is currently only available from a PPA, ppa:stub/pgcharm.
-    # This charm and this PPA are maintained by the same person.
-    # Ensure that this PPA or another containing the 'wal-e' package
-    # is included as an install_source.
-    apt.queue_install(['daemontools', 'wal-e'])
+    # Install WAL-E via snap package, currently attached as a charm
+    # resource due to the necessary use of classic mode. Upload
+    # to the snap store once they support classic snaps.
+    status_set(None, 'Installing wal-e snap')
+    snap.install('wal-e', classic=True, channel='beta')
 
 
 def wal_e_env_dir():
@@ -52,7 +54,7 @@ def wal_e_env_dir():
 
 
 @when('postgresql.cluster.created')
-@when('apt.installed.daemontools')
+@when('snap.installed.wal-e')
 @when_not('postgresql.wal_e.configured')
 def update_wal_e_env_dir():
     '''Regenerate the envdir(1) environment used to drive WAL-E.
@@ -120,31 +122,32 @@ def update_wal_e_env_dir():
 
 @when('postgresql.wal_e.swift')
 @when('postgresql.wal_e.configured')
-@when('apt.installed.daemontools')
+@when('snap.installed.wal-e')
 def ensure_swift_container():
     uri = hookenv.config().get('wal_e_storage_uri', None).strip()
     if reactive.helpers.data_changed('postgresql.wal_e.uri', uri):
         container = urlparse(uri).netloc
         hookenv.log('Creating Swift container {}'.format(container))
-        cmd = ['envdir', wal_e_env_dir(), 'swift', 'post', container]
+        cmd = ['wal-e.envdir', wal_e_env_dir(),
+               'wal-e.swift', 'post', container]
         subprocess.check_call(cmd, universal_newlines=True)
 
 
 def wal_e_archive_command():
     '''Return the archive_command needed in postgresql.conf.'''
-    return 'envdir {} wal-e wal-push %p'.format(wal_e_env_dir())
+    return 'wal-e.envdir {} wal-e wal-push %p'.format(wal_e_env_dir())
 
 
 def wal_e_restore_command():
-    return 'envdir {} wal-e wal-fetch "%f" "%p"'.format(wal_e_env_dir())
+    return 'wal-e.envdir {} wal-e wal-fetch "%f" "%p"'.format(wal_e_env_dir())
 
 
 def wal_e_backup_command():
-    return 'envdir {} wal-e backup-push {}'.format(wal_e_env_dir(),
-                                                   postgresql.data_dir())
+    return 'wal-e.envdir {} wal-e backup-push {}'.format(wal_e_env_dir(),
+                                                         postgresql.data_dir())
 
 
 def wal_e_prune_command():
     config = hookenv.config()
-    return ('envdir {} wal-e delete --confirm retain {}'
+    return ('wal-e.envdir {} wal-e delete --confirm retain {}'
             ''.format(wal_e_env_dir(), config['wal_e_backup_retention']))

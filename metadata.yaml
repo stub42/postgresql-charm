@@ -47,6 +47,11 @@
     "interface": "coordinator"
   "replication":
     "interface": "pgpeer"
+"resources":
+  "wal-e":
+    "type": "file"
+    "filename": "wal-e.snap"
+    "description": "WAL-E Snap Package"
 "storage":
   "pgdata":
     "type": "filesystem"

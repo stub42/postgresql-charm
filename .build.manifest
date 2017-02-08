@@ -2,6 +2,7 @@
   "layers": [
     "layer:basic", 
     "layer:apt", 
+    "layer:snap", 
     "layer:leadership", 
     "layer:coordinator", 
     "postgresql", 
@@ -27,12 +28,12 @@
     "Makefile": [
       "postgresql", 
       "static", 
-      "73aa44d5137450a1626af535139246c18b115b8bee3547ea4c5ae04c4b2060ca"
+      "4fdbb829dddf0b9ecbb96df54d6310d04cb893c91349a980dbd4484509dc6a53"
     ], 
     "README.md": [
       "postgresql", 
       "static", 
-      "1b65f8d875b755cb1193007a20ba5b42d9294d21f2d5008160bcc18a17d2effa"
+      "a8ab14a9eba24b9ffa1a3051f3f17cc5a38eba3b2239c1688bfa9690965f65ba"
     ], 
     "actions.yaml": [
       "postgresql", 
@@ -77,7 +78,7 @@
     "config.yaml": [
       "postgresql", 
       "dynamic", 
-      "5fd98b81f2765e55e631cd3c38153f1211332023d060f63a61e798f11c91e0b6"
+      "d26810b6360d7fb6dbebdae88821ce3a19ecbb8ef0e1dbec1e4ad622fdb74d78"
     ], 
     "copyright": [
       "postgresql", 
@@ -577,7 +578,7 @@
     "layer.yaml": [
       "postgresql", 
       "dynamic", 
-      "bb5bafbb7270fc2e83bfa576fa9f8c29a114ef62c444c5eac6cbbb964930a322"
+      "9546a7d7269ea49a237acec652ea839fdd21210526d726e8374b3bca434c4f18"
     ], 
     "lib/cache_settings.py": [
       "postgresql", 
@@ -614,10 +615,15 @@
       "static", 
       "c0eb4c90e93a14f04d851f78bc6592e093226321fbe328125958633397aed014"
     ], 
+    "lib/charms/layer/snap.py": [
+      "layer:snap", 
+      "static", 
+      "55972328ebe2c4b582ae8d92c64fe50f31e056be7652769f94c4ec590003bbb8"
+    ], 
     "lib/charms/leadership.py": [
       "layer:leadership", 
       "static", 
-      "12b52fa768c3e9072556ac6f46f68129dc762f89eb806d8dee921c86497f6707"
+      "20ffcbbc08147506759726ad51567420659ffb8a2e0121079240b8706658e332"
     ], 
     "lib/context.py": [
       "postgresql", 
@@ -747,7 +753,7 @@
     "metadata.yaml": [
       "postgresql", 
       "dynamic", 
-      "32869068bfbac6cafd5152c26db7844944f7d54cb5d25cedab7b86736f8e0af2"
+      "04fd1ee4bf87f4e2e46f3c4e7201293890e5b5682d6a7e834685d0fcf61ab551"
     ], 
     "reactive/__init__.py": [
       "postgresql", 
@@ -837,7 +843,12 @@
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
       "static", 
-      "bcd034ef3bd8158d96ad6e7a53061f10d09607429f3377539d579201ca63b176"
+      "db606f5cf1541f74da01d59305922b8cfa5dae6f9f80435f39d091e7548423f3"
+    ], 
+    "reactive/snap.py": [
+      "layer:snap", 
+      "static", 
+      "5a0ae05202702f0ffa9e06dadba8e92d0644d0aaf3f2bc636de295c8bcd1ee89"
     ], 
     "reactive/workloadstatus.py": [
       "postgresql", 
@@ -907,7 +918,7 @@
     "tests/test_integration.py": [
       "postgresql", 
       "static", 
-      "84e989fbd029cea467feb8986ac5a78abc45cc0e1b980a10ee352cad0d02b7eb"
+      "ca3d557f153937984413acb94136f0c4b630b14aa6d338966c597a1278250430"
     ], 
     "tests/tests.yaml": [
       "postgresql", 

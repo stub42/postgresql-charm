@@ -1,21 +1,24 @@
 "options":
-  "coordinator":
-    "class": "charms.coordinator.SimpleCoordinator"
-    "log_level": "debug"
   "basic":
     "packages":
+    - "squashfuse"
     - "python3-psycopg2"
     "use_venv": !!bool "false"
     "include_system_packages": !!bool "false"
-  "leadership": {}
+  "coordinator":
+    "class": "charms.coordinator.SimpleCoordinator"
+    "log_level": "debug"
   "postgresql": {}
   "apt":
     "version_package": ""
     "packages": []
     "full_version": !!bool "false"
+  "leadership": {}
+  "snap": {}
 "includes":
 - "layer:basic"
 - "layer:apt"
+- "layer:snap"
 - "layer:leadership"
 - "layer:coordinator"
 - "interface:pgsql"
