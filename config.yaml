@@ -14,8 +14,7 @@
       \ that can be added directly to sources.list(5), or in the form ppa:<user>/<ppa-name>\
       \ for adding Personal Package Archives, or a distribution component to enable.\n"
     "type": "string"
-    "default": |
-      - ppa:postgresql-charmers/charm
+    "default": ""
   "install_keys":
     "description": "List of signing keys for install_sources package sources, per\
       \ charmhelpers standard format (a yaml list of strings encoded as a string).\
@@ -25,8 +24,12 @@
       \ key is used that will already be installed on the machine, and for PPA sources\
       \ where the package signing key is securely retrieved from Launchpad.\n"
     "type": "string"
-    "default": |
-      - null
+    "default": ""
+  "snap_proxy":
+    "description": "HTTP/HTTPS web proxy for Snappy to use when accessing the snap\
+      \ store.\n"
+    "type": "string"
+    "default": ""
   "admin_addresses":
     "default": ""
     "type": "string"
@@ -162,7 +165,6 @@
     "type": "string"
     "default": ""
     "description": |
-      EXPERIMENTAL.
       Specify storage to be used by WAL-E. Every PostgreSQL service must use
       a unique URI. Backups will be unrecoverable if it is not unique. The
       URI's scheme must be one of 'swift' (OpenStack Swift), 's3' (Amazon AWS)
@@ -178,16 +180,14 @@
   "wal_e_backup_schedule":
     "type": "string"
     "default": "13 0 * * *"
-    "description": "EXPERIMENTAL. Cron-formatted schedule for WAL-E database backups.\
-      \ If wal_e_backup_schedule is unset, WAL files will never be removed from WAL-E\
-      \ storage.\n"
+    "description": "Cron-formatted schedule for WAL-E database backups. If wal_e_backup_schedule\
+      \ is unset, WAL files will never be removed from WAL-E storage.\n"
   "wal_e_backup_retention":
     "type": "int"
     "default": !!int "2"
-    "description": "EXPERIMENTAL. Number of recent base backups and WAL files to retain.\
-      \ You need enough space for this many backups plus one more, as an old backup\
-      \ will only be removed after a new one has been successfully made to replace\
-      \ it.\n"
+    "description": "Number of recent base backups and WAL files to retain. You need\
+      \ enough space for this many backups plus one more, as an old backup will only\
+      \ be removed after a new one has been successfully made to replace it.\n"
   "streaming_replication":
     "type": "boolean"
     "default": !!bool "true"
@@ -197,19 +197,19 @@
   "os_username":
     "type": "string"
     "default": ""
-    "description": "EXPERIMENTAL. OpenStack Swift username."
+    "description": "OpenStack Swift username."
   "os_password":
     "type": "string"
     "default": ""
-    "description": "EXPERIMENTAL. OpenStack Swift password."
+    "description": "OpenStack Swift password."
   "os_auth_url":
     "type": "string"
     "default": ""
-    "description": "EXPERIMENTAL. OpenStack Swift authentication URL."
+    "description": "OpenStack Swift authentication URL."
   "os_tenant_name":
     "type": "string"
     "default": ""
-    "description": "EXPERIMENTAL. OpenStack Swift tenant name."
+    "description": "OpenStack Swift tenant name."
   "aws_access_key_id":
     "type": "string"
     "default": ""

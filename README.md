@@ -165,11 +165,15 @@ and recreated after the PITR recovery.
 # Point In Time Recovery
 
 The PostgreSQL charm has support for log shipping and point in time
-recovery. This feature uses the wal-e[2] tool, which will be
-installed from the Launchpad PPA ppa:stub/pgcharm. This feature
-requires access to either Amazon S3, Microsoft Azure Block Storage or
-Swift. This feature is experimental because it has only been tested with
-Swift. The charm can be configured to perform regular filesystem backups
+recovery using the wal-e[2] tool. This feature requires access to either
+Amazon S3 (or compatible storage), Microsoft Azure Block Storage or Swift.
+GCE support is available in wal-e, but not yet enabled in the charm.
+
+/!\ It has only been tested with Swift, and other cloud storage should be
+considered experimental. Please let me know if it works for you with
+other providers.
+
+The charm can be configured to perform regular filesystem backups
 and ship WAL files to the object store. Hot standbys will make use of
 the archived WAL files, allowing them to resync after extended netsplits
 or even let you turn off streaming replication entirely.
@@ -193,12 +197,6 @@ and set the service configuration settings similar to the following:
         os_password: my_swift_password
         os_auth_url: https://keystone.auth.url.example.com:8080/v2/
         os_tenant_name: my_tenant_name
-        install_sources: |
-            - ppa:stub/pgcharm
-            - cloud:icehouse
-        install_keys: |
-            - null
-            - null
 
 
 # Development and Contributions
