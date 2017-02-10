@@ -28,7 +28,7 @@
     "Makefile": [
       "postgresql", 
       "static", 
-      "4fdbb829dddf0b9ecbb96df54d6310d04cb893c91349a980dbd4484509dc6a53"
+      "86fdc7ef1ac062cb26abb009641ddbd8577e3178dd4c81867df42202624ee69a"
     ], 
     "README.md": [
       "postgresql", 
@@ -828,7 +828,7 @@
     "reactive/postgresql/storage.py": [
       "postgresql", 
       "static", 
-      "f240a6a64a1a1f4d3e73ab46eb30d30c8e6f980aaea7ea7edcef75670ebc994c"
+      "3e4486fc2929d6b9335b275e472264a6e439a159b9c8f23398898e7812fc2bd3"
     ], 
     "reactive/postgresql/syslog.py": [
       "postgresql", 
