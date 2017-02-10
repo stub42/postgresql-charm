@@ -81,6 +81,7 @@ def detaching():
 
 
 @when('postgresql.storage.pgdata.attached')
+@when('postgresql.cluster.created')
 @when('coordinator.granted.restart')
 @when('apt.installed.rsync')
 @when_not('postgresql.storage.pgdata.migrated')
