@@ -1,13 +1,12 @@
 "options":
-  "basic":
-    "packages":
-    - "squashfuse"
-    - "python3-psycopg2"
-    "use_venv": !!bool "false"
-    "include_system_packages": !!bool "false"
   "coordinator":
     "class": "charms.coordinator.SimpleCoordinator"
     "log_level": "debug"
+  "basic":
+    "packages":
+    - "python3-psycopg2"
+    "use_venv": !!bool "false"
+    "include_system_packages": !!bool "false"
   "postgresql": {}
   "apt":
     "version_package": ""
