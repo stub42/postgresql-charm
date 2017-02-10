@@ -99,7 +99,7 @@ publish-dev: build-dev
 	    && export rev=`charm push . $(CHARM_STORE_URL) 2>&1 \
 		| tee /dev/tty | grep url: | cut -f 2 -d ' '` \
 	    && git tag -f -m "$$rev" `echo $$rev | tr -s '~:/' -` \
-	    && charm release -c development $$rev
+	    && charm release -c edge $$rev --resource wal-e-0
 	git push -f --tags upstream $(LAYER_BRANCH) $(DEVEL_BRANCH)
 	git push -f --tags github $(LAYER_BRANCH) $(DEVEL_BRANCH)
 
@@ -117,7 +117,7 @@ publish-stable:
 		| tee /dev/tty | grep url: | cut -f 2 -d ' '` \
 	    && git tag -f -m "$$rev" `echo $$rev | tr -s '~:/' -` \
 	    && git push -f --tags .. $(STABLE_BRANCH) \
-	    && charm release -c stable $$rev
+	    && charm release -c stable $$rev --resource wal-e-0
 	rm -rf .tmp-repo
 	git push -f --tags upstream master built
 	git push -f --tags github master built
