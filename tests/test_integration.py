@@ -47,7 +47,7 @@ assert os.path.isdir(CLIENT_CHARMDIR)
 
 def has_swift():
     os_keys = set(['OS_TENANT_NAME', 'OS_AUTH_URL',
-                    'OS_USERNAME', 'OS_PASSWORD'])
+                   'OS_USERNAME', 'OS_PASSWORD'])
     for os_key in os_keys:
         if os_key not in os.environ:
             return False

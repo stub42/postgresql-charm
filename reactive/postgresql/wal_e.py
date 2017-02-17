@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import ERROR
-from charms import apt, reactive
+from charms import reactive
 from charms.reactive import hook, when, when_not
 from charms.layer import snap
 
@@ -41,9 +41,7 @@ def main():
 @when('postgresql.wal_e.enabled')
 @when_not('snap.installed.wal-e')
 def install():
-    # Install WAL-E via snap package, currently attached as a charm
-    # resource due to the necessary use of classic mode. Upload
-    # to the snap store once they support classic snaps.
+    # Install WAL-E via snap package
     status_set(None, 'Installing wal-e snap')
     snap.install('wal-e', classic=True, channel='beta')
 
@@ -128,26 +126,29 @@ def ensure_swift_container():
     if reactive.helpers.data_changed('postgresql.wal_e.uri', uri):
         container = urlparse(uri).netloc
         hookenv.log('Creating Swift container {}'.format(container))
-        cmd = ['wal-e.envdir', wal_e_env_dir(),
-               'wal-e.swift', 'post', container]
+        cmd = ['/snap/bin/wal-e.envdir', wal_e_env_dir(),
+               '/snap/bin/wal-e.swift', 'post', container]
         subprocess.check_call(cmd, universal_newlines=True)
 
 
 def wal_e_archive_command():
     '''Return the archive_command needed in postgresql.conf.'''
-    return 'wal-e.envdir {} wal-e wal-push %p'.format(wal_e_env_dir())
+    return '/snap/bin/wal-e.envdir {} /snap/bin/wal-e wal-push %p'.format(
+        wal_e_env_dir())
 
 
 def wal_e_restore_command():
-    return 'wal-e.envdir {} wal-e wal-fetch "%f" "%p"'.format(wal_e_env_dir())
+    return ('/snap/bin/wal-e.envdir {} /snap/bin/wal-e '
+            'wal-fetch "%f" "%p"'.format(wal_e_env_dir()))
 
 
 def wal_e_backup_command():
-    return 'wal-e.envdir {} wal-e backup-push {}'.format(wal_e_env_dir(),
-                                                         postgresql.data_dir())
+    return '/snap/bin/wal-e.envdir {} /snap/bin/wal-e backup-push {}'.format(
+        wal_e_env_dir(), postgresql.data_dir())
 
 
 def wal_e_prune_command():
     config = hookenv.config()
-    return ('wal-e.envdir {} wal-e delete --confirm retain {}'
+    return ('/snap/bin/wal-e.envdir {} /snap/bin/wal-e '
+            'delete --confirm retain {}'
             ''.format(wal_e_env_dir(), config['wal_e_backup_retention']))
