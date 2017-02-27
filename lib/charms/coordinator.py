@@ -105,6 +105,15 @@ class SimpleCoordinator(BaseCoordinator):
         '''Emit a message.'''
         log(msg, level)
 
+    def _save_state(self):
+        # If the leader aquired a lock, and now released it,
+        # there may be outstanding requests in the queue from other
+        # units. We need to grant them now, as we have no guarantee
+        # of another hook running on the leader for some time (until
+        # update-status).
+        self.handle()
+        super(SimpleCoordinator, self)._save_state()
+
 
 def _instantiate():
     default_name = 'charms.coordinator.SimpleCoordinator'

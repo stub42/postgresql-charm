@@ -24,7 +24,7 @@ import yaml
 from charmhelpers.core import hookenv, host, sysctl, templating, unitdata
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charms import apt, coordinator, reactive
-from charms.reactive import hook, when, when_not
+from charms.reactive import hook, when, when_any, when_not
 
 import context
 from everyhook import everyhook
@@ -203,7 +203,8 @@ def create_cluster():
 
 
 @when('postgresql.cluster.created')
-@when('postgresql.replication.has_master')
+@when_any('postgresql.replication.has_master',
+          'postgresql.replication.failover')
 @when_not('postgresql.cluster.configured')
 @when_not('postgresql.cluster.inhibited')
 def configure_cluster():
@@ -431,7 +432,8 @@ def stop():
 @when_not('postgresql.cluster.is_running')
 @when_not('postgresql.cluster.destroyed')
 @when('postgresql.cluster.configured')
-@when('postgresql.replication.has_master')
+@when_any('postgresql.replication.has_master',
+          'postgresql.replication.failover')
 @when('postgresql.replication.cloned')
 @when('postgresql.cluster.kernel_settings.set')
 def start():

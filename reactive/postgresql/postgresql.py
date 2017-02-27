@@ -24,7 +24,9 @@ import json
 import os.path
 import re
 import subprocess
+import sys
 from textwrap import dedent
+import time
 
 import psycopg2
 import psycopg2.extensions
@@ -198,6 +200,10 @@ def recovery_conf_path():
 
 def pg_ctl_path():
     return '/usr/lib/postgresql/{}/bin/pg_ctl'.format(version())
+
+
+def pg_controldata_path():
+    return '/usr/lib/postgresql/{}/bin/pg_controldata'.format(version())
 
 
 def postgres_path():
@@ -509,7 +515,14 @@ def stop():
 
 def emit_pg_log(lines=100):
     '''Dump the end of the PostgreSQL log file to stdout'''
-    subprocess.call(['tail', '-{:d}'.format(lines), pg_log_path()])
+    rec_conf = recovery_conf_path()
+    if os.path.exists(rec_conf):
+        print(open(rec_conf, 'r').read())
+        sys.stdout.flush()
+    subprocess.call([pg_controldata_path(), '-D', data_dir()],
+                    universal_newlines=True)
+    subprocess.call(['tail', '-{:d}'.format(lines), pg_log_path()],
+                    universal_newlines=True)
 
 
 def reload_config():
@@ -679,6 +692,31 @@ def wal_received_offset(con):
     if is_in_recovery:
         return wal_location_to_bytes(xlog_received)
     return None
+
+
+def wal_replay_offset(con):
+    """How much WAL a hot standby has replayed.
+
+    Coverts PostgreSQL's pg_last_xlog_replay_location() to a number.
+    The higher the number, the more advanced in the timeline the unit
+    is.
+
+    This method waits until the replay location stops changing, and
+    should not be run against a standby connected to an active master
+    (ie. only during failover, after disconnecting from the doomed master)
+    """
+    cur = con.cursor()
+    prev_xlog_replayed = None
+    while True:
+        cur.execute('''SELECT pg_is_in_recovery(),
+                              pg_last_xlog_replay_location()''')
+        is_in_recovery, xlog_replayed = cur.fetchone()
+        assert is_in_recovery, 'Unit is not in recovery mode'
+        if xlog_replayed is not None and xlog_replayed == prev_xlog_replayed:
+            return wal_location_to_bytes(xlog_replayed)
+        prev_xlog_replayed = xlog_replayed
+        hookenv.log('WAL replay position {}'.format(xlog_replayed))
+        time.sleep(1.5)
 
 
 def wal_location_to_bytes(wal_location):

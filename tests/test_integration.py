@@ -40,7 +40,7 @@ sys.path.insert(3, os.path.join(ROOT, 'lib', 'pypi'))
 from testing.amuletfixture import AmuletFixture
 
 
-SERIES = os.environ.get('SERIES', 'trusty').strip()
+SERIES = os.environ.get('SERIES', 'xenial').strip()
 CLIENT_CHARMDIR = os.path.abspath(os.path.join(ROOT, 'lib', 'pgclient'))
 assert os.path.isdir(CLIENT_CHARMDIR)
 

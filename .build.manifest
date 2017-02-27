@@ -488,7 +488,7 @@
     "hooks/relations/pgsql/requires.py": [
       "interface:pgsql", 
       "static", 
-      "4e8b92d97399c9e3b2e1f1d2d785f6baaa71c3bd2ae0762131bdf80c006428bd"
+      "74e6723eb9d78019e908400115ae9bfffd83b4047c7d485223f03ab085c49f23"
     ], 
     "hooks/relations/pgsql/setup.py": [
       "interface:pgsql", 
@@ -590,6 +590,11 @@
       "static", 
       "4032724b98ed267185b12b8ec78dd9bcb0423ab1c89a6f0dad99397fd51159d9"
     ], 
+    "lib/charms/_coordinator.py": [
+      "layer:coordinator", 
+      "static", 
+      "1a1690ed5d6f43efd6868742b3a736350b1df95f4971adda3baaf3f1eb4739fa"
+    ], 
     "lib/charms/apt.py": [
       "layer:apt", 
       "static", 
@@ -598,7 +603,7 @@
     "lib/charms/coordinator.py": [
       "layer:coordinator", 
       "static", 
-      "0bbd2f3664f7f067bb037cda88fc67d18c57f37f7b246aa053578dfd8c3e2966"
+      "6dbacc87605be8efcbf19ec05341e4eb210327724495c79998a46947e034dbea"
     ], 
     "lib/charms/layer/__init__.py": [
       "layer:basic", 
@@ -618,7 +623,7 @@
     "lib/charms/layer/snap.py": [
       "layer:snap", 
       "static", 
-      "55972328ebe2c4b582ae8d92c64fe50f31e056be7652769f94c4ec590003bbb8"
+      "900e078131328c6c874190c7c31e2c34d8038b572515daf00b021288fb603802"
     ], 
     "lib/charms/leadership.py": [
       "layer:leadership", 
@@ -733,7 +738,7 @@
     "lib/pgdg.key": [
       "postgresql", 
       "static", 
-      "628a1e23fe2be9162b36326191b9cb618d6fc4949c333a97b906985e7249030d"
+      "c1e204a34a14c0f33d8f6949b3bae23ead4b6f3f04bba0b6d165b4efd4e159a8"
     ], 
     "lib/preflight.py": [
       "postgresql", 
@@ -808,7 +813,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql", 
       "static", 
-      "7c9973be71415edd1609f5018407956281d9af6ce0c6f2cdedeb459a0720f184"
+      "617fbca96b4bc4e362b507a7685ca8a2ffc1a1c44f0aa0aede8a6bafb165b6b6"
     ], 
     "reactive/postgresql/preflight.py": [
       "postgresql", 
@@ -818,12 +823,12 @@
     "reactive/postgresql/replication.py": [
       "postgresql", 
       "static", 
-      "32bc9565bb0fbc45be398b1161c32eec51dd8be5c70d82b73b7b0fd4b0392f08"
+      "2befa75794fd474ea71925d431dd9f913511952b2f8aa91c8a0a31933cfdcca8"
     ], 
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "6d29d938af0661bdd29b17ac5362732325f288a06bd3204cb129e3b0e0dde28a"
+      "bff29e9fde4a0d29e79e4f73c47765228b5733acc5907834d69a13aa28bc42f6"
     ], 
     "reactive/postgresql/storage.py": [
       "postgresql", 
@@ -908,7 +913,7 @@
     "testing/amuletfixture.py": [
       "postgresql", 
       "static", 
-      "3d2a24f59f553c9af4d15c97bcc19f9bb0b6ac3cf0257fe31ed3c8314a5bb25b"
+      "6f905f3dafacefba83b008f55a2ea36fbcd0e7b2d747ca58c889ddd5d97ba108"
     ], 
     "tests/conftest.py": [
       "postgresql", 
@@ -918,7 +923,7 @@
     "tests/test_integration.py": [
       "postgresql", 
       "static", 
-      "7ad96027c7db9dd09659cf361e16e3c7a6d8fe384dac844fb7191ceb2ce5ce47"
+      "14156fd09046594395238c83c06a900429b0644fe581abd09baa2788718d9e38"
     ], 
     "tests/tests.yaml": [
       "postgresql", 

@@ -149,6 +149,10 @@ class AmuletFixture(amulet.Deployment):
         cmd = ['timeout', str(timeout)] + cmd
         try:
             subprocess.check_output(cmd, universal_newlines=True)
+            # Twice, quick hack to ensure at least 30 seconds pass
+            # due to leadership election delays. If this works, update
+            # juju-wait.
+            subprocess.check_output(cmd, universal_newlines=True)
         except subprocess.CalledProcessError as x:
             print(x.output)
             raise
