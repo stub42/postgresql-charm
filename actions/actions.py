@@ -49,7 +49,8 @@ def replication_pause(params):
     cur = con.cursor()
     cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is True:
-        hookenv.action_fail('Already paused')
+        # Not a failure, per lp:1670613
+        hookenv.action_set(dict(result='Already paused'))
         return
     cur.execute('SELECT pg_xlog_replay_pause()')
     hookenv.action_set(dict(result='Paused'))
@@ -69,7 +70,8 @@ def replication_resume(params):
     cur = con.cursor()
     cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is False:
-        hookenv.action_fail('Already resumed')
+        # Not a failure, per lp:1670613
+        hookenv.action_set(dict(result='Already resumed'))
         return
     cur.execute('SELECT pg_xlog_replay_resume()')
     hookenv.action_set(dict(result='Resumed'))
