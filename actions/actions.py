@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import os.path
+import subprocess
 import sys
 import traceback
 
@@ -33,6 +34,7 @@ from charmhelpers.core import hookenv
 from charms import reactive
 
 from reactive.postgresql import postgresql
+from reactive.postgresql import wal_e
 
 
 def replication_pause(params):
@@ -77,6 +79,52 @@ def replication_resume(params):
     hookenv.action_set(dict(result='Resumed'))
 
 
+def wal_e_backup(params):
+    if not postgresql.is_primary():
+        hookenv.action_fail('Not a primary. Run this action on the master')
+        return
+
+    backup_cmd = wal_e.wal_e_backup_command()
+    if params['prune']:
+        prune_cmd = wal_e.wal_e_prune_command()
+    else:
+        prune_cmd = None
+
+    hookenv.action_set({"wal-e-backup-cmd": backup_cmd,
+                        "wal-e-prune-cmd": prune_cmd})
+
+    try:
+        hookenv.log('Running wal-e backup')
+        hookenv.log(backup_cmd)
+        out = subprocess.check_output('sudo -Hu postgres -- ' + backup_cmd,
+                                      stderr=subprocess.STDOUT,
+                                      shell=True, universal_newlines=True)
+        # hookenv.action_set({"backup-output": out,
+        #                     "backup-return-code": 0})
+    except subprocess.CalledProcessError as x:
+        hookenv.action_set({"backup-output": x.output,
+                            "backup-return-code": x.returncode})
+        hookenv.action_fail('Backup failed')
+        return
+
+    if prune_cmd is None:
+        return
+
+    try:
+        hookenv.log('Running wal-e prune')
+        hookenv.log(prune_cmd)
+        out = subprocess.check_output('sudo -Hu postgres -- ' + prune_cmd,
+                                      stderr=subprocess.STDOUT,
+                                      shell=True, universal_newlines=True)
+        # hookenv.action_set({"prune-output": out,
+        #                     "prune-return-code": 0})
+    except subprocess.CalledProcessError as x:
+        hookenv.action_set({"prune-output": x.output,
+                            "prune-return-code": x.returncode})
+        hookenv.action_fail('Backup succeeded, pruning failed')
+        return
+
+
 # Revisit this when actions are more mature. Per Bug #1483525, it seems
 # impossible to return filenames in our results.
 #
@@ -118,13 +166,18 @@ def main(argv):
             replication_pause(params)
         elif action == 'replication-resume':
             replication_resume(params)
+        elif action == 'wal-e-backup':
+            wal_e_backup(params)
         elif action == 'switchover':
             reactive_action('actions.switchover')
         else:
             hookenv.action_fail('Action {} not implemented'.format(action))
     except Exception:
         hookenv.action_fail('Unhandled exception')
-        hookenv.action_set(dict(traceback=traceback.format_exc()))
+        tb = traceback.format_exc()
+        hookenv.action_set(dict(traceback=tb))
+        hookenv.log('Unhandled exception in action {}'.format(action))
+        print(tb)
 
 
 if __name__ == '__main__':
