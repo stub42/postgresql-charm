@@ -26,6 +26,10 @@ wal-e-backup:
         Run the configured prune step if the backup completes successfully,
         the same as the regularly scheduled backup task.
 
+wal-e-list-backups:
+  description: >
+    List backups available for PITR and their metadata.
+
 # Revisit this when actions are more mature. Per Bug #1483525, it seems
 # impossible to return filenames in our results.
 # backup:

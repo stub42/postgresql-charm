@@ -14,6 +14,8 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import csv
+from io import StringIO
 import os.path
 import subprocess
 import sys
@@ -99,8 +101,8 @@ def wal_e_backup(params):
         out = subprocess.check_output('sudo -Hu postgres -- ' + backup_cmd,
                                       stderr=subprocess.STDOUT,
                                       shell=True, universal_newlines=True)
-        # hookenv.action_set({"backup-output": out,
-        #                     "backup-return-code": 0})
+        hookenv.action_set({"backup-output": out,
+                            "backup-return-code": 0})
     except subprocess.CalledProcessError as x:
         hookenv.action_set({"backup-output": x.output,
                             "backup-return-code": x.returncode})
@@ -116,13 +118,31 @@ def wal_e_backup(params):
         out = subprocess.check_output('sudo -Hu postgres -- ' + prune_cmd,
                                       stderr=subprocess.STDOUT,
                                       shell=True, universal_newlines=True)
-        # hookenv.action_set({"prune-output": out,
-        #                     "prune-return-code": 0})
+        hookenv.action_set({"prune-output": out,
+                            "prune-return-code": 0})
     except subprocess.CalledProcessError as x:
         hookenv.action_set({"prune-output": x.output,
                             "prune-return-code": x.returncode})
         hookenv.action_fail('Backup succeeded, pruning failed')
         return
+
+
+def wal_e_list_backups(params):
+    raw = wal_e.wal_e_run(['backup-list', '--detail'])
+    r = list(csv.reader(StringIO(raw), dialect='excel-tab'))
+    details = [{r[0][i]: r[j][i] for i in range(len(r[0]))}
+               for j in range(1, len(r))]
+
+    # Per Bug #1671791, we need to massage the results into a format
+    # that is acceptable to action-set restrictions while hopefully
+    # remaining usable.
+    m = {}
+    for detail in details:
+        detail_key = detail['name'].replace('_', '-')
+        for value_key, value in detail.items():
+            value_key = value_key.replace('_', '-')
+            m['{}.{}'.format(detail_key, value_key)] = value
+    hookenv.action_set(m)
 
 
 # Revisit this when actions are more mature. Per Bug #1483525, it seems
@@ -168,6 +188,8 @@ def main(argv):
             replication_resume(params)
         elif action == 'wal-e-backup':
             wal_e_backup(params)
+        elif action == 'wal-e-list-backups':
+            wal_e_list_backups(params)
         elif action == 'switchover':
             reactive_action('actions.switchover')
         else:

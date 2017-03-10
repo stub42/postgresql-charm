@@ -154,3 +154,19 @@ def wal_e_prune_command():
     return ('/snap/bin/wal-e.envdir {} /snap/bin/wal-e '
             'delete --confirm retain {}'
             ''.format(wal_e_env_dir(), config['wal_e_backup_retention']))
+
+
+def wal_e_run(args, timeout=None):
+    """Run a wal-e command.
+
+    Returns stdout output. On failure, raises CalledProcessError
+    with output on x.output and returncode on x.returncode. stderr goes
+    to stderr, and likely the juju logs.
+    """
+    config = hookenv.config()
+    cmd = ['/snap/bin/wal-e.envdir',
+           wal_e_env_dir(),
+           '/snap/bin/wal-e'] + args
+    # wal-e spits diagnostics to stderr, so leave them there for the juju logs.
+    return subprocess.check_output(cmd,
+                                   universal_newlines=True, timeout=timeout)
