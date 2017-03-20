@@ -469,7 +469,7 @@ STARTUP_TIMEOUT = 24 * 60 * 60
 SHUTDOWN_TIMEOUT = 5 * 60
 
 
-def start():
+def start(ignore_failure=False):
     try:
         subprocess.check_call(['pg_ctlcluster',
                                version(), 'main', 'start',
@@ -478,6 +478,8 @@ def start():
                                '--', '-w', '-t', str(STARTUP_TIMEOUT)],
                               universal_newlines=True)
     except subprocess.CalledProcessError as x:
+        if ignore_failure:
+            return
         if x.returncode == 2:
             return  # The server is already running.
         workloadstatus.status_set('blocked', 'PostgreSQL failed to start')

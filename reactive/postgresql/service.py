@@ -216,7 +216,6 @@ def configure_cluster():
         update_postgresql_conf()
         reactive.set_state('postgresql.cluster.configured')
         hookenv.log('PostgreSQL has been configured')
-        # Use @when_file_changed for this when Issue #44 is resolved.
         if reactive.helpers.is_state('postgresql.cluster.is_running'):
             postgresql_conf_changed()
     except InvalidPgConfSetting as x:
