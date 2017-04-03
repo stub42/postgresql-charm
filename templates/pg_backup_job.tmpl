@@ -84,13 +84,13 @@ nice -n 19 ${SCRIPTS}/dump-pg-db --dir=${DUMP_DIR} --compression=postgres ${DATA
 # - Delete anything beyond $FILES count of each backup
 
 # get name/size of the globals dump from $FILES runs ago
-THRESHOLD_GLOBALS_DUMP=$(find ${DUMP_DIR} -not \( -path ${DUMP_DIR}/lost+found -prune \) -type f -name 'globals.*.sql' | sort | tail -${FILES}| head -1)
+THRESHOLD_GLOBALS_DUMP=$(find ${DUMP_DIR}/ -not \( -path ${DUMP_DIR}/lost+found -prune \) -type f -name 'globals.*.sql' | sort | tail -${FILES}| head -1)
 TIME_NOW=$(date +%s)
 TIME_DUMP=$(date +%s -r $THRESHOLD_GLOBALS_DUMP)
 THRESHOLD_AGE=$(($TIME_NOW - $TIME_DUMP))
 THRESHOLD_MINS=$(($THRESHOLD_AGE / 60))
 THRESHOLD_MINS=$(($THRESHOLD_MINS + 1)) # always round up
-find ${DUMP_DIR} -not \( -path ${DUMP_DIR}/lost+found -prune \) -type f -mmin +${THRESHOLD_MINS} -print0 | xargs -0 rm -f
+find ${DUMP_DIR}/ -not \( -path ${DUMP_DIR}/lost+found -prune \) -type f -mmin +${THRESHOLD_MINS} -print0 | xargs -0 rm -f
 
 echo backups completed $(date)
 
