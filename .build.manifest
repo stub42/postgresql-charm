@@ -623,7 +623,7 @@
     "lib/charms/layer/snap.py": [
       "layer:snap", 
       "static", 
-      "900e078131328c6c874190c7c31e2c34d8038b572515daf00b021288fb603802"
+      "736362273a641b1290194143386dfd740c5297973bdbbf2acae70012c9059dae"
     ], 
     "lib/charms/leadership.py": [
       "layer:leadership", 
@@ -853,7 +853,7 @@
     "reactive/snap.py": [
       "layer:snap", 
       "static", 
-      "819cb6ab040fab2ce09c0a5b59a5ff5a09ff3b1e254869051a05aa52fd2f04b9"
+      "b5ca0d406ef05a6965c86447288f7c3889f36634d0624d6fae5371433cdc0fb2"
     ], 
     "reactive/workloadstatus.py": [
       "postgresql", 
@@ -888,7 +888,7 @@
     "templates/pg_backup_job.tmpl": [
       "postgresql", 
       "static", 
-      "5fea8cbd70201fea958a0e92abbb5a06df5aa3e6512c0599553729596b182944"
+      "00caab35510bbcb184be3ab868e813d519c31fd39496121b3712a72b505e5535"
     ], 
     "templates/postgres.cron.tmpl": [
       "postgresql", 
@@ -945,15 +945,15 @@
       "static", 
       "adc611c072e0e64e6306b9415ad5051714ad2e02d4006a431385605cb84bf328"
     ], 
-    "wheelhouse/Jinja2-2.9.5.tar.gz": [
+    "wheelhouse/Jinja2-2.9.6.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "702a24d992f856fa8d5a7a36db6128198d0c21e1da34448ca236c42e92384825"
+      "ddaa01a212cd6d641401cb01b605f4a4d9f37bfc93043d7f760ec70fb99ff9ff"
     ], 
-    "wheelhouse/MarkupSafe-0.23.tar.gz": [
+    "wheelhouse/MarkupSafe-1.0.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "a4ec1aff59b95a14b45eb2e23761a0179e98319da5a7eb76b56ea8cdc7b871c3"
+      "a6be69091dac236ea9c6bc7d012beab42010fa914c459791d627dad4910eb665"
     ], 
     "wheelhouse/PyYAML-3.12.tar.gz": [
       "layer:basic", 
@@ -965,10 +965,10 @@
       "dynamic", 
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ], 
-    "wheelhouse/charmhelpers-0.13.0.tar.gz": [
+    "wheelhouse/charmhelpers-0.14.0.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "3494ff105c793de5941a41bac1499b915e54a2236d1f396b358a2c677f8e5706"
+      "d2525bd5b1372ff098678f8ca7aa56f4bcdd62effabc92d48b6650f3c4b9251b"
     ], 
     "wheelhouse/charms.reactive-0.4.5.tar.gz": [
       "layer:basic", 
