@@ -40,11 +40,6 @@
       "dynamic", 
       "ac6d45c831217a1aa03cf8887618adb8e1fab63aed83483e3c71015dbe7115f8"
     ], 
-    "actions/action.template": [
-      "layer:basic", 
-      "static", 
-      "703461aaffa3d32cad0c0fb5d3f980fb6d3dc19702ea399bcc7b305a32fd0ddd"
-    ], 
     "actions/actions.py": [
       "postgresql", 
       "static", 
@@ -613,7 +608,7 @@
     "lib/charms/layer/basic.py": [
       "layer:basic", 
       "static", 
-      "41821be5a68e9380a3fb6b4efdb433d05ff958da68db766ca7156c0df80482d6"
+      "14905051850da09eb6b2b2a0032175b1c2efeb11109cbd01790d4e4c3b8a41ea"
     ], 
     "lib/charms/layer/execd.py": [
       "layer:basic", 
@@ -623,7 +618,7 @@
     "lib/charms/layer/snap.py": [
       "layer:snap", 
       "static", 
-      "736362273a641b1290194143386dfd740c5297973bdbbf2acae70012c9059dae"
+      "97d4f0e23f459b3d1f69c07928bdffa7972a450b0b524d0ce5f02e06f37c77af"
     ], 
     "lib/charms/leadership.py": [
       "layer:leadership", 
@@ -853,7 +848,7 @@
     "reactive/snap.py": [
       "layer:snap", 
       "static", 
-      "b5ca0d406ef05a6965c86447288f7c3889f36634d0624d6fae5371433cdc0fb2"
+      "ec53b69b316866cc34d807efd78b61a77027763cd2e598e0e1871a171e4be68c"
     ], 
     "reactive/workloadstatus.py": [
       "postgresql", 
@@ -980,10 +975,10 @@
       "dynamic", 
       "38aeec7cdd035081d3a4c306394b19d677623bf76fa0913f6695127c7753aefd"
     ], 
-    "wheelhouse/pip-7.1.2.tar.gz": [
+    "wheelhouse/pip-8.1.2.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "ca047986f0528cfa975a14fb9f7f106271d4e0c3fe1ddced6c1db2e7ae57a477"
+      "4d24b03ffa67638a3fa931c09fd9e0273ffa904e95ebebe7d4b1a54c93d7b732"
     ], 
     "wheelhouse/pyaml-16.12.2.tar.gz": [
       "layer:basic", 
