@@ -38,27 +38,42 @@
     "actions.yaml": [
       "postgresql", 
       "dynamic", 
-      "ac6d45c831217a1aa03cf8887618adb8e1fab63aed83483e3c71015dbe7115f8"
+      "f704658d73cad192fa4e0c2698281dbef76fde9b59681ace77e9c498ae51bc47"
     ], 
     "actions/actions.py": [
       "postgresql", 
       "static", 
-      "e5c4154610cbec45545dc7c9e796504ef5266583f851554b08d40d42e1720f88"
+      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
     ], 
     "actions/replication-pause": [
       "postgresql", 
       "static", 
-      "e5c4154610cbec45545dc7c9e796504ef5266583f851554b08d40d42e1720f88"
+      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
     ], 
     "actions/replication-resume": [
       "postgresql", 
       "static", 
-      "e5c4154610cbec45545dc7c9e796504ef5266583f851554b08d40d42e1720f88"
+      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
     ], 
     "actions/switchover": [
       "postgresql", 
       "static", 
-      "e5c4154610cbec45545dc7c9e796504ef5266583f851554b08d40d42e1720f88"
+      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
+    ], 
+    "actions/wal-e-backup": [
+      "postgresql", 
+      "static", 
+      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
+    ], 
+    "actions/wal-e-list-backups": [
+      "postgresql", 
+      "static", 
+      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
+    ], 
+    "actions/wal-e-restore": [
+      "postgresql", 
+      "static", 
+      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
     ], 
     "bin/layer_option": [
       "layer:basic", 
@@ -808,7 +823,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql", 
       "static", 
-      "617fbca96b4bc4e362b507a7685ca8a2ffc1a1c44f0aa0aede8a6bafb165b6b6"
+      "ef7ffe06237faba5dfa3203a6984e583419981100a8be9baa6ea63b3ce65e049"
     ], 
     "reactive/postgresql/preflight.py": [
       "postgresql", 
@@ -818,12 +833,12 @@
     "reactive/postgresql/replication.py": [
       "postgresql", 
       "static", 
-      "2befa75794fd474ea71925d431dd9f913511952b2f8aa91c8a0a31933cfdcca8"
+      "6f23b9fefbf4e060eb3fd2b8cd23b39b16996d7a527c01253acd625b8a2b258a"
     ], 
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "bff29e9fde4a0d29e79e4f73c47765228b5733acc5907834d69a13aa28bc42f6"
+      "4f61672977e36dcd65346547d43043b90f42221f194a5f10b42d23e649490626"
     ], 
     "reactive/postgresql/storage.py": [
       "postgresql", 
@@ -843,7 +858,7 @@
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
       "static", 
-      "3482d570dd63eab291a24d02e5266d6775bf3afaa69a23ac45275276d55022b7"
+      "8a2dfcd4e8d515df43107f495dae71c539eff6bc5217a1fdbf2638caca2325ca"
     ], 
     "reactive/snap.py": [
       "layer:snap", 
