@@ -217,6 +217,10 @@ options:
     type: string
     default: ""
     description: EXPERIMENTAL. Amazon AWS secret access key.
+  aws_region:
+    type: string
+    default: ""
+    description: EXPERIMENTAL. Amazon AWS region (eg. us-east-1)
   wabs_account_name:
     type: string
     default: ""
