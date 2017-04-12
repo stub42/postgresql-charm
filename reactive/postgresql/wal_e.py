@@ -71,6 +71,7 @@ def update_wal_e_env_dir():
         # wal-e AWS creds
         AWS_ACCESS_KEY_ID=config.get('aws_access_key_id', ''),
         AWS_SECRET_ACCESS_KEY=config.get('aws_secret_access_key', ''),
+        AWS_REGION=config.get('aws_region', ''),
 
         # wal-e Azure cred
         WABS_ACCOUNT_NAME=config.get('wabs_account_name', ''),
@@ -96,7 +97,8 @@ def update_wal_e_env_dir():
                             'SWIFT_USER', 'SWIFT_PASSWORD']
         elif parsed_uri.scheme == 's3':
             env['WALE_S3_PREFIX'] = uri
-            required_env = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']
+            required_env = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY',
+                            'AWS_REGION']
         elif parsed_uri.scheme == 'wabs':
             env['WALE_WABS_PREFIX'] = uri
             required_env = ['WABS_ACCOUNT_NAME', 'WABS_ACCESS_KEY']
