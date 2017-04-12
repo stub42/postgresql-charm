@@ -73,7 +73,7 @@
     "config.yaml": [
       "postgresql", 
       "dynamic", 
-      "d26810b6360d7fb6dbebdae88821ce3a19ecbb8ef0e1dbec1e4ad622fdb74d78"
+      "a1cd320f62b7b3072dd5c530dea8077188a9fc9d94977d8431d809215cb26dfe"
     ], 
     "copyright": [
       "postgresql", 
@@ -843,7 +843,7 @@
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
       "static", 
-      "c262b51a8f8dbed692df4d800f2eee17d1ca8e225bbad1aef948ef0d81357389"
+      "3482d570dd63eab291a24d02e5266d6775bf3afaa69a23ac45275276d55022b7"
     ], 
     "reactive/snap.py": [
       "layer:snap", 
@@ -960,10 +960,10 @@
       "dynamic", 
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ], 
-    "wheelhouse/charmhelpers-0.14.0.tar.gz": [
+    "wheelhouse/charmhelpers-0.15.0.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "d2525bd5b1372ff098678f8ca7aa56f4bcdd62effabc92d48b6650f3c4b9251b"
+      "dde6d6905a1f71cd3a6ed7cbf92bb4c26159d6a1b5ce8b4e5d2b893de7cc0647"
     ], 
     "wheelhouse/charms.reactive-0.4.5.tar.gz": [
       "layer:basic", 
