@@ -15,7 +15,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import os.path
+import subprocess
 import sys
+import tempfile
 import traceback
 
 
@@ -33,6 +35,7 @@ from charmhelpers.core import hookenv
 from charms import reactive
 
 from reactive.postgresql import postgresql
+from reactive.postgresql import wal_e
 
 
 def replication_pause(params):
@@ -49,7 +52,8 @@ def replication_pause(params):
     cur = con.cursor()
     cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is True:
-        hookenv.action_fail('Already paused')
+        # Not a failure, per lp:1670613
+        hookenv.action_set(dict(result='Already paused'))
         return
     cur.execute('SELECT pg_xlog_replay_pause()')
     hookenv.action_set(dict(result='Paused'))
@@ -69,10 +73,73 @@ def replication_resume(params):
     cur = con.cursor()
     cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is False:
-        hookenv.action_fail('Already resumed')
+        # Not a failure, per lp:1670613
+        hookenv.action_set(dict(result='Already resumed'))
         return
     cur.execute('SELECT pg_xlog_replay_resume()')
     hookenv.action_set(dict(result='Resumed'))
+
+
+def wal_e_backup(params):
+    if not postgresql.is_primary():
+        hookenv.action_fail('Not a primary. Run this action on the master')
+        return
+
+    backup_cmd = wal_e.wal_e_backup_command()
+    if params['prune']:
+        prune_cmd = wal_e.wal_e_prune_command()
+    else:
+        prune_cmd = None
+
+    hookenv.action_set({"wal-e-backup-cmd": backup_cmd,
+                        "wal-e-prune-cmd": prune_cmd})
+
+    try:
+        hookenv.log('Running wal-e backup')
+        hookenv.log(backup_cmd)
+        subprocess.check_call('sudo -Hu postgres -- ' + backup_cmd,
+                              stderr=subprocess.STDOUT,
+                              shell=True, universal_newlines=True)
+        hookenv.action_set({"backup-return-code": 0})
+    except subprocess.CalledProcessError as x:
+        hookenv.action_set({"backup-return-code": x.returncode})
+        hookenv.action_fail('Backup failed')
+        return
+
+    if prune_cmd is None:
+        return
+
+    try:
+        hookenv.log('Running wal-e prune')
+        hookenv.log(prune_cmd)
+        subprocess.check_call('sudo -Hu postgres -- ' + prune_cmd,
+                              stderr=subprocess.STDOUT,
+                              shell=True, universal_newlines=True)
+        hookenv.action_set({"prune-return-code": 0})
+    except subprocess.CalledProcessError as x:
+        hookenv.action_set({"prune-return-code": x.returncode})
+        hookenv.action_fail('Backup succeeded, pruning failed')
+        return
+
+
+def wal_e_list_backups(params):
+    storage_uri = (params['storage-uri'] or
+                   hookenv.config()['wal_e_storage_uri'])
+    with tempfile.TemporaryDirectory(prefix='wal-e',
+                                     suffix='envdir') as envdir:
+        wal_e.update_wal_e_env_dir(envdir, storage_uri)
+        details = wal_e.wal_e_list_backups(envdir)
+
+    # Per Bug #1671791, we need to massage the results into a format
+    # that is acceptable to action-set restrictions while hopefully
+    # remaining usable.
+    m = {}
+    for detail in details:
+        detail_key = detail['name'].replace('_', '-')
+        for value_key, value in detail.items():
+            value_key = value_key.replace('_', '-')
+            m['{}.{}'.format(detail_key, value_key)] = value
+    hookenv.action_set(m)
 
 
 # Revisit this when actions are more mature. Per Bug #1483525, it seems
@@ -116,13 +183,22 @@ def main(argv):
             replication_pause(params)
         elif action == 'replication-resume':
             replication_resume(params)
+        elif action == 'wal-e-backup':
+            wal_e_backup(params)
+        elif action == 'wal-e-list-backups':
+            wal_e_list_backups(params)
+        elif action == 'wal-e-restore':
+            reactive_action('action.wal-e-restore')
         elif action == 'switchover':
-            reactive_action('actions.switchover')
+            reactive_action('action.switchover')
         else:
             hookenv.action_fail('Action {} not implemented'.format(action))
     except Exception:
         hookenv.action_fail('Unhandled exception')
-        hookenv.action_set(dict(traceback=traceback.format_exc()))
+        tb = traceback.format_exc()
+        hookenv.action_set(dict(traceback=tb))
+        hookenv.log('Unhandled exception in action {}'.format(action))
+        print(tb)
 
 
 if __name__ == '__main__':

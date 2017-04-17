@@ -190,7 +190,7 @@ def wait_for_failover():
 
 def get_master():
     '''Return the master unit.'''
-    if reactive.is_state('manual_replication'):
+    if reactive.is_state('postgresql.replication.manual'):
         return None
     return leader_get('master')
 
@@ -207,7 +207,7 @@ def is_master():
 
 def get_anointed():
     """The unit anointed to become master in switchover (not failover)"""
-    if reactive.is_state('manual_replication'):
+    if reactive.is_state('postgresql.replication.manual'):
         return None
     anointed = leader_get('anointed_master')
     if anointed == hookenv.local_unit():
@@ -684,23 +684,23 @@ def elect_master():
     return elected_master
 
 
-@when('actions.switchover')
+@when('action.switchover')
 @when_not('leadership.is_leader')
 def switchover_action_requires_leader():
     hookenv.action_fail("switchover must be run on the leader unit")
-    reactive.remove_state('actions.switchover')
+    reactive.remove_state('action.switchover')
 
 
-@when('actions.switchover')
+@when('action.switchover')
 @when('leadership.is_leader')
 @when('leadership.set.anointed_master')
 def switchover_in_progress():
     hookenv.action_fail("switchover to {} already in progress"
                         "".format(get_anointed()))
-    reactive.remove_state('actions.switchover')
+    reactive.remove_state('action.switchover')
 
 
-@when('actions.switchover')
+@when('action.switchover')
 @when('leadership.is_leader')
 @when_not('leadership.set.anointed_master')
 def switchover_action():
@@ -736,7 +736,7 @@ def switchover_action():
                                        ''.format(anointed)))
 
     finally:
-        reactive.remove_state('actions.switchover')
+        reactive.remove_state('action.switchover')
 
 
 @when('leadership.is_leader')
