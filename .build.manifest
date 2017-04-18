@@ -858,7 +858,7 @@
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
       "static", 
-      "8a2dfcd4e8d515df43107f495dae71c539eff6bc5217a1fdbf2638caca2325ca"
+      "5700908e1078c6df3d6efe0d3a15ae93718edaa56f8ac1e189ca1680c5ba91b3"
     ], 
     "reactive/snap.py": [
       "layer:snap", 
