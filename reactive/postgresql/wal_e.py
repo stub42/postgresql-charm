@@ -32,7 +32,6 @@ from charms.layer import snap
 
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
-from reactive.postgresql import replication
 from reactive.workloadstatus import status_set
 
 
@@ -261,7 +260,7 @@ def wal_e_restore():
         wal_e_run(['backup-fetch', data_dir, backup], envdir=envdir)
 
         # Create recovery.conf to complete recovery
-        is_master = replication.is_master()
+        is_master = reactive.is_state('postgresql.replication.is_master')
         standby_mode = 'off' if is_master else 'on'
         if params.get('target-time'):
             target_time = ("recovery_target_time='{}'"
@@ -287,7 +286,13 @@ def wal_e_restore():
                                          immediate),
                       mode=0o600, user='postgres', group='postgres')
 
-        if replication.is_master():
+        # Avoid circular import. We could also avoid the import entirely
+        # with a sufficiently complex set of handlers in the replication
+        # module, but that seems to be a worse solution. Better to break
+        # out this action into a separate module.
+        from reactive.postgresql import replication
+
+        if is_master:
             # If master, trash the configured wal-e storage. This may
             # contain WAL and backups from the old cluster which will
             # conflict with the new cluster. Hopefully it does not
