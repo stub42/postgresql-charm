@@ -44,18 +44,22 @@ def main():
     reactive.remove_state('postgresql.wal_e.configured')
 
 
-@when_any('config.changed.os_username',
-          'config.changed.os_password',
-          'config.changed.os_auth_url',
-          'config.changed.os_tenant_name',
-          'config.changed.aws_access_key_id',
-          'config.changed.aws_secret_access_key',
-          'config.changed.aws_region',
-          'config.changed.wabs_account_name',
-          'config.changed.wabs_access_key')
+@when_any('config.set.os_username',
+          'config.set.os_password',
+          'config.set.os_auth_url',
+          'config.set.os_tenant_name',
+          'config.set.aws_access_key_id',
+          'config.set.aws_secret_access_key',
+          'config.set.aws_region',
+          'config.set.wabs_account_name',
+          'config.set.wabs_access_key')
 @when_not('snap.installed.wal-e')
 def install():
-    # Install WAL-E via snap package
+    # Install WAL-E via snap package. We only do this when relevant
+    # configuration options are set to ensure that the main charm works
+    # in environments with limited or no snap support (eg. Trusty lxd
+    # containers). The wal-e snap is used for log shipping and PITR
+    # actions.
     status_set(None, 'Installing wal-e snap')
     snap.install('wal-e', classic=True)
 
