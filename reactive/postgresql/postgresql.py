@@ -758,7 +758,7 @@ def promote():
 def is_replicating(parent, ip=None, user=None):
     '''Return True if the ip address is replicating from the parent unit'''
     if ip is None:
-        ip = hookenv.unit_private_ip()
+        ip = helpers.ensure_ip(hookenv.unit_private_ip())
     con = connect(user=user, unit=parent)
     cur = con.cursor(cursor_factory=psycopg2.extras.DictCursor)
     cur.execute('SELECT * FROM pg_stat_replication WHERE client_addr=%s',

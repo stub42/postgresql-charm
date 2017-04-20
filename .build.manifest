@@ -633,7 +633,7 @@
     "lib/charms/layer/snap.py": [
       "layer:snap", 
       "static", 
-      "97d4f0e23f459b3d1f69c07928bdffa7972a450b0b524d0ce5f02e06f37c77af"
+      "80dfa8989118c3b56e7d18d3d515021b959b69aaf4f8230d099e62a99137f47f"
     ], 
     "lib/charms/leadership.py": [
       "layer:leadership", 
@@ -808,7 +808,7 @@
     "reactive/postgresql/helpers.py": [
       "postgresql", 
       "static", 
-      "f5bcba358e542b44c5e1a3a789a1cdae0517771d6dc8c002da27a53025d79d44"
+      "b84d01a9eacc14b0890564c40ba6d34261a648d0d5d61b4a345297cea2d5eb29"
     ], 
     "reactive/postgresql/metrics.py": [
       "postgresql", 
@@ -823,7 +823,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql", 
       "static", 
-      "ef7ffe06237faba5dfa3203a6984e583419981100a8be9baa6ea63b3ce65e049"
+      "b8f8433565eaa24a2c412fe5287598db770d6251f6cf88bd58ec31a4c22cd66b"
     ], 
     "reactive/postgresql/preflight.py": [
       "postgresql", 
