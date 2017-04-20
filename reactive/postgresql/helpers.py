@@ -17,6 +17,7 @@ from contextlib import contextmanager
 import os
 import re
 import shutil
+import socket
 import stat
 import tempfile
 import uuid
@@ -164,3 +165,19 @@ def ping_peers():
     peer_rel = get_peer_relation()
     if peer_rel:
         peer_rel.local['ping'] = str(uuid.uuid4())
+
+
+def ensure_ip(addr):
+    """If addr is a hostname, resolve it to an IP address"""
+    if not addr:
+        return None
+    # We need to use socket.getaddrinfo for IPv6 support.
+    info = socket.getaddrinfo(addr, None)
+    if info is None:
+        # Should never happen
+        raise ValueError("Invalid result None from getaddinfo")
+    try:
+        return info[0][4][0]
+    except IndexError:
+        # Should never happen
+        raise ValueError("Invalid result {!r} from getaddinfo".format(info))
