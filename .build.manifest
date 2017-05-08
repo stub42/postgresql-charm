@@ -43,37 +43,37 @@
     "actions/actions.py": [
       "postgresql", 
       "static", 
-      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
+      "c177876721df55de5f5fdd21a9511bbf9bf8a4e856f60429d4e0ef703abfebaa"
     ], 
     "actions/replication-pause": [
       "postgresql", 
       "static", 
-      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
+      "c177876721df55de5f5fdd21a9511bbf9bf8a4e856f60429d4e0ef703abfebaa"
     ], 
     "actions/replication-resume": [
       "postgresql", 
       "static", 
-      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
+      "c177876721df55de5f5fdd21a9511bbf9bf8a4e856f60429d4e0ef703abfebaa"
     ], 
     "actions/switchover": [
       "postgresql", 
       "static", 
-      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
+      "c177876721df55de5f5fdd21a9511bbf9bf8a4e856f60429d4e0ef703abfebaa"
     ], 
     "actions/wal-e-backup": [
       "postgresql", 
       "static", 
-      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
+      "c177876721df55de5f5fdd21a9511bbf9bf8a4e856f60429d4e0ef703abfebaa"
     ], 
     "actions/wal-e-list-backups": [
       "postgresql", 
       "static", 
-      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
+      "c177876721df55de5f5fdd21a9511bbf9bf8a4e856f60429d4e0ef703abfebaa"
     ], 
     "actions/wal-e-restore": [
       "postgresql", 
       "static", 
-      "0429c68f4b43f893d29ab11ee5f081694e95f61a2706c5f0fbf94f52a23087a3"
+      "c177876721df55de5f5fdd21a9511bbf9bf8a4e856f60429d4e0ef703abfebaa"
     ], 
     "bin/layer_option": [
       "layer:basic", 
@@ -823,7 +823,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql", 
       "static", 
-      "b8f8433565eaa24a2c412fe5287598db770d6251f6cf88bd58ec31a4c22cd66b"
+      "11243e1109be291a41b9b58f58f8237df3db9c911b14a5c4eb26929cae2ceb9e"
     ], 
     "reactive/postgresql/preflight.py": [
       "postgresql", 
@@ -980,10 +980,10 @@
       "dynamic", 
       "dde6d6905a1f71cd3a6ed7cbf92bb4c26159d6a1b5ce8b4e5d2b893de7cc0647"
     ], 
-    "wheelhouse/charms.reactive-0.4.5.tar.gz": [
+    "wheelhouse/charms.reactive-0.4.7.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "b2a475aff349a1c6532de0f9b4df5ee456b97a1e1755695afd8747dbc51bb710"
+      "f023f5aef267786db1be51209610487171ba56e848f7b1c49877b06337000256"
     ], 
     "wheelhouse/netaddr-0.7.19.tar.gz": [
       "layer:basic", 
