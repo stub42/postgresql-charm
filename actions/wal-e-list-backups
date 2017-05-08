@@ -135,7 +135,7 @@ def wal_e_list_backups(params):
     # remaining usable.
     m = {}
     for detail in details:
-        detail_key = detail['name'].replace('_', '-')
+        detail_key = detail['name'].replace('_', '-').lower()
         for value_key, value in detail.items():
             value_key = value_key.replace('_', '-')
             m['{}.{}'.format(detail_key, value_key)] = value
