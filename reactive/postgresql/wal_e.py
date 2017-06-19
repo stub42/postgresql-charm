@@ -70,12 +70,10 @@ def wal_e_env_dir():
 
 
 @when('postgresql.cluster.created')
-@when('snap.installed.wal-e')
-@when('config.set.wal_e_storage_uri')
 @when_not('postgresql.wal_e.configured')
 def update_default_wal_e_env_dir():
     update_wal_e_env_dir(wal_e_env_dir(),
-                         hookenv.config()['wal_e_storage_uri'])
+                         hookenv.config().get('wal_e_storage_uri', ''))
     reactive.set_state('postgresql.wal_e.configured')
 
 
