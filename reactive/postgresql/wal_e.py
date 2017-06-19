@@ -295,12 +295,13 @@ def wal_e_restore():
         from reactive.postgresql import replication
 
         if is_master:
-            # If master, trash the configured wal-e storage. This may
-            # contain WAL and backups from the old cluster which will
-            # conflict with the new cluster. Hopefully it does not
-            # contain anything important, because we have no way to
-            # prompt the user for confirmation.
-            wal_e_run(['delete', '--confirm', 'everything'])
+            if ship_uri:
+                # If master, trash the configured wal-e storage. This may
+                # contain WAL and backups from the old cluster which will
+                # conflict with the new cluster. Hopefully it does not
+                # contain anything important, because we have no way to
+                # prompt the user for confirmation.
+                wal_e_run(['delete', '--confirm', 'everything'])
 
             # Then, wait for recovery and promotion.
             postgresql.start()
