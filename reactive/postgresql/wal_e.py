@@ -334,3 +334,4 @@ def wal_e_restore():
     reactive.remove_state('postgresql.cluster.configured')
     reactive.toggle_state('postgresql.cluster.is_running',
                           postgresql.is_running())
+    reactive.remove_state('postgresql.nagios.user_ensured')

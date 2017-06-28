@@ -73,6 +73,9 @@ def ensure_snapd():
     # too closely to apt packaging. Perhaps this is a snap-only system.
     if not shutil.which('snap'):
         cmd = ['apt', 'install', '-y', 'snapd']
+        # LP:1699986: Force install of systemd on Trusty.
+        if get_series() == 'trusty':
+            cmd.append('systemd')
         subprocess.check_call(cmd, universal_newlines=True)
 
     # Work around lp:1628289. Remove this stanza once snapd depends
@@ -103,14 +106,6 @@ def update_snap_proxy():
     # to ensure proxies are configured before attempting installs or
     # updates.
     proxy = proxy_settings()
-
-    if get_series() == 'trusty':
-        # The hack to configure a snapd proxy only works under
-        # xenial or later.
-        if proxy:
-            hookenv.log('snap_proxy config is not supported under '
-                        'Ubuntu 14.04 (trusty)', hookenv.ERROR)
-        return
 
     path = '/etc/systemd/system/snapd.service.d/snap_layer_proxy.conf'
     if not proxy and not os.path.exists(path):

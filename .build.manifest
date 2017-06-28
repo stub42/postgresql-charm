@@ -653,7 +653,7 @@
     "reactive/postgresql/nagios.py": [
       "postgresql", 
       "static", 
-      "deceeca49312748e25586fa0851e39c1d11a33e6f3ee67e912f455db393978cc"
+      "39abde694a7760bfea55b4b59c0e77d7a364949fa53c8c688faf5d4606a78e4b"
     ], 
     "reactive/postgresql/postgresql.py": [
       "postgresql", 
@@ -693,12 +693,12 @@
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
       "static", 
-      "2789d8ec398c9f67e20de226c1506ab9798f9e3b91fc7457bc7f0814e2f3c61f"
+      "12bdf4de72660fdc6672462dfb93ed006b6dcd1885503532112f84393766e87b"
     ], 
     "reactive/snap.py": [
       "layer:snap", 
       "static", 
-      "8863b8bf7ec962547793c1fd1a27bab0b74aa86bbebbdfbb4336549748b68f0d"
+      "61fecf7235916f2d17005603531bc3c112dbbb420aa9cd965404348b7ed05a09"
     ], 
     "reactive/workloadstatus.py": [
       "postgresql", 
