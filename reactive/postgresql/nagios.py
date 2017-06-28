@@ -71,6 +71,11 @@ def ensure_nagios_user():
     reactive.set_state('postgresql.nagios.user_ensured')
 
 
+@when('leadership.changed.nagios_password')
+def reensure_nagios_user():
+    reactive.remove_state('postgresql.nagios.user_ensured')
+
+
 def nagios_pgpass_path():
     return os.path.expanduser('~nagios/.pgpass')
 
