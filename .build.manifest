@@ -673,7 +673,7 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "4f61672977e36dcd65346547d43043b90f42221f194a5f10b42d23e649490626"
+      "fa122711d92a422d1cf8a93427ddee30d15e7e8e47c6575bafc3fdb8fea91129"
     ], 
     "reactive/postgresql/storage.py": [
       "postgresql", 
@@ -810,10 +810,10 @@
       "dynamic", 
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ], 
-    "wheelhouse/charmhelpers-0.16.0.tar.gz": [
+    "wheelhouse/charmhelpers-0.17.0.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "5727a1dc278416d3e0b432ae9d46f599bca1c61b17f4880e5d33553d249b7cb3"
+      "232f9ee252c58e9357aaa74d14d351e786716fa0cec3f496f74c40ad0bc6a0b5"
     ], 
     "wheelhouse/charms.reactive-0.4.7.tar.gz": [
       "layer:basic", 

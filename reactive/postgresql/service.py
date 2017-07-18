@@ -785,6 +785,10 @@ def postgresql_conf_changed():
     live = store.getrange('postgresql.cluster.pgconf.live.', strip=True)
     current = store.getrange('postgresql.cluster.pgconf.current.', strip=True)
 
+    if live == current:
+        hookenv.log('postgresql.conf settings unchanged', DEBUG)
+        return
+
     if not live or not current:
         hookenv.log('PostgreSQL started without current config being saved. '
                     'Was the server rebooted unexpectedly?', WARNING)
