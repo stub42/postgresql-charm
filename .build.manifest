@@ -418,7 +418,7 @@
     "icon.svg": [
       "postgresql", 
       "static", 
-      "00ffc4f772f0e5d37c6c8a2a472488c9c9e396af38ddaa251f92b9e9dbda0358"
+      "fb6d1d4dbb6e2aefc29cb7fc97ff0e3adf6fb00b51916a5b4f37c7ad1cd55f4c"
     ], 
     "layer.yaml": [
       "postgresql", 
@@ -698,7 +698,7 @@
     "reactive/snap.py": [
       "layer:snap", 
       "static", 
-      "61fecf7235916f2d17005603531bc3c112dbbb420aa9cd965404348b7ed05a09"
+      "9196b3ff940cbc8ad3790768cc8d5640bd285dfc865c1cbc26a65cc79cd14141"
     ], 
     "reactive/workloadstatus.py": [
       "postgresql", 
