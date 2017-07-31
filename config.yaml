@@ -360,7 +360,7 @@ options:
     type: int
     description: DEPRECATED. Use extra_pg_conf.
   replicated_wal_keep_segments:
-    default: 5000
+    default: 500
     type: int
     description: DEPRECATED. Use extra_pg_conf.
   archive_mode:
