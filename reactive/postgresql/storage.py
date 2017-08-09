@@ -36,25 +36,31 @@ pgdata_path_key = 'postgresql.storage.pgdata.path'
 
 @hook('pgdata-storage-attached')
 def attach():
-    mount = hookenv.storage_get()['location']
+    storageids = hookenv.storage_list('pgdata')
+    if not storageids:
+        hookenv.status_set('blocked', 'Cannot locate attached storage')
+        return
+    storageid = storageids[0]
+
+    mount = hookenv.storage_get('location', storageid)
+    if not mount:
+        hookenv.status_set('blocked', 'Cannot locate attached storage mount')
+        return
+
     pgdata = os.path.join(mount, postgresql.version(), 'main')
     unitdata.kv().set(pgdata_mount_key, mount)
     unitdata.kv().set(pgdata_path_key, pgdata)
 
     hookenv.log('PGDATA storage attached at {}'.format(mount))
 
-    # Never happens with Juju 2.0 as we can't reuse an old mount. This
-    # check is here for the future.
     existingdb = os.path.exists(pgdata)
-
-    if os.path.exists(postgresql.data_dir()):
+    if os.path.exists(postgresql.data_dir()) and not existingdb:
         required_space = shutil.disk_usage(postgresql.data_dir()).used
         free_space = shutil.disk_usage(mount).free
-
-        if required_space > free_space and not existingdb:
+        if required_space > free_space:
             hookenv.status_set('blocked',
                                'Not enough free space in pgdata storage')
-        return
+            return
 
     apt.queue_install(['rsync'])
     coordinator.acquire('restart')

@@ -26,6 +26,7 @@ from reactive import workloadstatus
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
 from reactive.postgresql import replication
+from reactive.postgresql import storage
 
 
 @hook('upgrade-charm')
@@ -105,6 +106,11 @@ def upgrade_charm():
         if following is None and not replication.is_master():
             following = replication.get_master()
         peer_rel.local['following'] = following
+
+    # Ensure storage that was attached but ignored is no longer ignored.
+    if not reactive.is_state('postgresql.storage.pgdata.attached'):
+        if hookenv.storage_list('pgdata'):
+            storage.attach()
 
 
 def migrate_user(old_username, new_username, password, superuser=False):
