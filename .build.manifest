@@ -678,7 +678,7 @@
     "reactive/postgresql/storage.py": [
       "postgresql", 
       "static", 
-      "3e4486fc2929d6b9335b275e472264a6e439a159b9c8f23398898e7812fc2bd3"
+      "79791163136f49c44c03342469b74a11acdc8ed43be730f3737dbb26e26ff06a"
     ], 
     "reactive/postgresql/syslog.py": [
       "postgresql", 
@@ -688,7 +688,7 @@
     "reactive/postgresql/upgrade.py": [
       "postgresql", 
       "static", 
-      "7d6da6bf41d602662629992d9809c115be8f4b5609d716a479c5fc80add4619e"
+      "804000db6f514cf98476bfeaa729bbba67bd70cba1facb67097d7db83e999b2b"
     ], 
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
