@@ -688,7 +688,7 @@
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
       "static", 
-      "12bdf4de72660fdc6672462dfb93ed006b6dcd1885503532112f84393766e87b"
+      "2445d5bcb31a8e5d5622ae81f3fbd46c8708af85b127ea512ebaee6760acb8b4"
     ], 
     "reactive/snap.py": [
       "layer:snap", 
@@ -805,10 +805,10 @@
       "dynamic", 
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ], 
-    "wheelhouse/charmhelpers-0.17.0.tar.gz": [
+    "wheelhouse/charmhelpers-0.18.1.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "232f9ee252c58e9357aaa74d14d351e786716fa0cec3f496f74c40ad0bc6a0b5"
+      "15dbae866550b724fb81ce501e118386b28a554110bd45f8ce3f62139411cf9f"
     ], 
     "wheelhouse/charms.reactive-0.4.7.tar.gz": [
       "layer:basic", 
@@ -825,10 +825,10 @@
       "dynamic", 
       "4d24b03ffa67638a3fa931c09fd9e0273ffa904e95ebebe7d4b1a54c93d7b732"
     ], 
-    "wheelhouse/pyaml-17.7.2.tar.gz": [
+    "wheelhouse/pyaml-17.8.0.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "e2de6b5ea87fd72ca266879995ac3f5394b4e66a74c47b55b6044b0578ce4f8c"
+      "9cf5ff8fc3b82aab1428e67ab2040b52a9f39433517cb7c5b852498ed3a75740"
     ], 
     "wheelhouse/six-1.10.0.tar.gz": [
       "layer:basic", 
