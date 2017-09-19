@@ -13,7 +13,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import json
+
 from charmhelpers.core import hookenv, host
+from charms import leadership
 from charms import reactive
 from charms.reactive import not_unless, when, when_not
 
@@ -35,9 +38,45 @@ from everyhook import everyhook
 @everyhook
 def publish_client_relations():
     reactive.remove_state('postgresql.client.published')
+    reactive.remove_state('postgresql.client.passwords_set')
 
 
 CLIENT_RELNAMES = frozenset(['db', 'db-admin', 'master'])
+
+
+@when('leadership.is_leader')
+@when_not('postgresql.client.passwords_set')
+def set_client_passwords():
+    '''The leader chooses passwords for client connections.
+
+    Storing the passwords in the leadership settings is the most
+    reliable way of distributing them to peers.
+    '''
+    raw = leadership.leader_get('client_passwords')
+    pwds = json.loads(raw) if raw else {}
+    rels = context.Relations()
+    updated = False
+    for relname in CLIENT_RELNAMES:
+        for rel in rels[relname].values():
+            superuser, replication = _credential_types(rel)
+            for remote in rel.values():
+                user = postgresql.username(remote.service,
+                                           superuser=superuser,
+                                           replication=replication)
+                if user not in pwds:
+                    password = host.pwgen()
+                    pwds[user] = password
+                    updated = True
+    if updated:
+        leadership.leader_set(client_passwords=json.dumps(pwds,
+                                                          sort_keys=True))
+    reactive.set_state('postgresql.client.passwords_set')
+
+
+def get_client_password(username):
+    raw = leadership.leader_get('client_passwords')
+    pwds = json.loads(raw) if raw else {}
+    return pwds.get(username)
 
 
 @when('postgresql.replication.is_master')
@@ -118,7 +157,10 @@ def db_relation_master(rel):
     if 'user' not in master:
         user = postgresql.username(remote.service, superuser=superuser,
                                    replication=replication)
-        password = host.pwgen()
+        password = get_client_password(user)
+        if not password:
+            hookenv.log('** Master waiting for {} password'.format(user))
+            return
         master['user'] = user
         master['password'] = password
 
@@ -242,6 +284,9 @@ def ensure_db_relation_resources(rel):
     '''Create the database resources needed for the relation.'''
 
     master = rel.local
+
+    if 'password' not in master:
+        return
 
     hookenv.log('Ensuring database {!r} and user {!r} exist for {}'
                 ''.format(master['database'], master['user'], rel))
