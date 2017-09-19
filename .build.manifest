@@ -435,11 +435,6 @@
       "static", 
       "4032724b98ed267185b12b8ec78dd9bcb0423ab1c89a6f0dad99397fd51159d9"
     ], 
-    "lib/charms/_coordinator.py": [
-      "layer:coordinator", 
-      "static", 
-      "1a1690ed5d6f43efd6868742b3a736350b1df95f4971adda3baaf3f1eb4739fa"
-    ], 
     "lib/charms/apt.py": [
       "layer:apt", 
       "static", 
@@ -473,7 +468,7 @@
     "lib/charms/leadership.py": [
       "layer:leadership", 
       "static", 
-      "20ffcbbc08147506759726ad51567420659ffb8a2e0121079240b8706658e332"
+      "12b52fa768c3e9072556ac6f46f68129dc762f89eb806d8dee921c86497f6707"
     ], 
     "lib/context.py": [
       "postgresql", 

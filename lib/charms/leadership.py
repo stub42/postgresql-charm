@@ -25,11 +25,8 @@ __all__ = ['leader_get', 'leader_set']
 
 
 @not_unless('leadership.is_leader')
-def leader_set(*args, **kw):
+def leader_set(settings=None, **kw):
     '''Change leadership settings, per charmhelpers.core.hookenv.leader_set.
-
-    Settings may either be passed in as a single dictionary, or using
-    keyword arguments. All values must be strings.
 
     The leadership.set.{key} reactive state will be set while the
     leadership hook environment setting remains set.
@@ -42,14 +39,7 @@ def leader_set(*args, **kw):
     in future hooks run on non-leaders. In this way both leaders and
     non-leaders can share handlers, waiting on these states.
     '''
-    if args:
-        if len(args) > 1:
-            raise TypeError('leader_set() takes 1 positional argument but '
-                            '{} were given'.format(len(args)))
-        else:
-            settings = dict(args[0])
-    else:
-        settings = {}
+    settings = settings or {}
     settings.update(kw)
     previous = unitdata.kv().getrange('leadership.settings.', strip=True)
 
