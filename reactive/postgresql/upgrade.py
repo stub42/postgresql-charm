@@ -112,6 +112,12 @@ def upgrade_charm():
         if hookenv.storage_list('pgdata'):
             storage.attach()
 
+    # Ensure client usernames and passwords match leader settings.
+    for relname in ('db', 'db-admin'):
+        for rel in rels[relname]:
+            del rel.local['user']
+            del rel.local['password']
+
 
 def migrate_user(old_username, new_username, password, superuser=False):
     if postgresql.is_primary():
