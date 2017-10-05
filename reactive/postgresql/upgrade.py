@@ -114,7 +114,7 @@ def upgrade_charm():
 
     # Ensure client usernames and passwords match leader settings.
     for relname in ('db', 'db-admin'):
-        for rel in rels[relname]:
+        for rel in rels[relname].values():
             del rel.local['user']
             del rel.local['password']
 
