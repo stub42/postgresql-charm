@@ -435,6 +435,11 @@
       "static", 
       "4032724b98ed267185b12b8ec78dd9bcb0423ab1c89a6f0dad99397fd51159d9"
     ], 
+    "lib/charms/_coordinator.py": [
+      "layer:coordinator", 
+      "static", 
+      "1a1690ed5d6f43efd6868742b3a736350b1df95f4971adda3baaf3f1eb4739fa"
+    ], 
     "lib/charms/apt.py": [
       "layer:apt", 
       "static", 
@@ -468,7 +473,7 @@
     "lib/charms/leadership.py": [
       "layer:leadership", 
       "static", 
-      "12b52fa768c3e9072556ac6f46f68129dc762f89eb806d8dee921c86497f6707"
+      "20ffcbbc08147506759726ad51567420659ffb8a2e0121079240b8706658e332"
     ], 
     "lib/context.py": [
       "postgresql", 
@@ -683,7 +688,7 @@
     "reactive/postgresql/upgrade.py": [
       "postgresql", 
       "static", 
-      "b20b912d5fd777819f5cb14219fe3525cb8d09ee429ac19b1538f331c9ae5d2d"
+      "8ac6e425441406f15515c6d5a3acbe4ddee95f4df116eb6d85ba4754a972f31c"
     ], 
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
