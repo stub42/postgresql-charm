@@ -308,8 +308,12 @@ def wal_e_restore():
             con = postgresql.connect()
             cur = con.cursor()
             while True:
-                cur.execute('''SELECT pg_is_in_recovery(),
-                                      pg_last_xlog_replay_location()''')
+                if postgresql.has_version('10'):
+                    cur.execute('''SELECT pg_is_in_recovery(),
+                                          pg_last_wal_replay_lsn()''')
+                else:
+                    cur.execute('''SELECT pg_is_in_recovery(),
+                                          pg_last_xlog_replay_location()''')
                 in_rec, loc = cur.fetchone()
                 if not in_rec:
                     break

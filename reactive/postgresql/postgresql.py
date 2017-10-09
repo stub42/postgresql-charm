@@ -16,7 +16,7 @@
 
 from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
-from distutils.version import StrictVersion
+from distutils.version import LooseVersion
 import functools
 import hashlib
 import itertools
@@ -32,7 +32,7 @@ import psycopg2
 import psycopg2.extensions
 import psycopg2.extras
 
-from charmhelpers.core import hookenv
+from charmhelpers.core import hookenv, unitdata
 from charmhelpers.core.hookenv import DEBUG, WARNING
 from charms import reactive
 
@@ -73,28 +73,40 @@ class AsIs(psycopg2.extensions.ISQLQuote):
 
 def version():
     '''PostgreSQL version. major.minor, as a string.'''
+    # Use a cached version if available, to ensure this
+    # method returns the same version consistently, even
+    # across OS release upgrades.
+    version = unitdata.kv().get('postgresql.pg_version')
+    if version:
+        return version
+
     # We use the charm configuration here, as multiple versions
     # of PostgreSQL may be installed.
     config = hookenv.config()
     version = config.get('version')
     if version:
+        unitdata.kv().set('postgresql.pg_version', version)
         return version
 
     # If the version wasn't set, we are using the default version for
     # the distro release.
     version_map = dict(trusty='9.3', xenial='9.5')
-    return version_map[helpers.distro_codename()]
+    if version not in version_map:
+        raise NotImplementedError("Invalid version {}".format(version))
+    version = version_map[helpers.distro_codename()]
+    unitdata.kv().set('postgresql.pg_version', version)
+    return version
 
 
 def point_version():
-    '''PostgreSQL version. major.minor.patch, as a string.'''
+    '''PostgreSQL version. major.minor.patch or major.patch, as a string.'''
     output = subprocess.check_output([postgres_path(), '-V'],
                                      universal_newlines=True)
     return output.split()[-1]
 
 
 def has_version(ver):
-    return StrictVersion(version()) >= StrictVersion(ver)
+    return LooseVersion(version()) >= LooseVersion(ver)
 
 
 class InvalidConnection(Exception):
@@ -689,7 +701,12 @@ def wal_received_offset(con):
     Returns None if run against a primary.
     """
     cur = con.cursor()
-    cur.execute('SELECT pg_is_in_recovery(), pg_last_xlog_receive_location()')
+    if has_version('10'):
+        cur.execute(
+            'SELECT pg_is_in_recovery(), pg_last_wal_receive_lsn()')
+    else:
+        cur.execute(
+            'SELECT pg_is_in_recovery(), pg_last_xlog_receive_location()')
     is_in_recovery, xlog_received = cur.fetchone()
     if is_in_recovery:
         return wal_location_to_bytes(xlog_received)
@@ -710,8 +727,12 @@ def wal_replay_offset(con):
     cur = con.cursor()
     prev_xlog_replayed = None
     while True:
-        cur.execute('''SELECT pg_is_in_recovery(),
-                              pg_last_xlog_replay_location()''')
+        if has_version('10'):
+            cur.execute('''SELECT pg_is_in_recovery(),
+                                  pg_last_wal_replay_lsn()''')
+        else:
+            cur.execute('''SELECT pg_is_in_recovery(),
+                                  pg_last_wal_replay_location()''')
         is_in_recovery, xlog_replayed = cur.fetchone()
         assert is_in_recovery, 'Unit is not in recovery mode'
         if xlog_replayed is not None and xlog_replayed == prev_xlog_replayed:

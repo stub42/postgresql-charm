@@ -63,8 +63,9 @@
     "default": ""
     "type": "string"
     "description": "Version of PostgreSQL that we want to install. Supported versions\
-      \ are \"9.3\", \"9.4\", \"9.5\" and \"9.6\". The default version for the deployed\
-      \ Ubuntu release is used when the version is unspecified.\n"
+      \ are \"9.3\", \"9.4\", \"9.5\", and \"9.6\". The default version for the deployed\
+      \ Ubuntu release is used when the version is unspecified. Version \"10\" is\
+      \ also available for testing.\n"
   "extra_pg_conf":
     "default": |
       # Additional service specific postgresql.conf settings.
@@ -89,7 +90,7 @@
       join_collapse_limit=16
       wal_buffers=-1
       checkpoint_completion_target=0.9
-      password_encryption=true
+      # password_encryption=true
       max_connections=100
       autovacuum_freeze_max_age=2000000000
       vacuum_freeze_table_age=1600000000

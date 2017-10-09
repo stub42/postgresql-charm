@@ -50,12 +50,18 @@ def replication_pause(params):
     hookenv.action_set(dict(offset=offset))
 
     cur = con.cursor()
-    cur.execute('SELECT pg_is_xlog_replay_paused()')
+    if postgresql.has_version('10'):
+        cur.execute('SELECT pg_is_wal_replay_paused()')
+    else:
+        cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is True:
         # Not a failure, per lp:1670613
         hookenv.action_set(dict(result='Already paused'))
         return
-    cur.execute('SELECT pg_xlog_replay_pause()')
+    if postgresql.has_version('10'):
+        cur.execute('SELECT pg_wal_replay_pause()')
+    else:
+        cur.execute('SELECT pg_xlog_replay_pause()')
     hookenv.action_set(dict(result='Paused'))
 
 
@@ -71,12 +77,18 @@ def replication_resume(params):
     hookenv.action_set(dict(offset=offset))
 
     cur = con.cursor()
-    cur.execute('SELECT pg_is_xlog_replay_paused()')
+    if postgresql.has_version('10'):
+        cur.execute('SELECT pg_is_wal_replay_paused()')
+    else:
+        cur.execute('SELECT pg_is_xlog_replay_paused()')
     if cur.fetchone()[0] is False:
         # Not a failure, per lp:1670613
         hookenv.action_set(dict(result='Already resumed'))
         return
-    cur.execute('SELECT pg_xlog_replay_resume()')
+    if postgresql.has_version('10'):
+        cur.execute('SELECT pg_wal_replay_resume()')
+    else:
+        cur.execute('SELECT pg_xlog_replay_resume()')
     hookenv.action_set(dict(result='Resumed'))
 
 
