@@ -80,7 +80,7 @@ def main():
 def log_states():
     '''Log active states to aid debugging'''
     blacklist = ['config.', 'apt.']
-    for state in sorted(reactive.helpers.get_states().keys()):
+    for state in sorted(reactive.flags.get_flags()):
         if not any(map(state.startswith, blacklist)):
             hookenv.log('Reactive state: {}'.format(state), DEBUG)
 
@@ -502,6 +502,15 @@ def postgresql_conf_defaults():
     defaults['shared_buffers'] = '{} MB'.format(shared_buffers)
     defaults['effective_cache_size'] = '{} MB'.format(effective_cache_size)
 
+    # PostgreSQL 10 introduces multiple password encryption methods.
+    if postgresql.has_version('10'):
+        # Change this to scram-sha-256 next LTS release, when we can
+        # start assuming clients have libpq 10. The setting can of
+        # course still be overridden in the config.
+        defaults['password_encryption'] = 'md5'
+    else:
+        defaults['password_encryption'] = True
+
     return defaults
 
 
@@ -862,7 +871,9 @@ def set_active():
 
 @when('apt.installed.postgresql-common')
 def set_version():
-    hookenv.application_version_set(postgresql.point_version())
+    v = postgresql.point_version()
+    hookenv.log('Setting application version to {}'.format(v))
+    hookenv.application_version_set(v)
 
 
 @when('postgresql.cluster.created')

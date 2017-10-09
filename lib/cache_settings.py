@@ -26,7 +26,7 @@ con = psycopg2.connect('user=postgres dbname=postgres')
 cur = con.cursor()
 cur.execute('show server_version')
 ver = cur.fetchone()[0]
-ver = '.'.join(ver.split('.')[:2])
+ver = ver.split('.')[0]
 
 cur = con.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 cur.execute('''

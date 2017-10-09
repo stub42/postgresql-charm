@@ -415,12 +415,16 @@ def clone_master():
         shutil.rmtree(data_dir)
     helpers.makedirs(data_dir, mode=0o700, user='postgres', group='postgres')
 
+    if postgresql.has_version('10'):
+        wal_method = '--wal-method=stream'
+    else:
+        wal_method = '--xlog-method=stream'
     cmd = ['sudo', '-H',  # -H needed to locate $HOME/.pgpass
            '-u', 'postgres', 'pg_basebackup',
            '-D', postgresql.data_dir(),
            '-h', master_relinfo['host'],
            '-p', master_relinfo['port'],
-           '--checkpoint=fast', '--progress', '--xlog-method=stream',
+           '--checkpoint=fast', '--progress', wal_method,
            '--no-password', '--username=_juju_repl']
     hookenv.log('Cloning {} with {}'.format(master, ' '.join(cmd)))
     status_set('maintenance', 'Cloning {}'.format(master))

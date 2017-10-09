@@ -4,7 +4,7 @@ from __future__ import print_function
 
 
 from contextlib import contextmanager
-from distutils.version import StrictVersion
+from distutils.version import LooseVersion
 import psycopg2
 import sys
 
@@ -136,8 +136,8 @@ def get_stats(description, conn, dbname=None):
     if 'version_required' in description:
         cur = conn.cursor()
         cur.execute('show SERVER_VERSION;')
-        server_version = StrictVersion(cur.fetchone()[0])
-        required = StrictVersion(description['version_required'])
+        server_version = LooseVersion(cur.fetchone()[0])
+        required = LooseVersion(description['version_required'])
         if server_version < required:
             return []
     cur = conn.cursor()

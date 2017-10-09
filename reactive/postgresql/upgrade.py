@@ -118,6 +118,9 @@ def upgrade_charm():
             del rel.local['user']
             del rel.local['password']
 
+    # Ensure the configure version is cached.
+    postgresql.version()
+
 
 def migrate_user(old_username, new_username, password, superuser=False):
     if postgresql.is_primary():
