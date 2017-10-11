@@ -332,14 +332,16 @@ class PostgreSQLClient(RelationBase):
             self.conversation().depart()
             hookenv.log('Departed {} relation'.format(hookenv.relation_id()))
 
-    # @hook('{requires:pgsql}-relation-broken')
-    # def broken(self):
-    #     if not hookenv.relation_ids(self.relation_name):
-    #         for conversation in self.conversations():
-    #             conversation.remove_state('{relation_name}.connected')
-    #             conversation.remove_state('{relation_name}.master.available')
-    #             conversation.remove_state('{relation_name}.standbys.available')
-    #             conversation.remove_state('{relation_name}.database.available')
+    def _set_value(self, key, value, relid=None):
+        for c in self.conversations():
+            if relid is None or c.namespace == relid:
+                current = c.get_local(key)
+                if current != value:
+                    c.set_local(key, value)
+                    c.set_remote(key, value)
+                    c.remove_state('{relation_name}.master.available')
+                    c.remove_state('{relation_name}.standbys.available')
+                    c.remove_state('{relation_name}.database.available')
 
     def set_database(self, dbname, relid=None):
         """Set the database that the named relations connect to.
@@ -355,9 +357,7 @@ class PostgreSQLClient(RelationBase):
                       sharing the relation name.
 
         """
-        for c in self.conversations():
-            if relid is None or c.namespace == relid:
-                c.set_remote('database', dbname)
+        self._set_value('database', dbname)
 
     def set_roles(self, roles, relid=None):
         """Provide a set of roles to be granted to the database user.
@@ -370,9 +370,7 @@ class PostgreSQLClient(RelationBase):
         if isinstance(roles, str):
             roles = [roles]
         roles = ','.join(sorted(roles))
-        for c in self.conversations():
-            if relid is None or c.namespace == relid:
-                c.set_remote('roles', roles)
+        self._set_value('roles', roles)
 
     def set_extensions(self, extensions, relid=None):
         """Provide a set of extensions to be installed into the database.
@@ -385,9 +383,7 @@ class PostgreSQLClient(RelationBase):
         if isinstance(extensions, str):
             extensions = [extensions]
         extensions = ','.join(sorted(extensions))
-        for c in self.conversations():
-            if relid is None or c.namespace == relid:
-                c.set_remote('extensions', extensions)
+        self._set_value('extensions', extensions)
 
     def __getitem__(self, relid):
         """:returns: :class:`ConnectionStrings` for the relation id."""
