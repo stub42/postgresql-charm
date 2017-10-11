@@ -6,7 +6,7 @@ all:
 
 .PHONY: clean
 clean:
-	git clean -fX
+	git clean -fxd
 
 .PHONY: lint
 lint:
