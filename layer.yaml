@@ -3,10 +3,10 @@
     "class": "charms.coordinator.SimpleCoordinator"
     "log_level": "debug"
   "basic":
+    "use_venv": !!bool "true"
+    "include_system_packages": !!bool "true"
     "packages":
     - "python3-psycopg2"
-    "use_venv": !!bool "false"
-    "include_system_packages": !!bool "false"
   "postgresql": {}
   "apt":
     "version_package": ""
