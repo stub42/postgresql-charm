@@ -7,6 +7,8 @@ includes:
   - interface:pgsql
 options:
   basic:
+    use_venv: true
+    include_system_packages: true
     packages:
       - python3-psycopg2
   coordinator:
