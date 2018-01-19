@@ -43,37 +43,37 @@
     "actions/actions.py": [
       "postgresql", 
       "static", 
-      "af94d6dac8bc769d5f6bef2f367c1dfbcba2cfb9278f27f01dfb0771e2b61be6"
+      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
     ], 
     "actions/replication-pause": [
       "postgresql", 
       "static", 
-      "af94d6dac8bc769d5f6bef2f367c1dfbcba2cfb9278f27f01dfb0771e2b61be6"
+      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
     ], 
     "actions/replication-resume": [
       "postgresql", 
       "static", 
-      "af94d6dac8bc769d5f6bef2f367c1dfbcba2cfb9278f27f01dfb0771e2b61be6"
+      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
     ], 
     "actions/switchover": [
       "postgresql", 
       "static", 
-      "af94d6dac8bc769d5f6bef2f367c1dfbcba2cfb9278f27f01dfb0771e2b61be6"
+      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
     ], 
     "actions/wal-e-backup": [
       "postgresql", 
       "static", 
-      "af94d6dac8bc769d5f6bef2f367c1dfbcba2cfb9278f27f01dfb0771e2b61be6"
+      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
     ], 
     "actions/wal-e-list-backups": [
       "postgresql", 
       "static", 
-      "af94d6dac8bc769d5f6bef2f367c1dfbcba2cfb9278f27f01dfb0771e2b61be6"
+      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
     ], 
     "actions/wal-e-restore": [
       "postgresql", 
       "static", 
-      "af94d6dac8bc769d5f6bef2f367c1dfbcba2cfb9278f27f01dfb0771e2b61be6"
+      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
     ], 
     "bin/layer_option": [
       "layer:basic", 
@@ -458,7 +458,7 @@
     "lib/charms/layer/execd.py": [
       "layer:basic", 
       "static", 
-      "af1f2409869f990cdb33cffc4120fb6713876e8e680ac5f064ea510bbdca1073"
+      "fda8bd491032db1db8ddaf4e99e7cc878c6fb5432efe1f91cadb5b34765d076d"
     ], 
     "lib/charms/layer/snap.py": [
       "layer:snap", 
@@ -790,10 +790,10 @@
       "static", 
       "adc611c072e0e64e6306b9415ad5051714ad2e02d4006a431385605cb84bf328"
     ], 
-    "wheelhouse/Jinja2-2.9.6.tar.gz": [
+    "wheelhouse/Jinja2-2.10.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "ddaa01a212cd6d641401cb01b605f4a4d9f37bfc93043d7f760ec70fb99ff9ff"
+      "f84be1bb0040caca4cea721fcbbbbd61f9be9464ca236387158b0feea01914a4"
     ], 
     "wheelhouse/MarkupSafe-1.0.tar.gz": [
       "layer:basic", 
@@ -810,15 +810,15 @@
       "dynamic", 
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ], 
-    "wheelhouse/charmhelpers-0.18.2.tar.gz": [
+    "wheelhouse/charmhelpers-0.18.3.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "6bb4276024d03e5caa176628e027cd0d75320395de6018d261fdda7e379da256"
+      "88a2be48ab939beaa612c3f8565a3a3f75a0ee46533f143a2bb6323bbfcb0d93"
     ], 
-    "wheelhouse/charms.reactive-0.5.0.tar.gz": [
+    "wheelhouse/charms.reactive-0.6.0.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "4df8e4c0052b0d46ec8a17dc724faa98169a879752eee78dc07d0f6a0a80837e"
+      "a1c2a00decfdaa51f58ffbadac5cb394288af40a1fb3bebdbf9909566fdeeb84"
     ], 
     "wheelhouse/netaddr-0.7.19.tar.gz": [
       "layer:basic", 
@@ -830,10 +830,10 @@
       "dynamic", 
       "4d24b03ffa67638a3fa931c09fd9e0273ffa904e95ebebe7d4b1a54c93d7b732"
     ], 
-    "wheelhouse/pyaml-17.10.0.tar.gz": [
+    "wheelhouse/pyaml-17.12.1.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "a9a3e83372072fc7dc1aebcab37d6f2e08fb8066f553f31d6fc9cb2ad0b515d3"
+      "66623c52f34d83a2c0fc963e08e8b9d0c13d88404e3b43b1852ef71eda19afa3"
     ], 
     "wheelhouse/six-1.11.0.tar.gz": [
       "layer:basic", 
