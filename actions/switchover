@@ -1,5 +1,5 @@
-#!/usr/bin/python3
-# Copyright 2015 Canonical Ltd.
+#!/usr/bin/env python3
+# Copyright 2015-2018 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -15,11 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import os.path
-import subprocess
 import sys
-import tempfile
-import traceback
-
 
 hooks_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                          '..', 'hooks'))
@@ -30,6 +26,12 @@ libs_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),
 if libs_dir not in sys.path:
     sys.path.append(libs_dir)
 
+from charms.layer.basic import activate_venv
+activate_venv()
+
+import subprocess
+import tempfile
+import traceback
 
 from charmhelpers.core import hookenv
 from charms import reactive
