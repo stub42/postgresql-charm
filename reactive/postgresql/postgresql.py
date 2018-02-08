@@ -90,7 +90,7 @@ def version():
 
     # If the version wasn't set, we are using the default version for
     # the distro release.
-    version_map = dict(trusty='9.3', xenial='9.5')
+    version_map = dict(trusty='9.3', xenial='9.5', bionic='10')
     try:
         version = version_map[helpers.distro_codename()]
     except KeyError:

@@ -658,7 +658,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql", 
       "static", 
-      "68947b7e37a9a47d4f9234c4e3a1452ad88e35c6141ed313196923279183daa2"
+      "f8f5e5206a7e4a4f0302231e9a339d88721b0499d97ed43cf17722ff5ab4b0ac"
     ], 
     "reactive/postgresql/preflight.py": [
       "postgresql", 
