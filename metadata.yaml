@@ -1,6 +1,5 @@
 name: postgresql
 summary: "PostgreSQL object-relational SQL database (supported version)"
-display-name: PostgreSQL
 description: |
   PostgreSQL is a powerful, open source object-relational database system.
   It has more than 15 years of active development and a proven
@@ -19,6 +18,7 @@ tags:
 series:
     - xenial
     - trusty
+    - bionic
 provides:
   db:
     interface: pgsql
