@@ -603,7 +603,7 @@
     "metadata.yaml": [
       "postgresql", 
       "dynamic", 
-      "04fd1ee4bf87f4e2e46f3c4e7201293890e5b5682d6a7e834685d0fcf61ab551"
+      "e852621ad59c489a65337953b4de158dc463a78a60508be53cfae9490ebe52c4"
     ], 
     "reactive/__init__.py": [
       "postgresql", 
@@ -698,7 +698,7 @@
     "reactive/snap.py": [
       "layer:snap", 
       "static", 
-      "9196b3ff940cbc8ad3790768cc8d5640bd285dfc865c1cbc26a65cc79cd14141"
+      "323272e0cb85bb2927dd549028d26ae4948a2defab3bf73d534112ee2342af78"
     ], 
     "reactive/workloadstatus.py": [
       "postgresql", 
@@ -810,10 +810,10 @@
       "dynamic", 
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ], 
-    "wheelhouse/charmhelpers-0.18.3.tar.gz": [
+    "wheelhouse/charmhelpers-0.18.5.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "88a2be48ab939beaa612c3f8565a3a3f75a0ee46533f143a2bb6323bbfcb0d93"
+      "b774d2281e2605ddb0f74989060b4f6e5f611bc2a84778331e9ff16063770530"
     ], 
     "wheelhouse/charms.reactive-0.6.0.tar.gz": [
       "layer:basic", 
