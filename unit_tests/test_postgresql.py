@@ -27,6 +27,7 @@ sys.path.insert(2, os.path.join(ROOT, 'lib'))
 sys.path.insert(3, os.path.join(ROOT, 'lib', 'testdeps'))
 
 from charmhelpers.core import hookenv
+from charmhelpers.core import unitdata
 
 import context
 from reactive import workloadstatus
@@ -38,23 +39,37 @@ class TestPostgresql(unittest.TestCase):
     @patch.object(hookenv, 'config')
     @patch.object(helpers, 'distro_codename')
     def test_version(self, codename, config):
+
+        def clear_cache():
+            unitdata.kv().unset('postgresql.pg_version')
+
         # Explicit version in config.
-        config.return_value = {'version': sentinel.version}
-        self.assertEqual(postgresql.version(), sentinel.version)
+        config.return_value = {'version': '23'}
+        clear_cache()
+        self.assertEqual(postgresql.version(), '23')
 
         config.return_value = {'version': ''}
 
         # Trusty default
         codename.return_value = 'trusty'
+        clear_cache()
         self.assertEqual(postgresql.version(), '9.3')
 
         # Xenial default
         codename.return_value = 'xenial'
+        clear_cache()
         self.assertEqual(postgresql.version(), '9.5')
+
+        # Bionic default
+        codename.return_value = 'bionic'
+        clear_cache()
+        self.assertEqual(postgresql.version(), '10')
+
 
         # No other fallbacks, yet.
         codename.return_value = 'whatever'
-        with self.assertRaises(KeyError):
+        clear_cache()
+        with self.assertRaises(NotImplementedError):
             postgresql.version()
 
     @patch('subprocess.check_output')

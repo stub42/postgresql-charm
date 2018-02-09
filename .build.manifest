@@ -673,7 +673,7 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "f905d28df72323414b9cad80869ced275e6f338f77c119fd6cc2732ba9fa6862"
+      "9e0dd088b0ce1c8747cdbd86097b5a126c015699247c79a5a45d8e2204bd0df8"
     ], 
     "reactive/postgresql/storage.py": [
       "postgresql", 
@@ -788,7 +788,7 @@
     "unit_tests/test_postgresql.py": [
       "postgresql", 
       "static", 
-      "adc611c072e0e64e6306b9415ad5051714ad2e02d4006a431385605cb84bf328"
+      "f39c85ba10b3790cbbc90ba879ae319ce3f697fdeb50904e61dff11ea8d4676f"
     ], 
     "wheelhouse/Jinja2-2.10.tar.gz": [
       "layer:basic", 
