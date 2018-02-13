@@ -18,6 +18,7 @@
 "series":
 - "xenial"
 - "trusty"
+- "bionic"
 "provides":
   "db":
     "interface": "pgsql"

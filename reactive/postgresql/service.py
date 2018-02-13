@@ -44,18 +44,6 @@ def install():
 
 @everyhook
 def main():
-    # Modify the behavior of the PostgreSQL package installation
-    # before any packages are installed. We do this here, rather than
-    # in handlers, so that extra_packages declared by the operator
-    # don't drag in the PostgreSQL packages as dependencies before
-    # the environment tweaks have been made.
-    if (not reactive.is_state('apt.installed.postgresql-common') and
-            not reactive.is_state('postgresql.cluster.inhibited')):
-        generate_locale()
-        inhibit_default_cluster_creation()
-        install_postgresql_packages()
-        install_extra_packages()  # Deprecated extra-packages option
-
     # Don't trust this state from the last hook. Daemons may have
     # crashed and servers rebooted since then.
     if reactive.is_state('postgresql.cluster.created'):
@@ -131,52 +119,44 @@ def configure_sources():
             apt.add_source(pgdg_src, f.read())
 
 
-def inhibit_default_cluster_creation():
-    '''Stop the PostgreSQL packages from creating the default cluster.
-
-    We can't use the default cluster as it is likely created with an
-    incorrect locale and without options such as data checksumming.
-    We could just delete it, but then we need to be able to tell between
-    an existing cluster whose data should be preserved and a freshly
-    created empty cluster. And why waste time creating it in the first
-    place?
-    '''
-    hookenv.log('Inhibiting PostgreSQL packages from creating default cluster')
-    path = postgresql.postgresql_conf_path()
-    if os.path.exists(path) and open(path, 'r').read():
-        status_set('blocked', 'postgresql.conf already exists')
-    else:
-        hookenv.log('Inhibiting', DEBUG)
-        os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
-        with open(path, 'w') as f:
-            f.write('# Inhibited')
-        reactive.set_state('postgresql.cluster.inhibited')
-
-
-@when('apt.installed.postgresql-common', 'postgresql.cluster.inhibited')
-def uninhibit_default_cluster_creation():
-    '''Undo inhibit_default_cluster_creation() so manual creation works.'''
-    hookenv.log('Removing inhibitions')
-    path = postgresql.postgresql_conf_path()
-    with open(path, 'r') as f:
-        assert f.read() == '# Inhibited', 'Default cluster inhibition failed'
-    os.unlink(postgresql.postgresql_conf_path())
-    reactive.remove_state('postgresql.cluster.inhibited')
-
-
-@when('postgresql.cluster.inhibited')
 @when('postgresql.cluster.locale.set')
 @when_not('apt.installed.postgresql-common')
+def install_postgresql_common_package():
+    '''First install postgresql-common, which allows us to customize later installation.'''
+    apt.queue_install(['postgresql-common'])
+
+
+@when('apt.installed.postgresql-common')
+@when_not('postgresql.packages-queued')
 def install_postgresql_packages():
+    # Stop the PostgreSQL packages from creating the default cluster.
+    # We can't use the default cluster as it is likely created with an
+    # incorrect locale and without options such as data checksumming.
+    # We could just delete it, but then we need to be able to tell between
+    # an existing cluster whose data should be preserved and a freshly
+    # created empty cluster. And why waste time creating it in the first
+    # place?
+    hookenv.log('Inhibiting PostgreSQL packages from creating default cluster')
+    # This works under bionic, but is bugged with earlier versions of postgresql-common
+    # subprocess.check_call([
+    #     'pg_conftool', '/etc/postgresql-common/createcluster.conf',
+    #     'set', 'create_main_cluster', 'false'])
+    cfg = open('/etc/postgresql-common/createcluster.conf', 'at')
+    cfg.write('\n# create_main_cluster disabled by Juju charm\n')
+    cfg.write('create_main_cluster=false\n')
+    cfg.flush()
+    cfg.close()
     apt.queue_install(postgresql.packages())
-
-
-def install_extra_packages():
-    '''Install packages declared by the deprecated 'extra-packages' config.
-
-    The apt layer handles 'extra_packages', with the underscore.
-    '''
+    # Deprecated option. The apt layer handles 'extra_packages' with
+    # an underscore.
     apt.queue_install(set(hookenv.config()['extra-packages'].split()))
+    reactive.set_state('postgresql.packages.queued')
+
+
+@when('postgresql.packages.queued')
+@when_not('apt.queued_installs')
+def postgresql_packages_installed():
+    reactive.set_state('postgresql.packages.installed')
 
 
 @when_not('postgresql.cluster.kernel_settings.set')
@@ -189,8 +169,7 @@ def update_kernel_settings():
     reactive.set_state('postgresql.cluster.kernel_settings.set')
 
 
-@when('apt.installed.postgresql-common')
-@when_not('postgresql.cluster.inhibited')
+@when('postgresql.packages.installed')
 @when_not('postgresql.cluster.created')
 @when_not('postgresql.cluster.destroyed')
 def create_cluster():
@@ -206,7 +185,6 @@ def create_cluster():
 @when_any('postgresql.replication.has_master',
           'postgresql.replication.failover')
 @when_not('postgresql.cluster.configured')
-@when_not('postgresql.cluster.inhibited')
 def configure_cluster():
     '''Configure the cluster.'''
     update_pg_ident_conf()
@@ -869,7 +847,7 @@ def set_active():
         status_set('blocked', 'PostgreSQL unexpectedly shut down')
 
 
-@when('apt.installed.postgresql-common')
+@when('postgresql.packages.installed')
 def set_version():
     v = postgresql.point_version()
     hookenv.log('Setting application version to {}'.format(v))
