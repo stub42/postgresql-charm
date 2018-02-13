@@ -1,4 +1,4 @@
-# Copyright 2015-2017 Canonical Ltd.
+# Copyright 2015-2018 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -29,7 +29,6 @@ sys.path.insert(3, os.path.join(ROOT, 'lib', 'testdeps'))
 from charmhelpers.core import hookenv
 from charmhelpers.core import unitdata
 
-import context
 from reactive import workloadstatus
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
@@ -65,7 +64,6 @@ class TestPostgresql(unittest.TestCase):
         clear_cache()
         self.assertEqual(postgresql.version(), '10')
 
-
         # No other fallbacks, yet.
         codename.return_value = 'whatever'
         clear_cache()
@@ -76,7 +74,7 @@ class TestPostgresql(unittest.TestCase):
     @patch.object(postgresql, 'postgres_path')
     def test_point_version(self, postgres_path, check_output):
         postgres_path.return_value = sentinel.postgres_path
-        check_output.return_value = 'postgres (PostgreSQL) 9.8.765\n'
+        check_output.return_value = 'postgres (PostgreSQL) 9.8.765-2\n'
         self.assertEqual(postgresql.point_version(), '9.8.765')
         check_output.assert_called_once_with([sentinel.postgres_path, '-V'],
                                              universal_newlines=True)

@@ -122,7 +122,11 @@ def configure_sources():
 @when('postgresql.cluster.locale.set')
 @when_not('apt.installed.postgresql-common')
 def install_postgresql_common_package():
-    '''First install postgresql-common, which allows us to customize later installation.'''
+    '''First install postgresql-common
+
+    This provides hooks for us to customize how the main postgresql
+    package behaves on installation.
+    '''
     apt.queue_install(['postgresql-common'])
 
 
@@ -137,7 +141,8 @@ def install_postgresql_packages():
     # created empty cluster. And why waste time creating it in the first
     # place?
     hookenv.log('Inhibiting PostgreSQL packages from creating default cluster')
-    # This works under bionic, but is bugged with earlier versions of postgresql-common
+    # This works under bionic, but is bugged with earlier versions of
+    # postgresql-common
     # subprocess.check_call([
     #     'pg_conftool', '/etc/postgresql-common/createcluster.conf',
     #     'set', 'create_main_cluster', 'false'])
