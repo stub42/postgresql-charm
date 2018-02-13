@@ -225,10 +225,9 @@ https://jujucharms.com/postgresql/ and deployed with juju using the
 URI `cs:postgresql`. It is also available as the 'built' git branch
 in the git+ssh://git.launchpad.net/postgresql-charm repository:
 
-    mkdir trusty
     git clone -b built \
-        https://git.launchpad.net/postgresql-charm trusty/postgresql
-    JUJU_REPOSITORY=. juju deploy local:postgresql
+        https://git.launchpad.net/postgresql-charm postgresql
+    juju deploy ./postgresql
 
 
 # References 
