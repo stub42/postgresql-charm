@@ -44,6 +44,26 @@ def install():
 
 @everyhook
 def main():
+    if not (reactive.is_state('postgresql.cluster.created') or
+            reactive.is_state('postgresql.cluster.initial-check')):
+        # We need to check for existance of an existing database,
+        # before the main PostgreSQL package has been installed.
+        # If there is one, abort rather than risk destroying data.
+        # We need to do this here, as the apt layer may pull in
+        # the main PostgreSQL package through dependencies, per
+        # lp:1749284
+        if os.path.exists(postgresql.postgresql_conf_path()):
+            hookenv.status_set('blocked', 'PostgreSQL config from previous '
+                               'install found at {}'
+                               ''.format(postgresql.postgresql_conf_path()))
+        elif os.path.exists(postgresql.data_dir()):
+            hookenv.status_set('blocked', 'PostgreSQL database from previous '
+                               'install found at {}'
+                               ''.format(postgresql.postgresql.data_dir()))
+        else:
+            hookenv.log('No pre-existing PostgreSQL database found')
+            reactive.set_state('postgresql.cluster.initial-check')
+
     # Don't trust this state from the last hook. Daemons may have
     # crashed and servers rebooted since then.
     if reactive.is_state('postgresql.cluster.created'):
@@ -120,37 +140,9 @@ def configure_sources():
 
 
 @when('postgresql.cluster.locale.set')
+@when('postgresql.cluster.initial-check')
 @when_not('apt.installed.postgresql-common')
-def install_postgresql_common_package():
-    '''First install postgresql-common
-
-    This provides hooks for us to customize how the main postgresql
-    package behaves on installation.
-    '''
-    apt.queue_install(['postgresql-common'])
-
-
-@when('apt.installed.postgresql-common')
-@when_not('postgresql.packages-queued')
 def install_postgresql_packages():
-    # Stop the PostgreSQL packages from creating the default cluster.
-    # We can't use the default cluster as it is likely created with an
-    # incorrect locale and without options such as data checksumming.
-    # We could just delete it, but then we need to be able to tell between
-    # an existing cluster whose data should be preserved and a freshly
-    # created empty cluster. And why waste time creating it in the first
-    # place?
-    hookenv.log('Inhibiting PostgreSQL packages from creating default cluster')
-    # This works under bionic, but is bugged with earlier versions of
-    # postgresql-common
-    # subprocess.check_call([
-    #     'pg_conftool', '/etc/postgresql-common/createcluster.conf',
-    #     'set', 'create_main_cluster', 'false'])
-    cfg = open('/etc/postgresql-common/createcluster.conf', 'at')
-    cfg.write('\n# create_main_cluster disabled by Juju charm\n')
-    cfg.write('create_main_cluster=false\n')
-    cfg.flush()
-    cfg.close()
     apt.queue_install(postgresql.packages())
     # Deprecated option. The apt layer handles 'extra_packages' with
     # an underscore.
@@ -175,13 +167,12 @@ def update_kernel_settings():
 
 
 @when('postgresql.packages.installed')
+@when('postgresql.cluster.initial-check')
 @when_not('postgresql.cluster.created')
 @when_not('postgresql.cluster.destroyed')
 def create_cluster():
     '''Sets the postgresql.cluster.created state.'''
-    assert not os.path.exists(postgresql.postgresql_conf_path()), \
-        'inhibit_default_cluster_creation() failed'
-    assert not os.path.exists(postgresql.data_dir())
+    postgresql.drop_cluster(stop=True)
     postgresql.create_cluster()
     reactive.set_state('postgresql.cluster.created')
 
@@ -761,10 +752,6 @@ def update_pgpass():
         helpers.write(path, content, mode=0o600, user=account, group=account)
 
 
-# Use @when_file_changed for this when Issue #44 is resolved.
-# @when_file_changed(postgresql.postgresql_conf_path)
-# @when('postgresql.cluster.is_running')
-# @when_not('postgresql.cluster.needs_restart')
 def postgresql_conf_changed():
     '''
     After postgresql.conf has been changed, check it to see if
@@ -859,7 +846,8 @@ def set_version():
     hookenv.application_version_set(v)
 
 
-@when('postgresql.cluster.created')
+@when('postgresql.packages.installed')
+@when_not('postgresql.cluster.support-scripts')
 def install_administrative_scripts():
     scripts_dir = helpers.scripts_dir()
     logs_dir = helpers.logs_dir()
@@ -903,6 +891,8 @@ def install_administrative_scripts():
         # unit is installed, per Bug #1329816.
         helpers.write(helpers.backups_log_path(), '', mode=0o644,
                       user='postgres', group='postgres')
+
+    reactive.set_state('postgresql.cluster.support-scripts')
 
 
 @when('postgresql.cluster.is_running')

@@ -164,7 +164,6 @@ def packages():
     ver = version()
     p = set(['postgresql-{}'.format(ver),
              'postgresql-common', 'postgresql-client-common',
-             'run-one',
              'postgresql-client-{}'.format(ver)])
     if not has_version('10'):
         p.add('postgresql-contrib-{}'.format(ver))
@@ -332,8 +331,10 @@ def create_cluster():
     subprocess.check_call(cmd, universal_newlines=True)
 
 
-def drop_cluster():
+def drop_cluster(stop=False):
     cmd = ['pg_dropcluster', version(), 'main']
+    if stop:
+        cmd.append('--stop')
     subprocess.check_call(cmd, universal_newlines=True)
 
 

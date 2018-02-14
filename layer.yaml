@@ -4,6 +4,7 @@ includes:
   - layer:snap
   - layer:leadership
   - layer:coordinator
+  - layer:nagios
   - interface:pgsql
 options:
   basic:
@@ -11,6 +12,7 @@ options:
     include_system_packages: true
     packages:
       - python3-psycopg2
+      - run-one
   coordinator:
     log_level: debug
 repo: git+ssh://git.launchpad.net/postgresql-charm

@@ -32,13 +32,10 @@ provides:
   master:
     interface: pgreplication
     optional: true
+  # Can local-monitors be dropped? Did it ever get used?
   local-monitors:
     interface: local-monitors
     scope: container
-  nrpe-external-master:
-    interface: nrpe-external-master
-    scope: container
-    optional: true
   data:
     interface: block-storage
     scope: container
