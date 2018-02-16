@@ -104,6 +104,7 @@ def point_version():
     '''PostgreSQL version. major.minor.patch or major.patch, as a string.'''
     output = subprocess.check_output([postgres_path(), '-V'],
                                      universal_newlines=True)
+    return re.search(r'[\d\.]+', output).group(0)
     return output.split()[-1]
 
 
@@ -161,11 +162,12 @@ def port():
 
 def packages():
     ver = version()
-    return set(['postgresql-{}'.format(ver),
-                'postgresql-common', 'postgresql-client-common',
-                'run-one',
-                'postgresql-contrib-{}'.format(ver),
-                'postgresql-client-{}'.format(ver)])
+    p = set(['postgresql-{}'.format(ver),
+             'postgresql-common', 'postgresql-client-common',
+             'postgresql-client-{}'.format(ver)])
+    if not has_version('10'):
+        p.add('postgresql-contrib-{}'.format(ver))
+    return p
 
 
 @contextmanager
@@ -329,8 +331,10 @@ def create_cluster():
     subprocess.check_call(cmd, universal_newlines=True)
 
 
-def drop_cluster():
+def drop_cluster(stop=False):
     cmd = ['pg_dropcluster', version(), 'main']
+    if stop:
+        cmd.append('--stop')
     subprocess.check_call(cmd, universal_newlines=True)
 
 

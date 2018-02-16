@@ -7,19 +7,23 @@
     "include_system_packages": !!bool "true"
     "packages":
     - "python3-psycopg2"
+    - "run-one"
   "postgresql": {}
   "apt":
     "version_package": ""
     "packages": []
     "full_version": !!bool "false"
+  "nagios": {}
   "leadership": {}
   "snap": {}
 "includes":
 - "layer:basic"
+- "interface:nrpe-external-master"
 - "layer:apt"
 - "layer:snap"
 - "layer:leadership"
 - "layer:coordinator"
+- "layer:nagios"
 - "interface:pgsql"
 "repo": "git+ssh://git.launchpad.net/postgresql-charm"
 "is": "postgresql"

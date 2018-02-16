@@ -20,6 +20,9 @@
 - "trusty"
 - "bionic"
 "provides":
+  "nrpe-external-master":
+    "interface": "nrpe-external-master"
+    "scope": "container"
   "db":
     "interface": "pgsql"
     "optional": !!bool "true"
@@ -35,10 +38,6 @@
   "local-monitors":
     "interface": "local-monitors"
     "scope": "container"
-  "nrpe-external-master":
-    "interface": "nrpe-external-master"
-    "scope": "container"
-    "optional": !!bool "true"
   "data":
     "interface": "block-storage"
     "scope": "container"

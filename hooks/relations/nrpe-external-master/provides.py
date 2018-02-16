@@ -1,25 +1,62 @@
-# Copyright 2015-2016 Canonical Ltd.
-#
-# This file is part of the PostgreSQL Charm for Juju.
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License version 3, as
-# published by the Free Software Foundation.
-#
-# This program is distributed in the hope that it will be useful, but
-# WITHOUT ANY WARRANTY; without even the implied warranties of
-# MERCHANTABILITY, SATISFACTORY QUALITY, or FITNESS FOR A PARTICULAR
-# PURPOSE.  See the GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+import datetime
 
-from charms import reactive
+from charms.reactive import hook
+from charms.reactive import RelationBase
+from charms.reactive import scopes
 
 
-class NrpeExternalMasterProvides(reactive.relations.RelationBase):
-    '''Dead chicken, sacrificed for charms.reactive assumptions?
+class NrpeExternalMasterProvides(RelationBase):
+    scope = scopes.GLOBAL
 
-    https://github.com/juju-solutions/charms.reactive/issues/48
-    '''
-    pass
+    @hook('{provides:nrpe-external-master}-relation-{joined,changed}')
+    def changed_nrpe(self):
+        self.set_state('{relation_name}.available')
+
+    @hook('{provides:nrpe-external-master}-relation-{broken,departed}')
+    def broken_nrpe(self):
+        self.remove_state('{relation_name}.available')
+
+    def add_check(self, args, name=None, description=None, context=None,
+                  servicegroups=None, unit=None):
+        unit = unit.replace('/', '-')
+        check_tmpl = """
+#---------------------------------------------------
+# This file is Juju managed
+#---------------------------------------------------
+command[%(check_name)s]=%(check_args)s
+"""
+        service_tmpl = """
+#---------------------------------------------------
+# This file is Juju managed
+#---------------------------------------------------
+define service {
+    use                             active-service
+    host_name                       %(context)s-%(unit_name)s
+    service_description             %(description)s
+    check_command                   check_nrpe!%(check_name)s
+    servicegroups                   %(servicegroups)s
+}
+"""
+        check_filename = "/etc/nagios/nrpe.d/check_%s.cfg" % (name)
+        with open(check_filename, "w") as fh:
+            fh.write(check_tmpl % {
+                'check_args': ' '.join(args),
+                'check_name': name,
+            })
+        service_filename = "/var/lib/nagios/export/service__%s_%s.cfg" % (
+                           unit, name)
+        with open(service_filename, "w") as fh:
+            fh.write(service_tmpl % {
+                'servicegroups': servicegroups or context,
+                'context': context,
+                'description': description,
+                'check_name': name,
+                'unit_name': unit,
+            })
+
+    def updated(self):
+        relation_info = {
+            'timestamp': datetime.datetime.now().isoformat(),
+        }
+        self.set_remote(**relation_info)
+        self.remove_state('{relation_name}.available')

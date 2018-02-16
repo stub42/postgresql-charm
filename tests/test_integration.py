@@ -588,17 +588,6 @@ class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
                          "'/srv/data/postgresql/9.3/main'")
 
 
-class PG94Tests(PGBaseTestCase, unittest.TestCase):
-    test_config = dict(version=('' if SERIES == 'wily' else '9.4'),
-                       pgdg=(False if SERIES == 'wily' else True))
-
-
-class PG94MultiTests(PGMultiBaseTestCase, unittest.TestCase):
-    num_units = 3
-    test_config = dict(version=('' if SERIES == 'wily' else '9.4'),
-                       pgdg=(False if SERIES == 'wily' else True))
-
-
 class PG95Tests(PGBaseTestCase, unittest.TestCase):
     # checkpoint_segments to test Bug #1588072
     test_config = dict(version=('' if SERIES == 'xenial' else '9.5'),
@@ -613,13 +602,15 @@ class PG95MultiTests(PGMultiBaseTestCase, unittest.TestCase):
                        pgdg=(False if SERIES == 'xenial' else True))
 
 
-class PG96Tests(PGBaseTestCase, unittest.TestCase):
-    test_config = dict(version='9.6', pgdg=True)
+class PG10Tests(PGBaseTestCase, unittest.TestCase):
+    test_config = dict(version=('' if SERIES == 'bionic' else '10'),
+                       pgdg=(False if SERIES == 'bionic' else True))
 
 
-class PG96MultiTests(PGMultiBaseTestCase, unittest.TestCase):
+class PG10MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     num_units = 2
-    test_config = dict(version='9.6', pgdg=True)
+    test_config = dict(version=('' if SERIES == 'bionic' else '10'),
+                       pgdg=(False if SERIES == 'bionic' else True))
 
 
 class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
