@@ -30,6 +30,22 @@
       \ store.\n"
     "type": "string"
     "default": ""
+  "nagios_context":
+    "default": "juju"
+    "type": "string"
+    "description": |
+      Used by the nrpe subordinate charms.
+      A string that will be prepended to instance name to set the host name
+      in nagios. So for instance the hostname would be something like:
+          juju-myservice-0
+      If you're running multiple environments with the same services in them
+      this allows you to differentiate between them.
+  "nagios_servicegroups":
+    "default": ""
+    "type": "string"
+    "description": |
+      A comma-separated list of nagios servicegroups.
+      If left empty, the nagios_context will be used as the servicegroup
   "admin_addresses":
     "default": ""
     "type": "string"
@@ -63,9 +79,8 @@
     "default": ""
     "type": "string"
     "description": "Version of PostgreSQL that we want to install. Supported versions\
-      \ are \"9.3\", \"9.4\", \"9.5\", and \"9.6\". The default version for the deployed\
-      \ Ubuntu release is used when the version is unspecified. Version \"10\" is\
-      \ also available for testing.\n"
+      \ are \"9.3\", \"9.4\", \"9.5\", \"9.6\" & \"10\". The default version for the\
+      \ deployed Ubuntu release is used when the version is unspecified.\n"
   "extra_pg_conf":
     "default": |
       # Additional service specific postgresql.conf settings.
@@ -142,19 +157,6 @@
     "default": "/var/lib/postgresql/backups"
     "type": "string"
     "description": "Directory to place backups in.\n"
-  "nagios_context":
-    "default": "juju"
-    "type": "string"
-    "description": "Used by the nrpe subordinate charms. A string that will be prepended\
-      \ to instance name to set the host name in nagios. So for instance the hostname\
-      \ would be something like:\n    juju-postgresql-0\nIf you're running multiple\
-      \ environments with the same services in them this allows you to differentiate\
-      \ between them.\n"
-  "nagios_servicegroups":
-    "default": ""
-    "type": "string"
-    "description": "A comma-separated list of nagios servicegroups. If left empty,\
-      \ the nagios_context will be used as the servicegroup\n"
   "pgdg":
     "description": "Enable the PostgreSQL Global Development Group APT repository\
       \ (https://wiki.postgresql.org/wiki/Apt). This package source provides official\

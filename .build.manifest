@@ -5,7 +5,9 @@
     "layer:snap", 
     "layer:leadership", 
     "layer:coordinator", 
+    "layer:nagios", 
     "postgresql", 
+    "interface:nrpe-external-master", 
     "interface:pgsql", 
     "build"
   ], 
@@ -33,7 +35,7 @@
     "README.md": [
       "postgresql", 
       "static", 
-      "a8ab14a9eba24b9ffa1a3051f3f17cc5a38eba3b2239c1688bfa9690965f65ba"
+      "1882eb9dcbfe4cb9bd8e7e0e92359ffc9d0de51ae56fd8b42acddd5c3c773c0c"
     ], 
     "actions.yaml": [
       "postgresql", 
@@ -88,12 +90,42 @@
     "config.yaml": [
       "postgresql", 
       "dynamic", 
-      "2e13e6672abce1611408a72855b86026cb48ad690ddcf6d9c197bd6b028f3c83"
+      "8abb7f64562530f7c9997c6175b5af699efe064e920945ab24294dfe2d7a6069"
     ], 
     "copyright": [
       "postgresql", 
       "static", 
       "5d53c0caa528000229bd4db076ee0516ecd4a88146196edb31740365bb2899ec"
+    ], 
+    "copyright.layer-apt": [
+      "layer:apt", 
+      "static", 
+      "5123b2d0220fefb4424a463216fb41a6dd7cfad49c9799ba7037f1e74a2fd6bc"
+    ], 
+    "copyright.layer-basic": [
+      "layer:basic", 
+      "static", 
+      "f6740d66fd60b60f2533d9fcb53907078d1e20920a0219afce7182e2a1c97629"
+    ], 
+    "copyright.layer-coordinator": [
+      "layer:coordinator", 
+      "static", 
+      "7d212a095a6143559fb51f26bc40c2ba24b977190f65c7e5c835104f54d5dfc5"
+    ], 
+    "copyright.layer-leadership": [
+      "layer:leadership", 
+      "static", 
+      "8ce407829378fc0f72ce44c7f624e4951c7ccb3db1cfb949bee026b701728cc9"
+    ], 
+    "copyright.layer-nagios": [
+      "layer:nagios", 
+      "static", 
+      "47b2363574909e748bcc471d9004780ac084b301c154905654b5b6f088474749"
+    ], 
+    "copyright.layer-snap": [
+      "layer:snap", 
+      "static", 
+      "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     ], 
     "files/metrics/postgres_to_statsd.py": [
       "postgresql", 
@@ -210,14 +242,24 @@
       "static", 
       "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
     ], 
+    "hooks/nrpe-external-master-relation-broken": [
+      "interface:nrpe-external-master", 
+      "dynamic", 
+      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+    ], 
     "hooks/nrpe-external-master-relation-changed": [
-      "postgresql", 
-      "static", 
+      "interface:nrpe-external-master", 
+      "dynamic", 
       "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
     ], 
     "hooks/nrpe-external-master-relation-departed": [
-      "postgresql", 
-      "static", 
+      "interface:nrpe-external-master", 
+      "dynamic", 
+      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+    ], 
+    "hooks/nrpe-external-master-relation-joined": [
+      "interface:nrpe-external-master", 
+      "dynamic", 
       "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
     ], 
     "hooks/pgdata-storage-attached": [
@@ -260,15 +302,25 @@
       "static", 
       "dd81937ffec7f2e0d3eb72beb21421183303856466bd45e0334c502c8e9c7d34"
     ], 
+    "hooks/relations/nrpe-external-master/README.md": [
+      "interface:nrpe-external-master", 
+      "static", 
+      "d8ed3bc7334f6581b12b6091923f58e6f5ef62075a095a4e78fb8f434a948636"
+    ], 
     "hooks/relations/nrpe-external-master/__init__.py": [
-      "postgresql", 
+      "interface:nrpe-external-master", 
       "static", 
       "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     ], 
-    "hooks/relations/nrpe-external-master/provides.py": [
-      "postgresql", 
+    "hooks/relations/nrpe-external-master/interface.yaml": [
+      "interface:nrpe-external-master", 
       "static", 
-      "eb995dff8c39508aa500d3a0669817aeb3e1e88b5b3390a491141e46a340f2ff"
+      "894f24ba56148044dae5b7febf874b427d199239bcbe1f2f55c3db06bb77b5f0"
+    ], 
+    "hooks/relations/nrpe-external-master/provides.py": [
+      "interface:nrpe-external-master", 
+      "static", 
+      "54e5400de99c051ecf6453776ad416b1cb8c6b73b34cbe2f41b617a8ed7b9daa"
     ], 
     "hooks/relations/pgpeer/peers.py": [
       "postgresql", 
@@ -423,7 +475,7 @@
     "layer.yaml": [
       "postgresql", 
       "dynamic", 
-      "2426856b3b500425c7fe39c7c40bda6cfae38d811959641172002929a5e43565"
+      "7a2042e526213a6310f6922d5584e3bf4f3732fbe9adaaa6b4205e4ebd96fa50"
     ], 
     "lib/cache_settings.py": [
       "postgresql", 
@@ -603,7 +655,7 @@
     "metadata.yaml": [
       "postgresql", 
       "dynamic", 
-      "e852621ad59c489a65337953b4de158dc463a78a60508be53cfae9490ebe52c4"
+      "72b962bbd2497ce4b7bc42ce4f8b621308f9ef36b8abfcc4fa14b381c41411f9"
     ], 
     "reactive/__init__.py": [
       "postgresql", 
@@ -643,7 +695,7 @@
     "reactive/postgresql/helpers.py": [
       "postgresql", 
       "static", 
-      "b84d01a9eacc14b0890564c40ba6d34261a648d0d5d61b4a345297cea2d5eb29"
+      "871d68fe5003dd5e1f61fd2c3e0d24dd39ead3c67a80f1793c79397dc1a478e0"
     ], 
     "reactive/postgresql/metrics.py": [
       "postgresql", 
@@ -658,7 +710,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql", 
       "static", 
-      "f8f5e5206a7e4a4f0302231e9a339d88721b0499d97ed43cf17722ff5ab4b0ac"
+      "b583ba02b1d366430deb78831ff48af0805214280bcf84a6db9a4684f619cf1c"
     ], 
     "reactive/postgresql/preflight.py": [
       "postgresql", 
@@ -673,7 +725,7 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "9e0dd088b0ce1c8747cdbd86097b5a126c015699247c79a5a45d8e2204bd0df8"
+      "4263ce72ea963f27a6b4c70a7bdb3237dda335d8a4dd2f85a2a06801db14075b"
     ], 
     "reactive/postgresql/storage.py": [
       "postgresql", 
@@ -688,7 +740,7 @@
     "reactive/postgresql/upgrade.py": [
       "postgresql", 
       "static", 
-      "cc3ca9e15699fda11e43b96e15c764b1f3af87615a8078b26085071bc5f037b8"
+      "dc7ded013f350bbf7d93c07423ab94a9499d6b5446e5c40b4f6ce3fb64ad7336"
     ], 
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
@@ -768,7 +820,7 @@
     "tests/test_integration.py": [
       "postgresql", 
       "static", 
-      "14156fd09046594395238c83c06a900429b0644fe581abd09baa2788718d9e38"
+      "1e64c6cb82107f495eb32ce3693e4a9b89f30e7fc7f73008ca6ab83fbb70c87f"
     ], 
     "tests/tests.yaml": [
       "postgresql", 
@@ -788,7 +840,7 @@
     "unit_tests/test_postgresql.py": [
       "postgresql", 
       "static", 
-      "f39c85ba10b3790cbbc90ba879ae319ce3f697fdeb50904e61dff11ea8d4676f"
+      "95a27e5d3b13c3692bb5befe11bc8f4659d8c4e17509bb00ee24ccd60f873951"
     ], 
     "wheelhouse/Jinja2-2.10.tar.gz": [
       "layer:basic", 

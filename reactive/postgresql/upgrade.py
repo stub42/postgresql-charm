@@ -121,6 +121,12 @@ def upgrade_charm():
     # Ensure the configure version is cached.
     postgresql.version()
 
+    # Skip checks for pre-existing databases, as that has already happened.
+    reactive.set_state('postgresql.cluster.initial-check')
+
+    # Reinstall support scripts
+    reactive.remove_state('postgresql.cluster.support-scripts')
+
 
 def migrate_user(old_username, new_username, password, superuser=False):
     if postgresql.is_primary():
