@@ -197,6 +197,20 @@ def configure_cluster():
                    'Invalid postgresql.conf setting {}: {}'.format(*x.args))
 
 
+def incoming_address(relinfo):
+    ''' Return the incoming address range if present in relinfo.
+    We look for information as provided by recent versions of Juju,
+    and fall back to private-address if needed.
+    '''
+    if 'egress-subnets' in relinfo:
+        return relinfo['egress-subnets']
+    if 'ingress-address' in relinfo:
+        return relinfo['ingress-address']
+    if 'private-address' in relinfo:
+        return relinfo['private-address']
+    return None
+
+
 def update_pg_ident_conf():
     '''Add the charm's required entry to pg_ident.conf'''
     entries = set([('root', 'postgres'),
@@ -268,9 +282,10 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
     # Peers need replication access as the charm replication user.
     if _peer_rel:
         for peer, relinfo in _peer_rel.items():
-            if 'private-address' not in relinfo:
+            addr = incoming_address(relinfo)
+            if addr is None:
                 continue  # Other end not yet provisioned?
-            addr = postgresql.addr_to_range(relinfo['private-address'])
+            addr = postgresql.addr_to_range(addr)
             qaddr = postgresql.quote_identifier(addr)
             # Magic replication database, for replication.
             add('host', 'replication', replication.replication_username(),
@@ -283,9 +298,10 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
     for rel in rels['db'].values():
         if 'user' in rel.local:
             for relinfo in rel.values():
-                if 'private-address' not in relinfo:
+                addr = incoming_address(relinfo)
+                if addr is None:
                     continue  # Other end not yet provisioned?
-                addr = postgresql.addr_to_range(relinfo['private-address'])
+                addr = postgresql.addr_to_range(addr)
                 # Quote everything, including the address, to disenchant
                 # magic tokens like 'all'.
                 add('host',
@@ -306,9 +322,10 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
     for rel in rels['db-admin'].values():
         if 'user' in rel.local:
             for relinfo in rel.values():
-                if 'private-address' not in relinfo:
+                addr = incoming_address(relinfo)
+                if addr is None:
                     continue  # Other end not yet provisioned?
-                addr = postgresql.addr_to_range(relinfo['private-address'])
+                addr = postgresql.addr_to_range(addr)
                 add('host', 'all', 'all',
                     postgresql.quote_identifier(addr),
                     'md5', '# {}'.format(relinfo))
@@ -319,9 +336,10 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
     # database name.
     for rel in rels['master'].values():
         for relinfo in rel.values():
-            if 'private-address' not in relinfo:
+            addr = incoming_address(relinfo)
+            if addr is None:
                 continue  # Other end not yet provisioned?
-            addr = postgresql.addr_to_range(relinfo['private-address'])
+            addr = postgresql.addr_to_range(addr)
             add('host', 'replication',
                 postgresql.quote_identifier(rel.local['user']),
                 postgresql.quote_identifier(addr),

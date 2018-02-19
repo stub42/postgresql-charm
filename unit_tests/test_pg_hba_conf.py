@@ -62,10 +62,19 @@ class TestPgHbaConf(unittest.TestCase):
         self.assertIn('local all all reject', content)
         self.assertIn('host all all all reject', content)
 
-    def test_peer_relation(self, log):
+    def test_peer_relation_private_address(self, log):
+        self.check_peer_relation('private-address', log)
+
+    def test_peer_relation_ingress_address(self, log):
+        self.check_peer_relation('ingress-address', log)
+
+    def test_peer_relation_egress_address(self, log):
+        self.check_peer_relation('egress-address', log)
+
+    def check_peer_relation(self, addr_key, log):
         rels = Relations()
         rels.peer = {
-            'unit/1': {'private-address': '1.2.3.4'},
+            'unit/1': {addr_key: '1.2.3.4'},
         }
         content = generate_pg_hba_conf('', defaultdict(str), rels, rels.peer)
         self.assertIn('host replication _juju_repl "1.2.3.4/32" md5', content)

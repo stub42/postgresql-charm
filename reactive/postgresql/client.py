@@ -24,6 +24,7 @@ import context
 from reactive.postgresql import helpers
 from reactive.postgresql import replication
 from reactive.postgresql import postgresql
+from reactive.postgresql.service import incoming_address
 from relations.pgsql.requires import ConnectionString
 
 from everyhook import everyhook
@@ -237,8 +238,9 @@ def db_relation_common(rel):
     # This is to avoid the race condition where a new client unit
     # joins an existing client relation and sees valid credentials,
     # before we have had a chance to grant it access.
-    local['allowed-units'] = ' '.join(unit for unit, relinfo in rel.items()
-                                      if 'private-address' in relinfo)
+    local['allowed-units'] = ' '.join(
+        unit for unit, relinfo in rel.items()
+        if incoming_address(relinfo) is not None)
 
     # v2 protocol. Publish connection strings for this unit and its peers.
     # Clients should use these connection strings in favour of the old
