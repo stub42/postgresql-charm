@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import json
+from itertools import chain
 
 from charmhelpers.core import hookenv, host
 from charms import leadership
@@ -24,6 +25,7 @@ import context
 from reactive.postgresql import helpers
 from reactive.postgresql import replication
 from reactive.postgresql import postgresql
+from reactive.postgresql.service import incoming_addresses
 from relations.pgsql.requires import ConnectionString
 
 from everyhook import everyhook
@@ -227,7 +229,7 @@ def db_relation_common(rel):
     # Host is the private ip address, but this might change and
     # become the address of an attached proxy or alternative peer
     # if this unit is in maintenance.
-    local['host'] = hookenv.unit_private_ip()
+    local['host'] = ingress_address(local.relname, local.relid)
 
     # Port will be 5432, unless the user has overridden it or
     # something very weird happened when the packages where installed.
@@ -237,8 +239,16 @@ def db_relation_common(rel):
     # This is to avoid the race condition where a new client unit
     # joins an existing client relation and sees valid credentials,
     # before we have had a chance to grant it access.
-    local['allowed-units'] = ' '.join(unit for unit, relinfo in rel.items()
-                                      if 'private-address' in relinfo)
+    local['allowed-units'] = ' '.join(
+        unit for unit, relinfo in rel.items()
+        if len(incoming_addresses(relinfo)) > 0)
+
+    # The list of IP address ranges on this relation granted access.
+    # This will replace allowed-units, which does not work with cross
+    # model ralations due to the anonymization of the external client.
+    local['allowed-addrs'] = ','.join(sorted(
+        {r: True for r in chain(*[incoming_addresses(relinfo)
+                                  for relinfo in rel.values()])}.keys()))
 
     # v2 protocol. Publish connection strings for this unit and its peers.
     # Clients should use these connection strings in favour of the old
@@ -329,3 +339,14 @@ def ensure_db_relation_resources(rel):
         postgresql.ensure_extensions(con, extensions)
 
     con.commit()  # Don't throw away our changes.
+
+
+def ingress_address(endpoint, relid):
+    try:
+        d = hookenv.network_get(endpoint, relid)
+        return d["ingress-addresses"][0]
+    except NotImplementedError:
+        # Warn, although this is normal with older Juju.
+        hookenv.log("Unable to determine ingress address, "
+                    "falling back to private ip", hookenv.WARNING)
+        return hookenv.unit_private_ip()
