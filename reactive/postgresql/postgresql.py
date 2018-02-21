@@ -784,6 +784,8 @@ def promote():
 
 def is_replicating(parent, ip=None, user=None):
     '''Return True if the ip address is replicating from the parent unit'''
+    # We can get away with using unit_private_ip() here because we only
+    # replicate to peers and not cross model. TODO: Use egress subnets anyway.
     if ip is None:
         ip = hookenv.unit_private_ip()
     ip = helpers.ensure_ip(ip)

@@ -690,7 +690,7 @@
     "reactive/postgresql/client.py": [
       "postgresql", 
       "static", 
-      "fc125d5cf3ae0d24ebd32f0020432eebeae11ff02dcc197cc7bc0e948017d7a8"
+      "8bec4d5e65e87a91de8652dbf54e3b6977efcff02ffb8707c31bc3261e41b49a"
     ], 
     "reactive/postgresql/helpers.py": [
       "postgresql", 
@@ -710,7 +710,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql", 
       "static", 
-      "b583ba02b1d366430deb78831ff48af0805214280bcf84a6db9a4684f619cf1c"
+      "5ef5369da3deac7804f858e21ae45db0c75db1fcdd962b550db640e6a3c77eb0"
     ], 
     "reactive/postgresql/preflight.py": [
       "postgresql", 
@@ -725,7 +725,7 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "4263ce72ea963f27a6b4c70a7bdb3237dda335d8a4dd2f85a2a06801db14075b"
+      "68975a0c506dbb35d45e768f7bc67280cc6966e9fd9c7070997d78de4784f54d"
     ], 
     "reactive/postgresql/storage.py": [
       "postgresql", 
@@ -835,7 +835,7 @@
     "unit_tests/test_pg_hba_conf.py": [
       "postgresql", 
       "static", 
-      "83e2d181ee4a634b260bf5650074e60870aeb691e80e1eeddd873dbd5d3f16bf"
+      "fddeec09cba9f48d811e6a062b7dd67af4606b143ac7a934699d67290d6d1f08"
     ], 
     "unit_tests/test_postgresql.py": [
       "postgresql", 
@@ -867,10 +867,10 @@
       "dynamic", 
       "b774d2281e2605ddb0f74989060b4f6e5f611bc2a84778331e9ff16063770530"
     ], 
-    "wheelhouse/charms.reactive-0.6.0.tar.gz": [
+    "wheelhouse/charms.reactive-0.6.1.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "a1c2a00decfdaa51f58ffbadac5cb394288af40a1fb3bebdbf9909566fdeeb84"
+      "e22fc106f501e2e52580c4764cbb70e11cc62d41285228a874909c868b3eb8d9"
     ], 
     "wheelhouse/netaddr-0.7.19.tar.gz": [
       "layer:basic", 
