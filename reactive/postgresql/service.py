@@ -197,17 +197,28 @@ def configure_cluster():
                    'Invalid postgresql.conf setting {}: {}'.format(*x.args))
 
 
-def incoming_address(relinfo):
-    ''' Return the incoming address range if present in relinfo.
-    We look for information as provided by recent versions of Juju,
-    and fall back to private-address if needed.
+def incoming_addresses(relinfo):
+    '''Return the incoming address range(s) if present in relinfo.
+
+    Address ranges are in CIDR format. eg. 192.168.1.0/24 or 2001::F00F/128.
+    We look for information as provided by recent versions of Juju, and
+    fall back to private-address if needed.
+
+    Returns an empty list if no address information is present. An
+    error is logged if this occurs, as something has gone seriously
+    wrong.
     '''
+    # This helper could return a set, but a list with stable ordering is
+    # easier to use without causing flapping.
     if 'egress-subnets' in relinfo:
-        return relinfo['egress-subnets']
+        return [n.strip() for n in relinfo['egress-subnets'].split(',')
+                if n.strip()]
     if 'ingress-address' in relinfo:
-        return relinfo['ingress-address']
+        return [postgresql.addr_to_range(relinfo['ingress-address'])]
     if 'private-address' in relinfo:
-        return relinfo['private-address']
+        return [postgresql.addr_to_range(relinfo['private-address'])]
+    hookenv.log('No network info available on {} {}'
+                ''.format(relinfo.relid, relinfo.unit))
     return None
 
 
@@ -282,38 +293,34 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
     # Peers need replication access as the charm replication user.
     if _peer_rel:
         for peer, relinfo in _peer_rel.items():
-            addr = incoming_address(relinfo)
-            if addr is None:
-                continue  # Other end not yet provisioned?
-            addr = postgresql.addr_to_range(addr)
-            qaddr = postgresql.quote_identifier(addr)
-            # Magic replication database, for replication.
-            add('host', 'replication', replication.replication_username(),
-                qaddr, 'md5', '# {}'.format(relinfo))
-            # postgres database, so the leader can query replication status.
-            add('host', 'postgres', replication.replication_username(),
-                qaddr, 'md5', '# {}'.format(relinfo))
+            for addr in incoming_addresses(relinfo):
+                qaddr = postgresql.quote_identifier(addr)
+                # Magic replication database, for replication.
+                add('host', 'replication',
+                    replication.replication_username(),
+                    qaddr, 'md5', '# {}'.format(relinfo))
+                # postgres db, so leader can query replication status.
+                add('host', 'postgres',
+                    replication.replication_username(),
+                    qaddr, 'md5', '# {}'.format(relinfo))
 
     # Clients need access to the relation database as the relation users.
     for rel in rels['db'].values():
         if 'user' in rel.local:
             for relinfo in rel.values():
-                addr = incoming_address(relinfo)
-                if addr is None:
-                    continue  # Other end not yet provisioned?
-                addr = postgresql.addr_to_range(addr)
-                # Quote everything, including the address, to disenchant
-                # magic tokens like 'all'.
-                add('host',
-                    postgresql.quote_identifier(rel.local['database']),
-                    postgresql.quote_identifier(rel.local['user']),
-                    postgresql.quote_identifier(addr),
-                    'md5', '# {}'.format(relinfo))
-                add('host',
-                    postgresql.quote_identifier(rel.local['database']),
-                    postgresql.quote_identifier(rel.local['schema_user']),
-                    postgresql.quote_identifier(addr),
-                    'md5', '# {}'.format(relinfo))
+                for addr in incoming_addresses(relinfo):
+                    # Quote everything, including the address, to disenchant
+                    # magic tokens like 'all'.
+                    add('host',
+                        postgresql.quote_identifier(rel.local['database']),
+                        postgresql.quote_identifier(rel.local['user']),
+                        postgresql.quote_identifier(addr),
+                        'md5', '# {}'.format(relinfo))
+                    add('host',
+                        postgresql.quote_identifier(rel.local['database']),
+                        postgresql.quote_identifier(rel.local['schema_user']),
+                        postgresql.quote_identifier(addr),
+                        'md5', '# {}'.format(relinfo))
 
     # Admin clients need access to all databases as any user, not just the
     # relation user. Most clients will just use the user provided them,
@@ -322,13 +329,10 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
     for rel in rels['db-admin'].values():
         if 'user' in rel.local:
             for relinfo in rel.values():
-                addr = incoming_address(relinfo)
-                if addr is None:
-                    continue  # Other end not yet provisioned?
-                addr = postgresql.addr_to_range(addr)
-                add('host', 'all', 'all',
-                    postgresql.quote_identifier(addr),
-                    'md5', '# {}'.format(relinfo))
+                for addr in incoming_addresses(relinfo):
+                    add('host', 'all', 'all',
+                        postgresql.quote_identifier(addr),
+                        'md5', '# {}'.format(relinfo))
 
     # External replication connections. Somewhat different than before
     # as the relation gets its own user to avoid sharing credentials,
@@ -336,20 +340,17 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
     # database name.
     for rel in rels['master'].values():
         for relinfo in rel.values():
-            addr = incoming_address(relinfo)
-            if addr is None:
-                continue  # Other end not yet provisioned?
-            addr = postgresql.addr_to_range(addr)
-            add('host', 'replication',
-                postgresql.quote_identifier(rel.local['user']),
-                postgresql.quote_identifier(addr),
-                'md5', '# {}'.format(relinfo))
-            if 'database' in rel.local:
-                add('host',
-                    postgresql.quote_identifier(rel.local['database']),
+            for addr in incoming_addresses(relinfo):
+                add('host', 'replication',
                     postgresql.quote_identifier(rel.local['user']),
                     postgresql.quote_identifier(addr),
                     'md5', '# {}'.format(relinfo))
+                if 'database' in rel.local:
+                    add('host',
+                        postgresql.quote_identifier(rel.local['database']),
+                        postgresql.quote_identifier(rel.local['user']),
+                        postgresql.quote_identifier(addr),
+                        'md5', '# {}'.format(relinfo))
 
     # External administrative addresses, if specified by the operator.
     for addr in config['admin_addresses'].split(','):
@@ -381,14 +382,6 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
     rules.append((end_mark,))
     pg_hba += '\n' + '\n'.join(' '.join(rule) for rule in rules)
     return pg_hba
-
-
-# Use @when_file_changed for this when Issue #44 is resolved.
-# @when_file_changed(postgresql.pg_ident_conf_path,
-#                    postgresql.pg_hba_conf_path)
-# @when('postgresql.cluster.is_running')
-# def reload_on_auth_change():
-#     reactive.set_state('postgresql.cluster.needs_reload')
 
 
 @when('postgresql.cluster.is_running')

@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import json
+from itertools import chain
 
 from charmhelpers.core import hookenv, host
 from charms import leadership
@@ -24,7 +25,7 @@ import context
 from reactive.postgresql import helpers
 from reactive.postgresql import replication
 from reactive.postgresql import postgresql
-from reactive.postgresql.service import incoming_address
+from reactive.postgresql.service import incoming_addresses
 from relations.pgsql.requires import ConnectionString
 
 from everyhook import everyhook
@@ -240,7 +241,14 @@ def db_relation_common(rel):
     # before we have had a chance to grant it access.
     local['allowed-units'] = ' '.join(
         unit for unit, relinfo in rel.items()
-        if incoming_address(relinfo) is not None)
+        if len(incoming_addresses(relinfo)) > 0)
+
+    # The list of IP address ranges on this relation granted access.
+    # This will replace allowed-units, which does not work with cross
+    # model ralations due to the anonymization of the external client.
+    local['allowed-addrs'] = ','.join(sorted(
+        {r: True for r in chain(*[incoming_addresses(relinfo)
+                                  for relinfo in rel.values()])}.keys()))
 
     # v2 protocol. Publish connection strings for this unit and its peers.
     # Clients should use these connection strings in favour of the old
