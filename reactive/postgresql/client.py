@@ -342,6 +342,10 @@ def ensure_db_relation_resources(rel):
 
 
 def ingress_address(endpoint, relid):
+    # Work around https://github.com/juju/charm-helpers/issues/112
+    if not hookenv.has_juju_version('2.3'):
+        return hookenv.unit_private_ip()
+
     try:
         d = hookenv.network_get(endpoint, relid)
         return d["ingress-addresses"][0]
