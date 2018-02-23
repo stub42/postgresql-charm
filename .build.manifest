@@ -690,7 +690,7 @@
     "reactive/postgresql/client.py": [
       "postgresql", 
       "static", 
-      "8bec4d5e65e87a91de8652dbf54e3b6977efcff02ffb8707c31bc3261e41b49a"
+      "1c95ad8253360d10efc064b0c85c07cc96109a3e9ef0d66c84687b7e3f03818b"
     ], 
     "reactive/postgresql/helpers.py": [
       "postgresql", 
