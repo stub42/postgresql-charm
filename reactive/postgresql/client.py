@@ -246,7 +246,7 @@ def db_relation_common(rel):
     # The list of IP address ranges on this relation granted access.
     # This will replace allowed-units, which does not work with cross
     # model ralations due to the anonymization of the external client.
-    local['allowed-addrs'] = ','.join(sorted(
+    local['allowed-subnets'] = ','.join(sorted(
         {r: True for r in chain(*[incoming_addresses(relinfo)
                                   for relinfo in rel.values()])}.keys()))
 
