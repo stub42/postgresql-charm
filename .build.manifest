@@ -710,7 +710,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql", 
       "static", 
-      "5ef5369da3deac7804f858e21ae45db0c75db1fcdd962b550db640e6a3c77eb0"
+      "1c57276039b551836c3afcc574ef6683b418a4f26b176558c656f8e0093e7659"
     ], 
     "reactive/postgresql/preflight.py": [
       "postgresql", 
