@@ -86,6 +86,11 @@ class TestPostgresql(unittest.TestCase):
         self.assertTrue(postgresql.has_version('9.4'))
         self.assertFalse(postgresql.has_version('9.5'))
 
+        # New version scheme starting PostgreSQL 10
+        version.return_value = '10'
+        self.assertTrue(postgresql.has_version('9.6'))
+        self.assertFalse(postgresql.has_version('11'))
+
     @patch.object(hookenv, 'local_unit')
     @patch.object(helpers, 'get_peer_relation')
     @patch.object(postgresql, 'port')

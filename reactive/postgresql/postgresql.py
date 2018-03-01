@@ -738,7 +738,7 @@ def wal_replay_offset(con):
                                   pg_last_wal_replay_lsn()''')
         else:
             cur.execute('''SELECT pg_is_in_recovery(),
-                                  pg_last_wal_replay_location()''')
+                                  pg_last_xlog_replay_location()''')
         is_in_recovery, xlog_replayed = cur.fetchone()
         assert is_in_recovery, 'Unit is not in recovery mode'
         if xlog_replayed is not None and xlog_replayed == prev_xlog_replayed:
