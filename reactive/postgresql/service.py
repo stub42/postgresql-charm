@@ -217,9 +217,7 @@ def incoming_addresses(relinfo):
         return [postgresql.addr_to_range(relinfo['ingress-address'])]
     if 'private-address' in relinfo:
         return [postgresql.addr_to_range(relinfo['private-address'])]
-    hookenv.log('No network info available on {} {}'
-                ''.format(relinfo.relid, relinfo.unit))
-    return None
+    return []
 
 
 def update_pg_ident_conf():

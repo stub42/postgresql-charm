@@ -1,4 +1,4 @@
-# Copyright 2016 Canonical Ltd.
+# Copyright 2016-2018 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Client Interface for Juju charms.reactive
 #
@@ -20,9 +20,8 @@ import itertools
 import re
 import urllib.parse
 
-from charmhelpers import context
 from charmhelpers.core import hookenv
-from charms.reactive import hook, scopes, RelationBase
+from charms.reactive import set_flag, clear_flag, Endpoint, when, when_not
 
 
 # This data structure cannot be in an external library,
@@ -168,31 +167,32 @@ class ConnectionStrings(OrderedDict):
     relname = None
     relid = None
 
-    def __init__(self, relid):
+    def __init__(self, relation):
         super(ConnectionStrings, self).__init__()
-        self.relname = relid.split(':', 1)[0]
-        self.relid = relid
-        relations = context.Relations()
-        relation = relations[self.relname][relid]
-        for unit, reldata in relation.items():
-            self[unit] = _cs(reldata)
+        self.relname = relation.relation_id.split(':', 1)[0]
+        self.relid = relation.relation_id
+        self.relation = relation
+        for name, unit in relation.joined_units.items():
+            self[name] = _cs(unit)
 
     @property
     def master(self):
         """The :class:`ConnectionString` for the master, or None."""
-        relation = context.Relations()[self.relname][self.relid]
-
-        if not self._authorized(relation):
+        if not self._authorized():
             return None
 
         # New v2 protocol, each unit advertises the master connection.
-        for reldata in relation.values():
-            if reldata.get('master'):
-                return ConnectionString(reldata['master'])
+        for unit in self.relation.joined_units.values():
+            master = unit.received_raw.get('master')
+            if master:
+                return ConnectionString(master)
 
         # Fallback to v1 protocol.
-        masters = [unit for unit, reldata in relation.items()
-                   if reldata.get('state') in ('master', 'standalone')]
+        masters = [
+            name for name, unit in self.relation.joined_units.items()
+            if (self[name] and
+                unit.received_raw.get('state') in ('master', 'standalone'))]
+
         if len(masters) == 1:
             return self[masters[0]]  # One, and only one.
         else:
@@ -202,22 +202,21 @@ class ConnectionStrings(OrderedDict):
     @property
     def standbys(self):
         """list of :class:`ConnectionString` for active hot standbys."""
-        relation = context.Relations()[self.relname][self.relid]
-
-        if not self._authorized(relation):
+        if not self._authorized():
             return None
 
         # New v2 protocol, each unit advertises all standbys.
-        for reldata in relation.values():
-            if reldata.get('standbys'):
+        for unit in self.relation.joined_units.values():
+            if unit.received_raw.get('standbys'):
                 return [ConnectionString(s)
-                        for s in reldata['standbys'].splitlines() if s]
+                        for s in unit.received_raw['standbys'].splitlines()
+                        if s]
 
         # Fallback to v1 protocol.
         s = []
-        for unit, reldata in relation.items():
-            if reldata.get('state') == 'hot standby':
-                conn_str = self[unit]
+        for name, unit in self.relation.joined_units.items():
+            if unit.received_raw.get('state') == 'hot standby':
+                conn_str = self[name]
                 if conn_str:
                     s.append(conn_str)
         return s
@@ -225,37 +224,32 @@ class ConnectionStrings(OrderedDict):
     @property
     def version(self):
         """PostgreSQL major version (eg. `9.5`)."""
-        for relation in context.Relations()[self.relname][self.relid].values():
-            if relation.get('version'):
-                return relation['version']
+        for unit in self.relation.joined_units.values():
+            if unit.received_raw.get('version'):
+                return unit.received_raw['version']
         return None
 
-    def _authorized(self, relation):
-        local_unit = hookenv.local_unit()
-        for reldata in relation.values():
+    def _authorized(self):
+        for name, unit in self.relation.joined_units.items():
+            d = unit.received_raw
             # Ignore new PostgreSQL units that are not yet providing
             # connection details. ie. all remote units that have not
             # yet run their -relation-joined hook and are yet unaware
-            # of this client. This prevents authorization 'flapping' when
-            # new remote units are added.
-            if 'master' not in reldata and 'standbys' not in reldata:
+            # of this client. This prevents authorization 'flapping'
+            # when new remote units are added.
+            if 'master' not in d and 'standbys' not in d:
                 continue
 
-            # If any units have not yet authorized this unit, we can't
-            # trust that the service is usable yet.
-            if local_unit not in reldata.get('allowed-units', '').split():
+            # If we don't have a connection string for this unit, it
+            # isn't ready for us. We should wait until all units are
+            # ready.
+            if self[name] is None:
                 return False
 
-            # Similarly, if any units do not yet match the requested database
-            # configuration, we can't trust that the service is usable yet.
-            for c in ['database', 'roles', 'extensions']:
-                requested = relation.local.get(c, '')
-                if requested and requested != reldata.get(c, ''):
-                    return False
         return True
 
 
-class PostgreSQLClient(RelationBase):
+class PostgreSQLClient(Endpoint):
     """
     PostgreSQL client interface.
 
@@ -285,61 +279,50 @@ class PostgreSQLClient(RelationBase):
                                  for cs in pgsql  # ConnectionStrings.
                                  if cs.master)
     """
-    scope = scopes.SERVICE
+    def _set_flag(self, flag):
+        set_flag(self.expand_name(flag))
 
-    @hook('{requires:pgsql}-relation-joined')
-    def joined(self):
-        # There is at least one named relation
-        self.set_state('{relation_name}.connected')
-        hookenv.log('Joined {} relation'.format(hookenv.relation_id()))
+    def _clear_flag(self, flag):
+        clear_flag(self.expand_name(flag))
 
-    @hook('{requires:pgsql}-relation-{joined,changed,departed}')
-    def changed(self):
-        relid = hookenv.relation_id()
-        cs = self[relid]
-
-        # There is a master in this relation.
-        self.toggle_state('{relation_name}.master.available',
-                          cs.master)
-
-        # There is at least one standby in this relation.
-        self.toggle_state('{relation_name}.standbys.available',
-                          cs.standbys)
-
-        # There is at least one database in this relation.
-        self.toggle_state('{relation_name}.database.available',
-                          cs.master or cs.standbys)
-
-        # Ideally, we could turn logging off using a layer option
-        # but that is not available for interfaces.
-        if cs.master and cs.standbys:
-            hookenv.log('Relation {} has master and standby '
-                        'databases available'.format(relid))
-        elif cs.master:
-            hookenv.log('Relation {} has a master database available, '
-                        'but no standbys'.format(relid))
-        elif cs.standbys:
-            hookenv.log('Relation {} only has standby databases '
-                        'available'.format(relid))
+    def _toggle_flag(self, flag, is_set):
+        if is_set:
+            self._set_flag(flag)
         else:
-            hookenv.log('Relation {} has no databases available'.format(relid))
+            self._clear_flag(flag)
 
-    @hook('{requires:pgsql}-relation-departed')
-    def departed(self):
-        if not any(u for u in hookenv.related_units() or []
-                   if u != hookenv.remote_unit()):
-            self.remove_state('{relation_name}.connected')
-            self.conversation().depart()
-            hookenv.log('Departed {} relation'.format(hookenv.relation_id()))
+    def _clear_all_flags(self):
+        self._clear_flag('{endpoint_name}.connected')
+        self._clear_flag('{endpoint_name}.master.available')
+        self._clear_flag('{endpoint_name}.standbys.available')
+        self._clear_flag('{endpoint_name}.database.available')
 
-    # @hook('{requires:pgsql}-relation-broken')
-    # def broken(self):
-    #     if not hookenv.relation_ids(self.relation_name):
-    #         for conversation in self.conversations():
-    #             conversation.remove_state('{relation_name}.connected')
-    #             conversation.remove_state('{relation_name}.master.available')
-    #             conversation.remove_state('{relation_name}.standbys.available')
-    #             conversation.remove_state('{relation_name}.database.available')
+    def _reset_all_flags(self):
+        m, s = self.master, self.standbys
+        self._toggle_flag('{endpoint_name}.master.available', m)
+        self._toggle_flag('{endpoint_name}.standbys.available', s)
+        self._toggle_flag('{endpoint_name}.database.available', m or s)
+
+    @when('endpoint.{endpoint_name}.joined')
+    def _joined(self):
+        self._set_flag('{endpoint_name}.connected')
+
+    @when_not('endpoint.{endpoint_name}.joined')
+    def _departed(self):
+        self._clear_all_flags()
+
+    @when('endpoint.{endpoint_name}.changed')
+    def _changed(self):
+        self._reset_all_flags()
+        self._clear_flag('endpoint.{endpoint_name}.changed')
+
+    def _set_raw_value(self, key, value, relid=None):
+        for relation in self.relations:
+            if relid is None or relid == relation.relation_id:
+                relation.to_publish_raw[key] = value
+                if relid is not None:
+                    break
+        self._reset_all_flags()
 
     def set_database(self, dbname, relid=None):
         """Set the database that the named relations connect to.
@@ -355,9 +338,7 @@ class PostgreSQLClient(RelationBase):
                       sharing the relation name.
 
         """
-        for c in self.conversations():
-            if relid is None or c.namespace == relid:
-                c.set_remote('database', dbname)
+        self._set_raw_value('database', dbname, relid)
 
     def set_roles(self, roles, relid=None):
         """Provide a set of roles to be granted to the database user.
@@ -370,9 +351,7 @@ class PostgreSQLClient(RelationBase):
         if isinstance(roles, str):
             roles = [roles]
         roles = ','.join(sorted(roles))
-        for c in self.conversations():
-            if relid is None or c.namespace == relid:
-                c.set_remote('roles', roles)
+        self._set_raw_value('roles', roles, relid)
 
     def set_extensions(self, extensions, relid=None):
         """Provide a set of extensions to be installed into the database.
@@ -385,20 +364,21 @@ class PostgreSQLClient(RelationBase):
         if isinstance(extensions, str):
             extensions = [extensions]
         extensions = ','.join(sorted(extensions))
-        for c in self.conversations():
-            if relid is None or c.namespace == relid:
-                c.set_remote('extensions', extensions)
+        self._set_raw_value('extensions', extensions, relid)
 
     def __getitem__(self, relid):
         """:returns: :class:`ConnectionStrings` for the relation id."""
-        return ConnectionStrings(relid)
+        for relation in self.relations:
+            if relid == relation.relation_id:
+                return ConnectionStrings(relid)
+        raise KeyError(relid)
 
     def __iter__(self):
-        """:returns: Iterator of :class:`ConnectionStrings` for this named
-                     relation, one per relation id.
+        """:returns: Iterator of :class:`ConnectionStrings` for this
+                     endpoint, one per relation id.
         """
-        return iter(self[relid]
-                    for relid in context.Relations()[self.relation_name])
+        return iter(ConnectionStrings(relation)
+                    for relation in self.relations)
 
     @property
     def master(self):
@@ -435,23 +415,33 @@ class PostgreSQLClient(RelationBase):
         if unit is None:
             unit = hookenv.remote_unit()
 
-        relations = context.Relations()
         found = False
-        for relation in relations[self.relation_name].values():
-            if unit in relation:
-                found = True
-                conn_str = _cs(relation[unit])
-                if conn_str:
-                    return conn_str
+        for relation in self.relations:
+            if unit not in relation.joined_units:
+                continue
+            found = True
+            conn_str = _cs(relation[unit].received_raw)
+            if conn_str:
+                return conn_str
+
         if found:
             return None  # unit found, but not yet ready.
-        raise LookupError(unit)  # unit not related.
+
+        raise LookupError(unit)  # unit is not related.
 
 
-def _cs(reldata):
-    """Generate a ConnectionString from :class:``context.RelationInfo``"""
-    if not reldata:
-        return None
+def _csplit(s):
+    if s:
+        for b in s.split(','):
+            b = b.strip()
+            if b:
+                yield b
+
+
+def _cs(unit):
+    reldata = unit.received_raw
+    locdata = unit.relation.to_publish_raw
+
     d = dict(host=reldata.get('host'),
              port=reldata.get('port'),
              dbname=reldata.get('database'),
@@ -459,15 +449,25 @@ def _cs(reldata):
              password=reldata.get('password'))
     if not all(d.values()):
         return None
-    local_unit = hookenv.local_unit()
-    if local_unit not in reldata.get('allowed-units', '').split():
-        return None  # Not yet authorized
-    locdata = context.Relations()[reldata.relname][reldata.relid].local
-    if 'database' in locdata and locdata['database'] != d['dbname']:
+
+    # Cannot connect if egress subnets have not been authorized.
+    allowed_subnets = set(_csplit(reldata.get('allowed-subnets')))
+    if allowed_subnets:
+        my_egress = set(_csplit(locdata.get('egress-subnets')))
+        if not (my_egress <= allowed_subnets):
+            return None
+    else:
+        # If unit name has not been authorized. This is a legacy protocol,
+        # deprecated with Juju 2.3 and cross model relation support.
+        local_unit = hookenv.local_unit()
+        allowed_units = set(_csplit(reldata.get('allowed-units')))
+        if local_unit not in allowed_units:
+            return None  # Not yet authorized
+
+    if locdata.get('database', '') != reldata.get('database', ''):
         return None  # Requested database does not match yet
-    if 'roles' in locdata and locdata['roles'] != reldata.get('roles'):
+    if locdata.get('roles', '') != reldata.get('roles', ''):
         return None  # Requested roles have not yet been assigned
-    if 'extensions' in locdata and (locdata['extensions'] !=
-                                    reldata.get('extensions')):
+    if locdata.get('extensions', '') != reldata.get('extensions', ''):
         return None  # Requested extensions have not yet been installed
     return ConnectionString(**d)

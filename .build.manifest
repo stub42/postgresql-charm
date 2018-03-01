@@ -335,7 +335,7 @@
     "hooks/relations/pgsql/Makefile": [
       "interface:pgsql", 
       "static", 
-      "3ddb71f84b7a9763910d3aee4bf960c1e893082fd32e87106c61a8e62cfed003"
+      "134c9d87ac9911dc9bf4c5d723da644e02518b7e66f734a7dfe42b584c125821"
     ], 
     "hooks/relations/pgsql/README.md": [
       "interface:pgsql", 
@@ -385,7 +385,7 @@
     "hooks/relations/pgsql/requires.py": [
       "interface:pgsql", 
       "static", 
-      "a945810d077285c1599cad4e3e20dd17e46a02e54ebe45c89bbb41bc75f7468b"
+      "0165ccf0ec7bd4706ce4acfb73de9b919d2b66dfce5b1fedbfc04df39b8047a4"
     ], 
     "hooks/relations/pgsql/setup.py": [
       "interface:pgsql", 
@@ -725,7 +725,7 @@
     "reactive/postgresql/service.py": [
       "postgresql", 
       "static", 
-      "68975a0c506dbb35d45e768f7bc67280cc6966e9fd9c7070997d78de4784f54d"
+      "4dd9a219faf22885f80799a2fd4fa53ae9b6938ac07c8253a563fe201e1abeec"
     ], 
     "reactive/postgresql/storage.py": [
       "postgresql", 
@@ -835,12 +835,12 @@
     "unit_tests/test_pg_hba_conf.py": [
       "postgresql", 
       "static", 
-      "fddeec09cba9f48d811e6a062b7dd67af4606b143ac7a934699d67290d6d1f08"
+      "c956b06494c56308c9b59731e89ee9d0a9b2cfa8292be0fad0de616d432a5c22"
     ], 
     "unit_tests/test_postgresql.py": [
       "postgresql", 
       "static", 
-      "95a27e5d3b13c3692bb5befe11bc8f4659d8c4e17509bb00ee24ccd60f873951"
+      "bfefc917010ce4abd21955d0232ba729c89442cbce5806a36a40f82d4d0f27d0"
     ], 
     "wheelhouse/Jinja2-2.10.tar.gz": [
       "layer:basic", 
