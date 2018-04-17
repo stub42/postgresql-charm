@@ -5,6 +5,7 @@ from glob import glob
 from subprocess import check_call, CalledProcessError
 from time import sleep
 
+from charms import layer
 from charms.layer.execd import execd_preinstall
 
 
@@ -82,6 +83,11 @@ def bootstrap_charm_deps():
         # https://github.com/pypa/pip/issues/56
         check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse',
                     'pip'])
+        # per https://github.com/juju-solutions/layer-basic/issues/110
+        # this replaces the setuptools that was copied over from the system on
+        # venv create with latest setuptools and adds setuptools_scm
+        check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse',
+                    'setuptools', 'setuptools-scm'])
         # install the rest of the wheelhouse deps
         check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse'] +
                    glob('wheelhouse/*'))
@@ -92,6 +98,22 @@ def bootstrap_charm_deps():
                 shutil.copy2('/usr/bin/pip.save', '/usr/bin/pip')
                 os.remove('/usr/bin/pip.save')
         os.remove('/root/.pydistutils.cfg')
+        # setup wrappers to ensure envs are used for scripts
+        shutil.copy2('bin/charm-env', '/usr/local/sbin/')
+        for wrapper in ('charms.reactive', 'charms.reactive.sh',
+                        'chlp', 'layer_option'):
+            src = os.path.join('/usr/local/sbin', 'charm-env')
+            dst = os.path.join('/usr/local/sbin', wrapper)
+            if not os.path.exists(dst):
+                os.symlink(src, dst)
+        if cfg.get('use_venv'):
+            shutil.copy2('bin/layer_option', vbin)
+        else:
+            shutil.copy2('bin/layer_option', '/usr/local/bin/')
+        # re-link the charm copy to the wrapper in case charms
+        # call bin/layer_option directly (as was the old pattern)
+        os.remove('bin/layer_option')
+        os.symlink('/usr/local/sbin/layer_option', 'bin/layer_option')
         # flag us as having already bootstrapped so we don't do it again
         open('wheelhouse/.bootstrapped', 'w').close()
         # Ensure that the newly bootstrapped libs are available.
@@ -121,12 +143,12 @@ def activate_venv():
     venv = os.path.abspath('../.venv')
     vbin = os.path.join(venv, 'bin')
     vpy = os.path.join(vbin, 'python')
-    from charms import layer
     cfg = layer.options('basic')
     if cfg.get('use_venv') and '.venv' not in sys.executable:
         # activate the venv
         os.environ['PATH'] = ':'.join([vbin, os.environ['PATH']])
         reload_interpreter(vpy)
+    layer.import_layer_libs()
 
 
 def reload_interpreter(python):
