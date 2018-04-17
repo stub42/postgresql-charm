@@ -77,6 +77,7 @@ class PGBaseTestCase(object):
 
     # Override these in subclasses to run these tests multiple times
     # for different PostgreSQL versions.
+    version = None
     test_config = None
     num_units = 1
     nagios_subordinate = False
@@ -413,6 +414,35 @@ class PGBaseTestCase(object):
                 cur.execute('SELECT 1')
                 self.assertEqual(cur.fetchone()[0], 1)
 
+    def test_mount(self):
+        ver = self.version
+        client_unit = self.deployment.sentry['postgresql'][0].info['unit_name']
+        details = subprocess.check_output(['juju', 'run',
+                                           '--unit', client_unit,
+                                           'stat --format "%A %U %G %N" '
+                                           '/var/lib/postgresql/{}/main'
+                                           ''.format(ver)],
+                                          stderr=subprocess.DEVNULL,
+                                          universal_newlines=True).strip()
+        if self.storage_subordinate:
+            mount = '/srv/data/postgresql'
+        else:
+            mount = '/srv/pgdata'
+        self.assertEqual(details,
+                         "lrwxrwxrwx root root "
+                         "'/var/lib/postgresql/{}/main' -> "
+                         "'{}/{}/main'".format(ver, mount, ver))
+
+        details = subprocess.check_output(['juju', 'run',
+                                           '--unit', client_unit,
+                                           'stat --format "%A %U %G %N" '
+                                           '{}/{}/main'.format(mount, ver)],
+                                          stderr=subprocess.DEVNULL,
+                                          universal_newlines=True).strip()
+        self.assertEqual(details,
+                         "drwx------ postgres postgres "
+                         "'{}/{}/main'".format(mount, ver))
+
 
 class PGMultiBaseTestCase(PGBaseTestCase):
     num_units = 2
@@ -541,6 +571,7 @@ class PGMultiBaseTestCase(PGBaseTestCase):
 
 
 class PG93Tests(PGBaseTestCase, unittest.TestCase):
+    version = '9.3'
     test_config = dict(version=('' if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True),
                        max_connections=150)
@@ -561,35 +592,14 @@ class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     storage_subordinate = True if SERIES == 'trusty' else False
     nagios_subordinate = True if SERIES == 'trusty' else False
 
+    version = '9.3'
     test_config = dict(version=('' if SERIES == 'trusty' else '9.3'),
                        pgdg=(False if SERIES == 'trusty' else True))
-
-    def test_mount(self):
-        client_unit = self.deployment.sentry['postgresql'][0].info['unit_name']
-        details = subprocess.check_output(['juju', 'run',
-                                           '--unit', client_unit,
-                                           'stat --format "%A %U %G %N" '
-                                           '/var/lib/postgresql/9.3/main'],
-                                          stderr=subprocess.DEVNULL,
-                                          universal_newlines=True).strip()
-        self.assertEqual(details,
-                         "lrwxrwxrwx root root "
-                         "'/var/lib/postgresql/9.3/main' -> "
-                         "'/srv/data/postgresql/9.3/main'")
-
-        details = subprocess.check_output(['juju', 'run',
-                                           '--unit', client_unit,
-                                           'stat --format "%A %U %G %N" '
-                                           '/srv/data/postgresql/9.3/main'],
-                                          stderr=subprocess.DEVNULL,
-                                          universal_newlines=True).strip()
-        self.assertEqual(details,
-                         "drwx------ postgres postgres "
-                         "'/srv/data/postgresql/9.3/main'")
 
 
 class PG95Tests(PGBaseTestCase, unittest.TestCase):
     # checkpoint_segments to test Bug #1588072
+    version = '9.5'
     test_config = dict(version=('' if SERIES == 'xenial' else '9.5'),
                        pgdg=(False if SERIES == 'xenial' else True),
                        checkpoint_segments=10)
@@ -598,24 +608,28 @@ class PG95Tests(PGBaseTestCase, unittest.TestCase):
 
 class PG95MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     num_units = 3
+    version = '9.6'
     test_config = dict(version=('' if SERIES == 'xenial' else '9.5'),
                        pgdg=(False if SERIES == 'xenial' else True))
 
 
 class PG10Tests(PGBaseTestCase, unittest.TestCase):
+    version = '10'
     test_config = dict(version=('' if SERIES == 'bionic' else '10'),
                        pgdg=(False if SERIES == 'bionic' else True))
 
 
 class PG10MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     num_units = 2
+    version = '10'
     test_config = dict(version=('' if SERIES == 'bionic' else '10'),
                        pgdg=(False if SERIES == 'bionic' else True))
 
 
 class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
     num_units = 2  # Old charm only supported 2 unit initial deploy.
-    test_config = dict(version=None)
+    version = '9.3'
+    test_config = dict(version='9.3')
     # Storage subordinate does not yet work with Xenial.
     storage_subordinate = True if SERIES == 'trusty' else False
     nagios_subordinate = False  # Nagios was broken with the old revision.

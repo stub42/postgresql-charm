@@ -77,10 +77,15 @@
       "static", 
       "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
     ], 
+    "bin/charm-env": [
+      "layer:basic", 
+      "static", 
+      "09126ccb5849fa7c821a1fd0940ab794f32b5bde22956d043619596a34c974e4"
+    ], 
     "bin/layer_option": [
       "layer:basic", 
       "static", 
-      "621b556cd208005e131e9f648859294347da9376609745a73ca2e808dd2032f9"
+      "f597e63424560baee58d5cdc1d54a8cfd7d97efc3fe51ec0c067e8b50e2d489c"
     ], 
     "charm-helpers.yaml": [
       "postgresql", 
@@ -90,7 +95,7 @@
     "config.yaml": [
       "postgresql", 
       "dynamic", 
-      "8abb7f64562530f7c9997c6175b5af699efe064e920945ab24294dfe2d7a6069"
+      "bc40a285825186e0ce58c9b195124aa1964f4547f1cb74bbe61d7fceb199ab6b"
     ], 
     "copyright": [
       "postgresql", 
@@ -500,12 +505,12 @@
     "lib/charms/layer/__init__.py": [
       "layer:basic", 
       "static", 
-      "71a8b901f7e64a6b1b61959fc25819bafc9c9905e37a918615b9f949295095a4"
+      "78a91399dc7836c09b12c9539a460d400daa5ad4b5061825f526f3a8d3599f65"
     ], 
     "lib/charms/layer/basic.py": [
       "layer:basic", 
       "static", 
-      "d09706ef3a224eb60d34366a2867c382791aa30157ab5b77eda37f29731df2e2"
+      "d513006c97e15ce8707ab69fa9d2a935a7c3afcd923ccaa4dc208fc1e196a52b"
     ], 
     "lib/charms/layer/execd.py": [
       "layer:basic", 
@@ -745,12 +750,12 @@
     "reactive/postgresql/wal_e.py": [
       "postgresql", 
       "static", 
-      "ae2e02725c97be171070386aa9babfdf721f77958c5de6fa2919361a58bfe41e"
+      "eaa5b546bd97d91cc7c0ac7c52176e44dd0249f3f4b255100f8b4b6108c0aeb5"
     ], 
     "reactive/snap.py": [
       "layer:snap", 
       "static", 
-      "323272e0cb85bb2927dd549028d26ae4948a2defab3bf73d534112ee2342af78"
+      "aa7081da5761f9e338143c87c323f3079d403c089ce33538df8d43fae523e9bd"
     ], 
     "reactive/workloadstatus.py": [
       "postgresql", 
@@ -820,7 +825,7 @@
     "tests/test_integration.py": [
       "postgresql", 
       "static", 
-      "1e64c6cb82107f495eb32ce3693e4a9b89f30e7fc7f73008ca6ab83fbb70c87f"
+      "92b87bcbaf1991dbc1b850b81ba0886f0d96f2c488158e9071bfc2fc247682e9"
     ], 
     "tests/tests.yaml": [
       "postgresql", 
@@ -862,10 +867,10 @@
       "dynamic", 
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ], 
-    "wheelhouse/charmhelpers-0.18.5.tar.gz": [
+    "wheelhouse/charmhelpers-0.18.8.tar.gz": [
       "layer:basic", 
       "dynamic", 
-      "b774d2281e2605ddb0f74989060b4f6e5f611bc2a84778331e9ff16063770530"
+      "2e9da23a420a8ff3acb437c4c6166724f0abc67696756376f859c88678c960fe"
     ], 
     "wheelhouse/charms.reactive-0.6.2.tar.gz": [
       "layer:basic", 
@@ -886,6 +891,16 @@
       "layer:basic", 
       "dynamic", 
       "66623c52f34d83a2c0fc963e08e8b9d0c13d88404e3b43b1852ef71eda19afa3"
+    ], 
+    "wheelhouse/setuptools-39.0.1.zip": [
+      "layer:basic", 
+      "dynamic", 
+      "bec7badf0f60e7fc8153fac47836edc41b74e5d541d7692e614e635720d6a7c7"
+    ], 
+    "wheelhouse/setuptools_scm-1.17.0.tar.gz": [
+      "layer:basic", 
+      "dynamic", 
+      "70a4cf5584e966ae92f54a764e6437af992ba42ac4bca7eb37cc5d02b98ec40a"
     ], 
     "wheelhouse/six-1.11.0.tar.gz": [
       "layer:basic", 

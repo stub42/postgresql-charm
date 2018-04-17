@@ -35,7 +35,7 @@ from reactive.postgresql import postgresql
 from reactive.workloadstatus import status_set
 
 
-@when('config.changed.wal_e_storage_uri')
+@when('config.changed')
 def main():
     storage_uri = hookenv.config()['wal_e_storage_uri'].strip()
     reactive.helpers.toggle_state('postgresql.wal_e.enabled', storage_uri)
