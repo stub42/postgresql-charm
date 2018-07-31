@@ -2,7 +2,7 @@
 
 import sys
 import argparse
-from charms.layer import options
+from charms import layer
 
 
 parser = argparse.ArgumentParser(description='Access layer options.')
@@ -12,7 +12,7 @@ parser.add_argument('option',
                     help='the option to access')
 
 args = parser.parse_args()
-value = options(args.section).get(args.option, '')
+value = layer.options.get(args.section, args.option)
 if isinstance(value, bool):
     sys.exit(0 if value else 1)
 elif isinstance(value, list):

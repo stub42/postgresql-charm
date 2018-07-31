@@ -22,6 +22,7 @@ from charms import layer
 from charms import reactive
 from charms.reactive.helpers import any_file_changed, data_changed
 from time import sleep
+from datetime import datetime, timedelta
 
 
 def install(snapname, **kw):
@@ -48,6 +49,12 @@ def install(snapname, **kw):
         else:
             _install_store(snapname, **kw)
         reactive.set_state(installed_state)
+
+    # Installing any snap will first ensure that 'core' is installed. Set an
+    # appropriate flag for consumers that want to get/set core options.
+    core_installed = 'snap.installed.core'
+    if not reactive.is_state(core_installed):
+        reactive.set_state(core_installed)
 
 
 def refresh(snapname, **kw):
@@ -103,6 +110,130 @@ def connect_all():
     for snapname, snap_opts in opts.items():
         for plug, slot in snap_opts.get('connect', []):
             connect(plug, slot)
+
+
+def disable(snapname):
+    '''Disables a snap in the system
+
+    Sets the snap.disabled.{snapname} flag
+
+    This method doesn't affect any snap state if requested snap does not
+    exist
+    '''
+    hookenv.log('Disabling {} snap'.format(snapname))
+    if not reactive.is_flag_set('snap.installed.{}'.format(snapname)):
+        hookenv.log(
+            'Cannot disable {} snap because it is not installed'.format(
+                snapname), hookenv.WARNING)
+        return
+
+    subprocess.check_call(['snap', 'disable', snapname],
+                          universal_newlines=True)
+    reactive.set_flag('snap.disabled.{}'.format(snapname))
+
+
+def enable(snapname):
+    '''Enables a snap in the system
+
+    Clears the snap.disabled.{snapname} flag
+
+    This method doesn't affect any snap state if requeted snap does not
+    exist
+    '''
+    hookenv.log('Enabling {} snap'.format(snapname))
+    if not reactive.is_flag_set('snap.installed.{}'.format(snapname)):
+        hookenv.log(
+            'Cannot enable {} snap because it is not installed'.format(
+                snapname), hookenv.WARNING)
+        return
+
+    subprocess.check_call(['snap', 'enable', snapname],
+                          universal_newlines=True)
+    reactive.clear_flag('snap.disabled.{}'.format(snapname))
+
+
+def restart(snapname):
+    '''Restarts a snap in the system
+
+    This method doesn't affect any snap state if requested snap does not
+    exist
+    '''
+    hookenv.log('Restarting {} snap'.format(snapname))
+    if not reactive.is_flag_set('snap.installed.{}'.format(snapname)):
+        hookenv.log(
+            'Cannot restart {} snap because it is not installed'.format(
+                snapname), hookenv.WARNING)
+        return
+
+    subprocess.check_call(['snap', 'restart', snapname],
+                          universal_newlines=True)
+
+
+def set(snapname, key, value):
+    '''Changes configuration options in a snap
+
+    This method will fail if snapname is not an installed snap
+    '''
+    hookenv.log('Set config {}={} for snap {}'.format(key, value, snapname))
+    if not reactive.is_flag_set('snap.installed.{}'.format(snapname)):
+        hookenv.log(
+            'Cannot set {} snap config because it is not installed'.format(
+                snapname), hookenv.WARNING)
+        return
+
+    subprocess.check_call(
+        ['snap', 'set', snapname, '{}={}'.format(key, value)])
+
+
+def set_refresh_timer(timer=''):
+    '''Set the system refresh.timer option (snapd 2.31+)
+
+    This method sets how often snapd will refresh installed snaps. Call with
+    an empty timer string to use the system default (currently 4x per day).
+    Use 'max' to schedule refreshes as far into the future as possible
+    (currently 1 month). Also accepts custom timer strings as defined in the
+    refresh.timer section here:
+      https://forum.snapcraft.io/t/system-options/87
+
+    This method does not validate custom strings and will lead to a
+    CalledProcessError if an invalid string is given.
+
+    :param: timer: empty string (default), 'max', or custom string
+    '''
+    if timer == 'max':
+        # A month from yesterday is the farthest we should delay to safely stay
+        # under the 1 month max. Translate that to a valid refresh.timer value.
+        # Examples:
+        # - Today is Friday the 13th, set the refresh timer to
+        # 'thu2' (Thursday the 12th is the 2nd thursday of the month).
+        # - Today is Tuesday the 1st, set the refresh timer to
+        # 'mon5' (Monday the [28..31] is the 5th monday of the month).
+        yesterday = datetime.now() - timedelta(1)
+        dow = yesterday.strftime('%a').lower()
+        # increment after int division because we want occurrence 1-5, not 0-4.
+        occurrence = yesterday.day // 7 + 1
+        timer = '{}{}'.format(dow, occurrence)
+
+    # NB: 'system' became synonymous with 'core' in 2.32.5, but we use 'core'
+    # here to ensure max compatibility.
+    set(snapname='core', key='refresh.timer', value=timer)
+    subprocess.check_call(['systemctl', 'restart', 'snapd.service'])
+
+
+def get(snapname, key):
+    '''Gets configuration options for a snap
+
+    This method returns the output that snapctl get command prints out.
+    This method will fail if snapname is not an installed snap
+    '''
+    hookenv.log('Get config {} for snap {}'.format(key, snapname))
+    if not reactive.is_flag_set('snap.installed.{}'.format(snapname)):
+        hookenv.log(
+            'Cannot get {} snap config because it is not installed'.format(
+                snapname), hookenv.WARNING)
+        return
+
+    return subprocess.check_output(['snap', 'get', snapname, key])
 
 
 def _snap_args(channel='stable', devmode=False, jailmode=False,
@@ -164,7 +295,8 @@ def _refresh_store(snapname, **kw):
     if not data_changed('snap.opts.{}'.format(snapname), kw):
         return
 
-    cmd = ['snap', 'refresh']
+    # --amend allows us to refresh from a local resource
+    cmd = ['snap', 'refresh', '--amend']
     cmd.extend(_snap_args(**kw))
     cmd.append(snapname)
     hookenv.log('Refreshing {} from store'.format(snapname))
