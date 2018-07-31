@@ -16,6 +16,7 @@
 
 from contextlib import suppress
 from datetime import datetime
+from distutils.version import LooseVersion
 import os.path
 import re
 import shutil
@@ -300,6 +301,9 @@ class PGBaseTestCase(object):
             user=user or relinfo['user'],
             password=password or relinfo['password'])
 
+    def has_version(self, ver):
+        return LooseVersion(self.ver) >= LooseVersion(ver)
+
     def test_db_relation(self):
         for unit in self.units:
             with self.subTest(unit=unit):
@@ -555,7 +559,10 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         # Confirm that replication is actually happening.
         # Create a table and force a WAL change.
         cur.execute("CREATE TABLE wale AS SELECT generate_series(0,100)")
-        cur.execute("SELECT pg_switch_xlog()")
+        if self.has_version('10'):
+            cur.execute("SELECT pg_switch_wal()")
+        else:
+            cur.execute("SELECT pg_switch_xlog()")
         self.addCleanup(cur.execute, 'DROP TABLE wale')
 
         con = self.connect(self.secondary, admin=True)
