@@ -47,6 +47,7 @@
     "interface": "coordinator"
   "replication":
     "interface": "pgpeer"
+"display-name": "PostgreSQL"
 "resources":
   "wal-e":
     "type": "file"
