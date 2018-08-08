@@ -506,7 +506,7 @@
     "layer.yaml": [
       "postgresql",
       "dynamic",
-      "52ee579f50061ac79297a16a8bc36bd2e70c29bd6bbb00a377fa77f1b7ea3de2"
+      "06b7db847b11f62fecff825905c9abf1c4dcaaefd7ec1845a8e54589547715dc"
     ],
     "lib/cache_settings.py": [
       "postgresql",
@@ -903,10 +903,10 @@
       "dynamic",
       "9a695a36a7774d9e2d5f9f072f8b595c51daf4d439b34b16c2efbecf776a0066"
     ],
-    "wheelhouse/charms.reactive-0.6.3.tar.gz": [
+    "wheelhouse/charms.reactive-1.0.0.tar.gz": [
       "layer:basic",
       "dynamic",
-      "9dbade9f046d79d60bf400ffa65838744e8d81771874605d5607ee90822d2e00"
+      "df35b70f9440c450d17629ab42741bc002feb49eb9961ad1faca9de5c6bf867c"
     ],
     "wheelhouse/netaddr-0.7.19.tar.gz": [
       "layer:basic",
