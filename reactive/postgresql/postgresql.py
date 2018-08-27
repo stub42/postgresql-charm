@@ -434,17 +434,22 @@ def ensure_role(con, role):
 
 # @not_unless('postgresql.replication.is_primary')
 def ensure_extensions(con, extensions):
+    '''extensions is a list of (name, schema) tuples'''
     cur = con.cursor()
-    cur.execute('SELECT extname FROM pg_extension')
-    installed_extensions = frozenset(x[0] for x in cur.fetchall())
+    cur.execute('''SELECT extname,nspname FROM pg_extension,pg_namespace
+                   WHERE pg_namespace.oid = extnamespace''')
+    installed_extensions = frozenset((x[0], x[1]) for x in cur.fetchall())
     hookenv.log("ensure_extensions({}), have {}"
                 .format(extensions, installed_extensions), DEBUG)
-    extensions_set = frozenset(extensions)
+    extensions_set = frozenset(set(extensions))
     extensions_to_create = extensions_set.difference(installed_extensions)
-    for ext in extensions_to_create:
+    for ext, schema in extensions_to_create:
         hookenv.log("creating extension {}".format(ext), DEBUG)
-        cur.execute('CREATE EXTENSION %s',
-                    (pgidentifier(ext),))
+        if schema != 'public':
+            cur.execute('CREATE SCHEMA IF NOT EXISTS %s',
+                        (pgidentifier(schema),))
+        cur.execute('CREATE EXTENSION %s WITH SCHEMA %s',
+                    (pgidentifier(ext), pgidentifier(schema)))
 
 
 def addr_to_range(addr):
