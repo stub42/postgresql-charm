@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import json
 from itertools import chain
+import re
 
 from charmhelpers.core import hookenv, host
 from charms import leadership
@@ -335,7 +336,16 @@ def ensure_db_relation_resources(rel):
     # Create requested extensions. We never drop extensions, as there
     # may be dependent objects.
     if 'extensions' in master:
-        extensions = filter(None, master.get('extensions', '').split(','))
+        extensions = list(
+            filter(None, master.get('extensions', '').split(',')))
+        # Convert to the (extension, schema) tuple expected by
+        # postgresql.ensure_extensions
+        for i in range(0, len(extensions)):
+            m = re.search(r'^\s*([^(\s]+)\s*(?:\((\w+)\))?', extensions[i])
+            if m is None:
+                raise RuntimeError("Invalid extension {}"
+                                   .format(extensions[i]))
+            extensions[i] = (m.group(1), m.group(2) or 'public')
         postgresql.ensure_extensions(con, extensions)
 
     con.commit()  # Don't throw away our changes.

@@ -1,6 +1,6 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
-# Copyright 2008-2016 Canonical Ltd.  All rights reserved.
+# Copyright 2008-2018 Canonical Ltd.  All rights reserved.
 
 """
 Backup one or more PostgreSQL databases.
@@ -38,16 +38,15 @@ def main(options, databases):
             "-U", "postgres",
             "--format=c",
             "--blobs",
-            ])
+        ])
 
         # alter the cmd to be used based on compression chosen
         if options.compression_cmd == 'postgres':
             cmd = " ".join([
                 cmd,
                 "--compress=%d" % options.compression_level
-                    if options.compression_level else "",
-                "--file=%s" % dest,
-                database])
+                if options.compression_level else "",
+                "--file=%s" % dest, database])
         elif options.compression_cmd == 'none':
             cmd = " ".join([
                 cmd,
@@ -93,6 +92,7 @@ def main(options, databases):
         log.info("Backed up %s (%0.2fMB)" % (database, size / MB))
 
     return rv
+
 
 if __name__ == '__main__':
     valid_compression_cmd = ['none'] + sorted([

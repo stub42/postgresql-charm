@@ -279,7 +279,7 @@ class ConnectionStrings(OrderedDict):
     def standbys(self):
         """list of :class:`ConnectionString` for active hot standbys."""
         if not self._authorized():
-            return None
+            return []
 
         # New v2 protocol, each unit advertises all standbys.
         for unit in self.relation.joined_units.values():

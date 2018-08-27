@@ -20,12 +20,12 @@
     - "run-one"
   "nagios": {}
   "snap": {}
+  "postgresql": {}
+  "leadership": {}
   "apt":
     "packages": []
     "full_version": !!bool "false"
-    "keys": []
     "version_package": ""
-  "postgresql": {}
-  "leadership": {}
+    "keys": []
 "repo": "git+ssh://git.launchpad.net/postgresql-charm"
 "is": "postgresql"

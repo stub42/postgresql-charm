@@ -101,7 +101,7 @@
     "config.yaml": [
       "postgresql",
       "dynamic",
-      "db44598ef67acbf7dcfae46e937579a345c658251faa553f2f47d730a3f2348a"
+      "179efc7649deadf7dd04adf11999aa03822a20800c058e75cd4d76c6c9b1f588"
     ],
     "copyright": [
       "postgresql",
@@ -146,7 +146,7 @@
     "files/metrics/postgres_to_statsd.py": [
       "postgresql",
       "static",
-      "b5e5d4183a0745d11761ee33736f0f562a504be229c6c57673d2b32e6041e6d8"
+      "ce7740fa218a4f9faba348d7b10236b45f65388748208a8421b6a072ae47b206"
     ],
     "hooks/config-changed": [
       "layer:basic",
@@ -416,7 +416,7 @@
     "hooks/relations/pgsql/requires.py": [
       "interface:pgsql",
       "static",
-      "c023fcd2dcffa2043d7473e9a8c72142585c985a873a2202290a006480d481f9"
+      "16a1722accf28242bdc2e9910a7b81d24c7465e8626f69ac2f65a1972f617116"
     ],
     "hooks/relations/pgsql/setup.py": [
       "interface:pgsql",
@@ -506,7 +506,7 @@
     "layer.yaml": [
       "postgresql",
       "dynamic",
-      "b74d434bf1b78bf2fdd43c16ec0b1fb6b32dff534c0b2a04fbd0e04d5c06ab1e"
+      "67cd3ea7763f4d44721521b9a74d8236bac8e0ebefdfcc01c488f2e7b4bc3dcd"
     ],
     "lib/cache_settings.py": [
       "postgresql",
@@ -726,7 +726,7 @@
     "reactive/postgresql/client.py": [
       "postgresql",
       "static",
-      "1ef51605225e1e521c4c32920219df71453bd3ccaa719db0ebbf83b47e84a432"
+      "302df2576032dcdcc858c420ea2da9ea306a022f82c053ba8bddc16a07b495fb"
     ],
     "reactive/postgresql/helpers.py": [
       "postgresql",
@@ -746,7 +746,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql",
       "static",
-      "1c57276039b551836c3afcc574ef6683b418a4f26b176558c656f8e0093e7659"
+      "ff1b7f8b37c9d52067ecd7c9ad4202e8709d0cbfd08b537f772715c08091bcec"
     ],
     "reactive/postgresql/preflight.py": [
       "postgresql",
@@ -786,7 +786,7 @@
     "reactive/snap.py": [
       "layer:snap",
       "static",
-      "aec7d4bb939d2ddb174616aa6779a514511b8093a248ecdccb34023e4a698549"
+      "71799655fea321a1a449995dc93fabf0959652b15d94f3c56e5d2ddb4f451993"
     ],
     "reactive/workloadstatus.py": [
       "postgresql",
@@ -801,7 +801,7 @@
     "scripts/pgbackup.py": [
       "postgresql",
       "static",
-      "75d841e055226929d365f6d16b745f814a33dd3f0132e94db3b6d63c8bdbf207"
+      "acd725a08436d447b1a11bf794fb7d0b4947606ebdfce6dd6d91662f546cb18a"
     ],
     "scripts/pgkillidle.py": [
       "postgresql",
