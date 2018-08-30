@@ -448,6 +448,8 @@ def ensure_extensions(con, extensions):
         if schema != 'public':
             cur.execute('CREATE SCHEMA IF NOT EXISTS %s',
                         (pgidentifier(schema),))
+            cur.execute('GRANT USAGE ON SCHEMA %s TO PUBLIC',
+                        (pgidentifier(schema),))
         cur.execute('CREATE EXTENSION %s WITH SCHEMA %s',
                     (pgidentifier(ext), pgidentifier(schema)))
 

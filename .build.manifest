@@ -506,7 +506,7 @@
     "layer.yaml": [
       "postgresql",
       "dynamic",
-      "67cd3ea7763f4d44721521b9a74d8236bac8e0ebefdfcc01c488f2e7b4bc3dcd"
+      "fba6ce57e42c5eb1febbc65f21e8a9c4de999b20239f1b5e4b02a81722925a2a"
     ],
     "lib/cache_settings.py": [
       "postgresql",
@@ -746,7 +746,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql",
       "static",
-      "ff1b7f8b37c9d52067ecd7c9ad4202e8709d0cbfd08b537f772715c08091bcec"
+      "7fa30f7b951dad219fcf601ee9ad4d135557de0680b260ae473322376d9a36aa"
     ],
     "reactive/postgresql/preflight.py": [
       "postgresql",

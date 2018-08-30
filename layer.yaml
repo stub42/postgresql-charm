@@ -19,13 +19,13 @@
     - "python3-psycopg2"
     - "run-one"
   "nagios": {}
-  "snap": {}
-  "postgresql": {}
-  "leadership": {}
   "apt":
-    "packages": []
     "full_version": !!bool "false"
-    "version_package": ""
     "keys": []
+    "packages": []
+    "version_package": ""
+  "postgresql": {}
+  "snap": {}
+  "leadership": {}
 "repo": "git+ssh://git.launchpad.net/postgresql-charm"
 "is": "postgresql"
