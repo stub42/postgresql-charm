@@ -506,6 +506,14 @@ def stop():
         raise SystemExit(0)
 
 
+def stop_pgctlcluster():
+    '''Use pg_ctlcluster to stop PostgreSQL
+
+    This is only used (once) by upgrade-charm to reparent the process under systemd.
+    '''
+    subprocess.check_call(['pg_ctlcluster', '-m', 'fast', version(), 'main', 'stop'])
+
+
 def emit_pg_log(lines=100):
     '''Dump the end of the PostgreSQL log file to stdout'''
     rec_conf = recovery_conf_path()

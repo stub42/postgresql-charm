@@ -127,6 +127,13 @@ def upgrade_charm():
     # Reinstall support scripts
     reactive.remove_state('postgresql.cluster.support-scripts')
 
+    # Ensure that systemd is managing the PostgreSQL process
+    if (host.init_is_systemd() and
+            reactive.is_flag_set('postgresql.cluster.is_running') and
+            not reactive.is_flag_set('postgresql.cluster.systemd')):
+        reactive.clear_flag('postgresql.cluster.is_running')
+        postgresql.stop_pgctlcluster()
+
 
 def migrate_user(old_username, new_username, password, superuser=False):
     if postgresql.is_primary():
