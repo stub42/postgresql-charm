@@ -17,9 +17,9 @@ maintainer: Stuart Bishop <stuart.bishop@canonical.com>
 tags:
     - databases
 series:
+    - bionic
     - xenial
     - trusty
-    - bionic
 provides:
   db:
     interface: pgsql
