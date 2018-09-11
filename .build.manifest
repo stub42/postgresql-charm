@@ -2,6 +2,7 @@
   "layers": [
     "layer:options",
     "layer:basic",
+    "layer:status",
     "layer:apt",
     "layer:snap",
     "layer:leadership",
@@ -29,7 +30,7 @@
       "4502b8bbfb3dbc9a99bb59f935cf26aa64247347a6a5949d1da41b5f44bd95f8"
     ],
     "LICENSE": [
-      "layer:basic",
+      "layer:status",
       "static",
       "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     ],
@@ -142,6 +143,16 @@
       "layer:snap",
       "static",
       "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    ],
+    "copyright.layer-status": [
+      "layer:status",
+      "static",
+      "7c0e36e618a8544faaaa3f8e0533c2f1f4a18bcacbdd8b99b537742e6b587d58"
+    ],
+    "docs/status.md": [
+      "layer:status",
+      "static",
+      "975dec9f8c938196e102e954a80226bda293407c4e5ae857c118bf692154702a"
     ],
     "files/metrics/postgres_to_statsd.py": [
       "postgresql",
@@ -506,7 +517,7 @@
     "layer.yaml": [
       "postgresql",
       "dynamic",
-      "fba6ce57e42c5eb1febbc65f21e8a9c4de999b20239f1b5e4b02a81722925a2a"
+      "1bd6edc90be91ede6669dca5007fa352338a37cad1ebc5a47e9be18c1a9a5b67"
     ],
     "lib/cache_settings.py": [
       "postgresql",
@@ -521,7 +532,7 @@
     "lib/charms/apt.py": [
       "layer:apt",
       "static",
-      "e3583b0cdfe4d0258e261811c7daa5ca9a3c3c082715370d88518839ade874b6"
+      "76e20b0e60ee8c5ee845386d1948e4ac0ace0e3490dc75d96bd5436808f0101a"
     ],
     "lib/charms/coordinator.py": [
       "layer:coordinator",
@@ -552,6 +563,11 @@
       "layer:snap",
       "static",
       "008db94bf205c5dd8814f3132b5880da67576aedf5c7b00384ecd8d9c4074595"
+    ],
+    "lib/charms/layer/status.py": [
+      "layer:status",
+      "static",
+      "d706076a6763af9838134362bcefa9e205574bc8ff2e5326e78c630af65b6834"
     ],
     "lib/charms/leadership.py": [
       "layer:leadership",
@@ -688,10 +704,20 @@
       "static",
       "9cd78d4bfba601cad3c1f5b2f7a1efb64b01dbad9f07cfee922d819c673dd2f5"
     ],
+    "make_docs": [
+      "layer:status",
+      "static",
+      "c990f55c8e879793a62ed8464ee3d7e0d7d2225fdecaf17af24b0df0e2daa8c1"
+    ],
     "metadata.yaml": [
       "postgresql",
       "dynamic",
-      "b758b468dcd1e6edec66b491819eea3b4ecae378e9a18137a5184136b79aa6c4"
+      "766193744726da3b139263b35561f0970cf10cd0e0ed58a86a4ecb27b2113d4d"
+    ],
+    "pydocmd.yml": [
+      "layer:status",
+      "static",
+      "11d9293901f32f75f4256ae4ac2073b92ce1d7ef7b6c892ba9fbb98690a0b330"
     ],
     "reactive/__init__.py": [
       "postgresql",
@@ -701,7 +727,7 @@
     "reactive/apt.py": [
       "layer:apt",
       "static",
-      "0f90ea44aad1fdd32674afcc3be175519166eafda5fcf5336c97f7d695f2476e"
+      "65153d74a88993dd2d4632c25196d9a6015a92a0b225debf4f942a62d111f47b"
     ],
     "reactive/coordinator.py": [
       "layer:coordinator",
@@ -746,7 +772,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql",
       "static",
-      "7fa30f7b951dad219fcf601ee9ad4d135557de0680b260ae473322376d9a36aa"
+      "dfbdf603ed7154a69409879c9314fa3835f56a5bade279dfdf277cb8842c44a8"
     ],
     "reactive/postgresql/preflight.py": [
       "postgresql",
@@ -761,7 +787,7 @@
     "reactive/postgresql/service.py": [
       "postgresql",
       "static",
-      "4dd9a219faf22885f80799a2fd4fa53ae9b6938ac07c8253a563fe201e1abeec"
+      "b58280aeaf99b985b28af85e2314d4cd88e5b24c5deb28ac460a7ce06751dec2"
     ],
     "reactive/postgresql/storage.py": [
       "postgresql",
@@ -787,6 +813,11 @@
       "layer:snap",
       "static",
       "71799655fea321a1a449995dc93fabf0959652b15d94f3c56e5d2ddb4f451993"
+    ],
+    "reactive/status.py": [
+      "layer:status",
+      "static",
+      "7add8f2c5be69bf5e1375889cd0084b5ec0fd136bf4256d8f3cd0be41a006ae8"
     ],
     "reactive/workloadstatus.py": [
       "postgresql",
@@ -866,7 +897,7 @@
     "tox.ini": [
       "postgresql",
       "static",
-      "2564e06bb1936edb44552e6e693063bac5c34ffa448a43b4a2c105a5eec06439"
+      "d7ef7a8f7338e199c4a250e233db66ec105de2f4f83b03b2abbc88d7fc488fb6"
     ],
     "unit_tests/test_pg_hba_conf.py": [
       "postgresql",
@@ -898,10 +929,10 @@
       "dynamic",
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ],
-    "wheelhouse/charmhelpers-0.19.1.tar.gz": [
+    "wheelhouse/charmhelpers-0.19.2.tar.gz": [
       "layer:basic",
       "dynamic",
-      "9a695a36a7774d9e2d5f9f072f8b595c51daf4d439b34b16c2efbecf776a0066"
+      "fdd06ed00fdc0425eed7452e9181645e998eb95eba1079806a30149802a1cada"
     ],
     "wheelhouse/charms.reactive-1.0.0.tar.gz": [
       "layer:basic",

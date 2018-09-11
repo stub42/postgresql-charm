@@ -17,6 +17,7 @@ import math
 import os.path
 import re
 import subprocess
+import textwrap
 import time
 
 import yaml
@@ -175,6 +176,21 @@ def create_cluster():
     postgresql.drop_cluster(stop=True)
     postgresql.create_cluster()
     reactive.set_state('postgresql.cluster.created')
+
+
+@when('postgresql.cluster.created')
+@when_not('postgresql.cluster.pg_ctl_conf.created')
+def create_pg_ctl_conf():
+    contents = textwrap.dedent('''\
+                        # Managed by Juju
+                        # Automatic pg_ctl configuration
+                        # This configuration file contains cluster specific options to be passed to
+                        # pg_ctl(1).
+
+                        pg_ctl_options = '-w -t 3600'
+                        ''')
+    helpers.write(postgresql.pg_ctl_conf_path(), contents, mode=0o644, user='postgres', group='postgres')
+    reactive.set_flag('postgresql.cluster.pg_ctl_conf.created')
 
 
 @when('postgresql.cluster.created')

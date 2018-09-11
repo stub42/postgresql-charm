@@ -19,7 +19,7 @@ charms.reactive helpers for dealing with deb packages.
 
 Add apt package sources using add_source(). Queue deb packages for
 installation with install(). Configure and work with your software
-once the apt.installed.{packagename} state is set.
+once the apt.installed.{packagename} flag is set.
 '''
 import os.path
 import subprocess
@@ -28,6 +28,7 @@ from charmhelpers import fetch
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import DEBUG, ERROR, WARNING
 from charms import layer
+from charms.layer import status
 from charms import reactive
 from charms.reactive import when, when_not
 
@@ -59,15 +60,13 @@ def filter_installed_packages(packages):
     return set(packages) - installed
 
 
-def clear_removed_package_states():
-    """On hook startup, clear install states for removed packages."""
+def clear_removed_package_flags():
+    """On hook startup, clear install flags for removed packages."""
     removed = filter_installed_packages(charms.apt.installed())
     if removed:
-        hookenv.log('{} missing packages ({})'.format(len(removed),
-                                                      ','.join(removed)),
-                    WARNING)
+        hookenv.log('{} missing packages ({})'.format(len(removed), ','.join(removed)), WARNING)
         for package in removed:
-            reactive.remove_state('apt.installed.{}'.format(package))
+            reactive.clear_flag('apt.installed.{}'.format(package))
 
 
 def add_implicit_signing_keys():
@@ -104,9 +103,7 @@ def configure_sources():
     # We don't have enums, so we need to validate this ourselves.
     package_status = config.get('package_status') or ''
     if package_status not in ('hold', 'install'):
-        charms.apt.status_set('blocked',
-                              'Unknown package_status {}'
-                              ''.format(package_status))
+        status.blocked('Unknown package_status {}'.format(package_status))
         # Die before further hooks are run. This isn't very nice, but
         # there is no other way to inform the operator that they have
         # invalid configuration.
@@ -118,7 +115,7 @@ def configure_sources():
         fetch.configure_sources(update=False,
                                 sources_var='install_sources',
                                 keys_var='install_keys')
-        reactive.set_state('apt.needs_update')
+        reactive.set_flag('apt.needs_update')
 
     # Clumsy 'config.get() or' per Bug #1641362
     extra_packages = sorted((config.get('extra_packages') or '').split())
@@ -130,7 +127,7 @@ def queue_layer_packages():
     """Add packages listed in build-time layer options."""
     # Both basic and apt layer. basic layer will have already installed
     # its defined packages, but rescheduling it here gets the apt layer
-    # state set and they will pinned as any other apt layer installed
+    # flag set and they will pinned as any other apt layer installed
     # package.
     opts = layer.options()
     for section in ['basic', 'apt']:
@@ -138,21 +135,9 @@ def queue_layer_packages():
             charms.apt.queue_install(opts[section]['packages'])
 
 
-# Per https://github.com/juju-solutions/charms.reactive/issues/33,
-# this module may be imported multiple times so ensure the
-# initialization hook is only registered once. I have to piggy back
-# onto the namespace of a module imported before reactive discovery
-# to do this.
-if not hasattr(reactive, '_apt_registered'):
-    # We need to register this to run every hook, not just during install
-    # and config-changed, to protect against race conditions. If we don't
-    # do this, then the config in the hook environment may show updates
-    # to running hooks well before the config-changed hook has been invoked
-    # and the intialization provided an opertunity to be run.
-    hookenv.atstart(hookenv.log, 'Initializing Apt Layer')
-    hookenv.atstart(clear_removed_package_states)
-    hookenv.atstart(add_implicit_signing_keys)
-    hookenv.atstart(configure_sources)
-    hookenv.atstart(queue_layer_packages)
-    hookenv.atstart(charms.apt.reset_application_version)
-    reactive._apt_registered = True
+hookenv.atstart(hookenv.log, 'Initializing Apt Layer')
+hookenv.atstart(clear_removed_package_flags)
+hookenv.atstart(add_implicit_signing_keys)
+hookenv.atstart(configure_sources)
+hookenv.atstart(queue_layer_packages)
+hookenv.atstart(charms.apt.reset_application_version)

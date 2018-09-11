@@ -16,9 +16,9 @@
 "tags":
 - "databases"
 "series":
+- "bionic"
 - "xenial"
 - "trusty"
-- "bionic"
 "provides":
   "nrpe-external-master":
     "interface": "nrpe-external-master"
