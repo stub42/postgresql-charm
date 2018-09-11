@@ -24,7 +24,6 @@ import json
 import os.path
 import re
 import subprocess
-import sys
 from textwrap import dedent
 import time
 
@@ -32,8 +31,8 @@ import psycopg2
 import psycopg2.extensions
 import psycopg2.extras
 
-from charmhelpers.core import hookenv, unitdata
-from charmhelpers.core.hookenv import DEBUG, WARNING
+from charmhelpers.core import hookenv, host, unitdata
+from charmhelpers.core.hookenv import DEBUG
 from charms import reactive
 
 # This module is unit tested, so we can't use not_unless until we
@@ -208,6 +207,10 @@ def pg_hba_conf_path():
 
 def pg_ident_conf_path():
     return os.path.join(config_dir(), 'pg_ident.conf')
+
+
+def pg_ctl_conf_path():
+    return os.path.join(config_dir(), 'pg_ctl.conf')
 
 
 def recovery_conf_path():
@@ -483,59 +486,22 @@ def is_running():
         raise  # Unexpected failure.
 
 
-# Slow or busy systems can take much longer than the default 60 seconds
-# to startup or shutdown. If a database needs to go through recovery,
-# it could take days.
-STARTUP_TIMEOUT = 24 * 60 * 60
-
-# If we can't perform a fast shutdown in 5 minutes, the system is in
-# a bit of a mess so proceed to immediate shutdown (and causing the
-# subsequent startup to be slow).
-SHUTDOWN_TIMEOUT = 5 * 60
+def service_name():
+    if host.init_is_systemd():
+        return 'postgresql@{}-main'.format(version())
+    return 'postgresql'
 
 
 def start(ignore_failure=False):
-    try:
-        subprocess.check_call(['pg_ctlcluster',
-                               version(), 'main', 'start',
-                               # These extra options cause pg_ctl to wait
-                               # for startup to finish, so we don't have to.
-                               '--', '-w', '-t', str(STARTUP_TIMEOUT)],
-                              universal_newlines=True)
-    except subprocess.CalledProcessError as x:
-        if ignore_failure:
-            return
-        if x.returncode == 2:
-            return  # The server is already running.
-        workloadstatus.status_set('blocked', 'PostgreSQL failed to start')
-        emit_pg_log()  # For debugging inscruitable pg_ctlcluster failures.
-        raise SystemExit(0)
+    if host.service_start(service_name()) or ignore_failure:
+        return
+    workloadstatus.status_set('blocked', 'PostgreSQL failed to start')
+    emit_pg_log()
+    raise SystemExit(0)
 
 
 def stop():
-    # First try a 'fast' shutdown.
-    try:
-        subprocess.check_call(['pg_ctlcluster', '--mode', 'fast',
-                               version(), 'main', 'stop',
-                               '--', '-w', '-t', str(SHUTDOWN_TIMEOUT)],
-                              universal_newlines=True)
-        return
-    except subprocess.CalledProcessError as x:
-        if x.returncode == 2:
-            return  # The server was not running.
-
-    # If the 'fast' shutdown failed, try an 'immediate' shutdown.
-    try:
-        hookenv.log('Fast shutdown failed. Attempting immediate shutdown.',
-                    WARNING)
-        subprocess.check_call(['pg_ctlcluster', '--mode', 'immediate',
-                               version(), 'main', 'stop',
-                               '--', '-w', '-t', str(SHUTDOWN_TIMEOUT)],
-                              universal_newlines=True)
-        return
-    except subprocess.CalledProcessError as x:
-        if x.returncode == 2:
-            return  # The server was not running.
+    if not host.service_stop(service_name()):
         workloadstatus.status_set('blocked', 'Unable to shutdown PostgreSQL')
         raise SystemExit(0)
 
@@ -544,12 +510,10 @@ def emit_pg_log(lines=100):
     '''Dump the end of the PostgreSQL log file to stdout'''
     rec_conf = recovery_conf_path()
     if os.path.exists(rec_conf):
-        print(open(rec_conf, 'r').read())
-        sys.stdout.flush()
-    subprocess.call([pg_controldata_path(), '-D', data_dir()],
-                    universal_newlines=True)
-    subprocess.call(['tail', '-{:d}'.format(lines), pg_log_path()],
-                    universal_newlines=True)
+        # Don't dump the actual file, as one day it might contain passwords.
+        print('recovery.conf exists at {}'.format(rec_conf))
+    subprocess.call([pg_controldata_path(), '-D', data_dir()], universal_newlines=True)
+    subprocess.call(['tail', '-{:d}'.format(lines), pg_log_path()], universal_newlines=True)
 
 
 def reload_config():
@@ -557,7 +521,7 @@ def reload_config():
 
     Alas, there is no easy way to confirm that the reload succeeded.
     '''
-    subprocess.check_call(['pg_ctlcluster', version(), 'main', 'reload'])
+    host.service_reload(service_name())
 
 
 def parse_config(unparsed_config, fatal=True):
@@ -607,8 +571,7 @@ def parse_config(unparsed_config, fatal=True):
                 x.lineno = lineno
                 x.text = line
                 raise x
-            workloadstatus.status_set('blocked',
-                                      '{} line {}: {}'.format(x, lineno, line))
+            workloadstatus.status_set('blocked', '{} line {}: {}'.format(x, lineno, line))
             raise SystemExit(0)
     return parsed
 
