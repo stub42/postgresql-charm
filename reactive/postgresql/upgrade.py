@@ -1,4 +1,4 @@
-# Copyright 2015-2017 Canonical Ltd.
+# Copyright 2015-2018 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -126,6 +126,14 @@ def upgrade_charm():
 
     # Reinstall support scripts
     reactive.remove_state('postgresql.cluster.support-scripts')
+
+    # Ensure that systemd is managing the PostgreSQL process
+    if host.init_is_systemd() and not reactive.is_flag_set('postgresql.upgrade.systemd'):
+        reactive.set_flag('postgresql.upgrade.systemd')
+        if reactive.is_flag_set('postgresql.cluster.is_running'):
+            hookenv.log('Restarting PostgreSQL under systemd', hookenv.WARNING)
+            reactive.clear_flag('postgresql.cluster.is_running')
+            postgresql.stop_pgctlcluster()
 
 
 def migrate_user(old_username, new_username, password, superuser=False):

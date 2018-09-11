@@ -1,4 +1,4 @@
-# Copyright 2015-2017 Canonical Ltd.
+# Copyright 2015-2018 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -504,6 +504,14 @@ def stop():
     if not host.service_stop(service_name()):
         workloadstatus.status_set('blocked', 'Unable to shutdown PostgreSQL')
         raise SystemExit(0)
+
+
+def stop_pgctlcluster():
+    '''Use pg_ctlcluster to stop PostgreSQL
+
+    This is only used (once) by upgrade-charm to reparent the process under systemd.
+    '''
+    subprocess.check_call(['pg_ctlcluster', '-m', 'fast', version(), 'main', 'stop'])
 
 
 def emit_pg_log(lines=100):
