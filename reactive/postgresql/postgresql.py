@@ -1,4 +1,4 @@
-# Copyright 2015-2017 Canonical Ltd.
+# Copyright 2015-2018 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
