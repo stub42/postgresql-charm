@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+#!/usr/local/sbin/charm-env python3
+#
 # Copyright 2015-2018 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
