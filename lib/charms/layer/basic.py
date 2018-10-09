@@ -36,9 +36,27 @@ def bootstrap_charm_deps():
     vbin = os.path.join(venv, 'bin')
     vpip = os.path.join(vbin, 'pip')
     vpy = os.path.join(vbin, 'python')
-    if os.path.exists('wheelhouse/.bootstrapped'):
+    hook_name = os.path.basename(sys.argv[0])
+    is_bootstrapped = os.path.exists('wheelhouse/.bootstrapped')
+    is_charm_upgrade = hook_name == 'upgrade-charm'
+    is_series_upgrade = hook_name == 'post-series-upgrade'
+    post_upgrade = os.path.exists('wheelhouse/.upgrade')
+    is_upgrade = not post_upgrade and (is_charm_upgrade or is_series_upgrade)
+    if is_bootstrapped and not is_upgrade:
         activate_venv()
+        # the .upgrade file prevents us from getting stuck in a loop
+        # when re-execing to activate the venv; at this point, we've
+        # activated the venv, so it's safe to clear it
+        if post_upgrade:
+            os.unlink('wheelhouse/.upgrade')
         return
+    if is_series_upgrade and os.path.exists(venv):
+        # series upgrade should do a full clear of the venv, rather than just
+        # updating it, to bring in updates to Python itself
+        shutil.rmtree(venv)
+    if is_upgrade:
+        os.unlink('wheelhouse/.bootstrapped')
+        open('wheelhouse/.upgrade', 'w').close()
     # bootstrap wheelhouse
     if os.path.exists('wheelhouse'):
         with open('/root/.pydistutils.cfg', 'w') as fp:
@@ -54,6 +72,8 @@ def bootstrap_charm_deps():
             'python3-setuptools',
             'python3-yaml',
             'python3-dev',
+            'python3-wheel',
+            'build-essential',
         ])
         from charms.layer import options
         cfg = options.get('basic')
@@ -91,13 +111,17 @@ def bootstrap_charm_deps():
         # install the rest of the wheelhouse deps
         check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse'] +
                    glob('wheelhouse/*'))
+        # re-enable installation from pypi
+        os.remove('/root/.pydistutils.cfg')
+        # install python packages from layer options
+        if cfg['python_packages']:
+            check_call([pip, 'install', '-U'] + cfg['python_packages'])
         if not cfg.get('use_venv'):
             # restore system pip to prevent `pip3 install -U pip`
             # from changing it
             if os.path.exists('/usr/bin/pip.save'):
                 shutil.copy2('/usr/bin/pip.save', '/usr/bin/pip')
                 os.remove('/usr/bin/pip.save')
-        os.remove('/root/.pydistutils.cfg')
         # setup wrappers to ensure envs are used for scripts
         shutil.copy2('bin/charm-env', '/usr/local/sbin/')
         for wrapper in ('charms.reactive', 'charms.reactive.sh',
@@ -188,6 +212,12 @@ def apt_install(packages):
         except CalledProcessError:
             if attempt == 2:  # third attempt
                 raise
+            try:
+                # sometimes apt-get update needs to be run
+                check_call(['apt-get', 'update'])
+            except CalledProcessError:
+                # sometimes it's a dpkg lock issue
+                pass
             sleep(5)
         else:
             break
@@ -214,7 +244,6 @@ def init_config_states():
         toggle_state('config.set.{}'.format(opt), config.get(opt))
         toggle_state('config.default.{}'.format(opt),
                      config.get(opt) == config_defaults[opt])
-    hookenv.atexit(clear_config_states)
 
 
 def clear_config_states():

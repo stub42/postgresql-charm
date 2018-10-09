@@ -52,37 +52,37 @@
     "actions/actions.py": [
       "postgresql",
       "static",
-      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
+      "49d384645f5c58bd594a22c10f5644d1eece9bb9838cf6454d1fa8f0ee863ba8"
     ],
     "actions/replication-pause": [
       "postgresql",
       "static",
-      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
+      "49d384645f5c58bd594a22c10f5644d1eece9bb9838cf6454d1fa8f0ee863ba8"
     ],
     "actions/replication-resume": [
       "postgresql",
       "static",
-      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
+      "49d384645f5c58bd594a22c10f5644d1eece9bb9838cf6454d1fa8f0ee863ba8"
     ],
     "actions/switchover": [
       "postgresql",
       "static",
-      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
+      "49d384645f5c58bd594a22c10f5644d1eece9bb9838cf6454d1fa8f0ee863ba8"
     ],
     "actions/wal-e-backup": [
       "postgresql",
       "static",
-      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
+      "49d384645f5c58bd594a22c10f5644d1eece9bb9838cf6454d1fa8f0ee863ba8"
     ],
     "actions/wal-e-list-backups": [
       "postgresql",
       "static",
-      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
+      "49d384645f5c58bd594a22c10f5644d1eece9bb9838cf6454d1fa8f0ee863ba8"
     ],
     "actions/wal-e-restore": [
       "postgresql",
       "static",
-      "dd9e3f08a7b7c69f3cf2446a145790bbc84fe3d6933dea2ef41b25a6d77d44c9"
+      "49d384645f5c58bd594a22c10f5644d1eece9bb9838cf6454d1fa8f0ee863ba8"
     ],
     "bin/charm-env": [
       "layer:basic",
@@ -161,8 +161,13 @@
     ],
     "hooks/config-changed": [
       "layer:basic",
-      "static",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
+    ],
+    "hooks/coordinator-relation-broken": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/coordinator-relation-changed": [
       "layer:coordinator",
@@ -174,6 +179,16 @@
       "static",
       "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
     ],
+    "hooks/coordinator-relation-joined": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
+    ],
+    "hooks/data-relation-broken": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
+    ],
     "hooks/data-relation-changed": [
       "postgresql",
       "static",
@@ -184,10 +199,15 @@
       "static",
       "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
     ],
-    "hooks/db-admin-relation-broken": [
-      "interface:pgsql",
+    "hooks/data-relation-joined": [
+      "layer:basic",
       "dynamic",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
+    ],
+    "hooks/db-admin-relation-broken": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/db-admin-relation-changed": [
       "postgresql",
@@ -200,14 +220,14 @@
       "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
     ],
     "hooks/db-admin-relation-joined": [
-      "interface:pgsql",
+      "layer:basic",
       "dynamic",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/db-relation-broken": [
-      "interface:pgsql",
+      "layer:basic",
       "dynamic",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/db-relation-changed": [
       "postgresql",
@@ -220,9 +240,9 @@
       "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
     ],
     "hooks/db-relation-joined": [
-      "interface:pgsql",
+      "layer:basic",
       "dynamic",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/defaulthook.py": [
       "postgresql",
@@ -232,12 +252,12 @@
     "hooks/hook.template": [
       "layer:basic",
       "static",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/install": [
       "layer:basic",
-      "static",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/leader-elected": [
       "layer:coordinator",
@@ -249,6 +269,11 @@
       "static",
       "e5138d13492aa9a90379e8fce4a85c612481e7bc27a49958edbbfcaaf06f03a6"
     ],
+    "hooks/local-monitors-relation-broken": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
+    ],
     "hooks/local-monitors-relation-changed": [
       "postgresql",
       "static",
@@ -258,6 +283,16 @@
       "postgresql",
       "static",
       "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+    ],
+    "hooks/local-monitors-relation-joined": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
+    ],
+    "hooks/master-relation-broken": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/master-relation-changed": [
       "postgresql",
@@ -269,10 +304,15 @@
       "static",
       "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
     ],
-    "hooks/nrpe-external-master-relation-broken": [
-      "interface:nrpe-external-master",
+    "hooks/master-relation-joined": [
+      "layer:basic",
       "dynamic",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
+    ],
+    "hooks/nrpe-external-master-relation-broken": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/nrpe-external-master-relation-changed": [
       "postgresql",
@@ -285,29 +325,29 @@
       "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
     ],
     "hooks/nrpe-external-master-relation-joined": [
-      "interface:nrpe-external-master",
+      "layer:basic",
       "dynamic",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/pgdata-storage-attached": [
       "postgresql",
       "dynamic",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/pgdata-storage-detaching": [
       "postgresql",
       "dynamic",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/post-series-upgrade": [
       "layer:basic",
       "dynamic",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/pre-series-upgrade": [
       "layer:basic",
       "dynamic",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/relations/__init__.py": [
       "postgresql",
@@ -469,6 +509,11 @@
       "static",
       "2a84f832e51a14104b01890c86209fdb272c6dca9d346c9e9301a2762a855626"
     ],
+    "hooks/replication-relation-broken": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
+    ],
     "hooks/replication-relation-changed": [
       "postgresql",
       "static",
@@ -479,15 +524,25 @@
       "static",
       "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
     ],
+    "hooks/replication-relation-joined": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
+    ],
     "hooks/start": [
       "layer:basic",
-      "static",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/stop": [
       "layer:basic",
-      "static",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
+    ],
+    "hooks/syslog-relation-broken": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/syslog-relation-changed": [
       "postgresql",
@@ -499,15 +554,20 @@
       "static",
       "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
     ],
+    "hooks/syslog-relation-joined": [
+      "layer:basic",
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
+    ],
     "hooks/update-status": [
       "layer:basic",
-      "static",
-      "f976e7ff3e347d44dac22626507f2a88042ba913aeebca7ffdcd5f6179b83683"
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "hooks/upgrade-charm": [
       "layer:basic",
-      "static",
-      "8fb6559bf4d4b7cdf1b857564c1d7265df98e863a4746fcbae092f141e59d97e"
+      "dynamic",
+      "2b693cb2a11594a80cc91235c2dc219a0a6303ae62bee8aa87eb35781f7158f7"
     ],
     "icon.svg": [
       "postgresql",
@@ -517,7 +577,7 @@
     "layer.yaml": [
       "postgresql",
       "dynamic",
-      "8dbefe541e0f098af67ef5b156da282e92356ec8d386b13f4bb7b841b3ae31c3"
+      "29e0d6ff0f9ae923517c2e828b107aae34c39c42ce27e41bf846490e6b4f50f1"
     ],
     "lib/cache_settings.py": [
       "postgresql",
@@ -547,7 +607,7 @@
     "lib/charms/layer/basic.py": [
       "layer:basic",
       "static",
-      "0cc3090c9f39111c63fd1dc1030734640650687138d4d77cfe09671b9d7ed6b3"
+      "b1999883f669aa0d7e329cd7757ee2b14c7bcabdcf3c781272e9be79ef36255f"
     ],
     "lib/charms/layer/execd.py": [
       "layer:basic",
@@ -562,7 +622,7 @@
     "lib/charms/layer/snap.py": [
       "layer:snap",
       "static",
-      "008db94bf205c5dd8814f3132b5880da67576aedf5c7b00384ecd8d9c4074595"
+      "79887542042d000b339a3e4bcb506f1aecc269074acc5c0f79562517eeb17c65"
     ],
     "lib/charms/layer/status.py": [
       "layer:status",
@@ -812,7 +872,7 @@
     "reactive/snap.py": [
       "layer:snap",
       "static",
-      "71799655fea321a1a449995dc93fabf0959652b15d94f3c56e5d2ddb4f451993"
+      "d2267b8b8feb0b0869cb5611c015d20a75996ee62b82182aca37f57c5f0fb3f3"
     ],
     "reactive/status.py": [
       "layer:status",
@@ -832,7 +892,7 @@
     "scripts/pgbackup.py": [
       "postgresql",
       "static",
-      "acd725a08436d447b1a11bf794fb7d0b4947606ebdfce6dd6d91662f546cb18a"
+      "bacb55f059a13418197a783511da94a47433bf58c96096bdbd95ff9f222095bb"
     ],
     "scripts/pgkillidle.py": [
       "postgresql",
@@ -909,6 +969,11 @@
       "static",
       "bfefc917010ce4abd21955d0232ba729c89442cbce5806a36a40f82d4d0f27d0"
     ],
+    "version": [
+      "postgresql",
+      "dynamic",
+      "f8a1ccd8cb38816be6552c94a642ab14b885f168ae08fc210697497f288fb60f"
+    ],
     "wheelhouse/Jinja2-2.10.tar.gz": [
       "layer:basic",
       "dynamic",
@@ -934,10 +999,10 @@
       "dynamic",
       "fdd06ed00fdc0425eed7452e9181645e998eb95eba1079806a30149802a1cada"
     ],
-    "wheelhouse/charms.reactive-1.0.0.tar.gz": [
+    "wheelhouse/charms.reactive-1.1.2.tar.gz": [
       "layer:basic",
       "dynamic",
-      "df35b70f9440c450d17629ab42741bc002feb49eb9961ad1faca9de5c6bf867c"
+      "ce86a2273d070478160a236e2dfb9f68a0ea9b79923c65b2b17692b1d73b63b3"
     ],
     "wheelhouse/netaddr-0.7.19.tar.gz": [
       "layer:basic",

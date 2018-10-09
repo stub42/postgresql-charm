@@ -66,8 +66,8 @@ def install():
             hookenv.log('Snap {} not supported on {!r} architecture'
                         ''.format(snapname, arch), ERROR)
             continue
-        installed_state = 'snap.installed.{}'.format(snapname)
-        if not reactive.is_state(installed_state):
+        installed_flag = 'snap.installed.{}'.format(snapname)
+        if not reactive.is_flag_set(installed_flag):
             snap.install(snapname, **snap_opts)
     if data_changed('snap.install.opts', opts):
         snap.connect_all()
@@ -112,7 +112,8 @@ def ensure_snapd():
     # I don't use the apt layer, because that would tie this layer
     # too closely to apt packaging. Perhaps this is a snap-only system.
     if not shutil.which('snap'):
-        cmd = ['apt', 'install', '-y', 'snapd']
+        os.environ['DEBIAN_FRONTEND'] = 'noninteractive'
+        cmd = ['apt-get', 'install', '-y', 'snapd']
         # LP:1699986: Force install of systemd on Trusty.
         if get_series() == 'trusty':
             cmd.append('systemd')
@@ -122,7 +123,8 @@ def ensure_snapd():
     # on the necessary package and snaps work in lxd xenial containers
     # without the workaround.
     if host.is_container() and not shutil.which('squashfuse'):
-        cmd = ['apt', 'install', '-y', 'squashfuse', 'fuse']
+        os.environ['DEBIAN_FRONTEND'] = 'noninteractive'
+        cmd = ['apt-get', 'install', '-y', 'squashfuse', 'fuse']
         subprocess.check_call(cmd, universal_newlines=True)
 
 
@@ -278,21 +280,11 @@ def change_snapd_refresh():
     reactive.set_flag('snap.refresh.set')
 
 
-# Per https://github.com/juju-solutions/charms.reactive/issues/33,
-# this module may be imported multiple times so ensure the
-# initialization hook is only registered once. I have to piggy back
-# onto the namespace of a module imported before reactive discovery
-# to do this.
-if not hasattr(reactive, '_snap_registered'):
-    # We need to register this to run every hook, not just during install
-    # and config-changed, to protect against race conditions. If we don't
-    # do this, then the config in the hook environment may show updates
-    # to running hooks well before the config-changed hook has been invoked
-    # and the intialization provided an opertunity to be run.
-    hookenv.atstart(hookenv.log, 'Initializing Snap Layer')
-    hookenv.atstart(ensure_snapd)
-    hookenv.atstart(ensure_path)
-    hookenv.atstart(update_snap_proxy)
-    hookenv.atstart(configure_snap_store_proxy)
-    hookenv.atstart(install)
-    reactive._snap_registered = True
+# Bootstrap. We don't use standard reactive handlers to ensure that
+# everything is bootstrapped before any charm handlers are run.
+hookenv.atstart(hookenv.log, 'Initializing Snap Layer')
+hookenv.atstart(ensure_snapd)
+hookenv.atstart(ensure_path)
+hookenv.atstart(update_snap_proxy)
+hookenv.atstart(configure_snap_store_proxy)
+hookenv.atstart(install)

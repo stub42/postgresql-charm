@@ -16,7 +16,7 @@ import os
 import os.path
 import stat
 import logging
-import commands
+import subprocess
 from datetime import datetime
 from optparse import OptionParser
 
@@ -82,10 +82,12 @@ def main(options, databases):
             log.error("%s already exists. Skipping." % dest)
             continue
 
-        (rv, outtext) = commands.getstatusoutput(cmd)
-        if rv != 0:
-            log.critical("Failed to backup %s (%d)" % (database, rv))
-            log.critical(outtext)
+        try:
+            subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as x:
+            log.critical("Failed to backup %s (%d)" % (database, x.returncode))
+            log.critical(x.output.decode(errors='ignore'))
+            rv = x.returncode
             continue
 
         size = os.stat(dest)[stat.ST_SIZE]
