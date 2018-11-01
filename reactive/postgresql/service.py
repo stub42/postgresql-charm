@@ -41,6 +41,8 @@ from reactive.postgresql import wal_e
 @hook('install')
 def install():
     reactive.set_state('config.changed.pgdg')
+    if host.init_is_systemd():
+        reactive.set_flag('postgresql.upgrade.systemd')
 
 
 @everyhook
