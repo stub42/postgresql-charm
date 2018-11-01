@@ -390,6 +390,7 @@ class PostgreSQLClient(Endpoint):
         self._set_flag('{endpoint_name}.connected')
 
     @when_not('endpoint.{endpoint_name}.joined')
+    @when('{endpoint_name}.connected')
     def _departed(self):
         self._clear_all_flags()
         self._clear_flag('{endpoint_name}.database.changed')
@@ -398,6 +399,7 @@ class PostgreSQLClient(Endpoint):
         self._set_flag('{endpoint_name}.master.changed')
         self._clear_flag('{endpoint_name}.standbys.changed')
         self._set_flag('{endpoint_name}.standbys.changed')
+        self._set_flag('{endpoint_name}.departed')
 
     @when('endpoint.{endpoint_name}.changed')
     def _changed(self):
