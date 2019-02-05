@@ -170,6 +170,18 @@ options:
       You need enough space for this many backups plus one more, as
       an old backup will only be removed after a new one has been
       successfully made to replace it.
+  wal_e_backup_stale_warn_threshold:
+    type: int
+    default: 300
+    description: >
+      How many seconds the oldest un-uploaded WAL database backup can be
+      before the Nagios check will issue a warning.
+  wal_e_backup_stale_warn_threshold:
+    type: int
+    default: 600
+    description: >
+      How many seconds the oldest un-uploaded WAL database backup can be
+      before the Nagios check will issue a critical error.
   streaming_replication:
     type: boolean
     default: true
@@ -308,7 +320,7 @@ options:
     type: float
     description: DEPRECATED. Use extra_pg_conf.
   autovacuum_analyze_scale_factor:
-    default: 0.1  
+    default: 0.1
     type: float
     description: DEPRECATED. Use extra_pg_conf.
   autovacuum_vacuum_cost_delay:
@@ -366,7 +378,7 @@ options:
   kernel_shmall:
     default: 0
     type: int
-    description: DEPRECATED and ignored. 
+    description: DEPRECATED and ignored.
   kernel_shmmax:
     default: 0
     type: int
@@ -384,7 +396,7 @@ options:
     type: int
     description: DEPRECATED. Use extra_pg_conf.
   collapse_limit:
-    default: -1 
+    default: -1
     type: int
     description: DEPRECATED. Use extra_pg_conf.
   temp_buffers:
@@ -396,7 +408,7 @@ options:
     type: string
     description: DEPRECATED. Use extra_pg_conf.
   checkpoint_segments:
-    default: 10 
+    default: 10
     type: int
     description: DEPRECATED. Use extra_pg_conf.
   checkpoint_completion_target:
