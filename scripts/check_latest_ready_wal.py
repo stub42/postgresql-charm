@@ -6,7 +6,7 @@ import sys
 def get_val_from_file(filename):
     with open(filename) as the_file:
         content = the_file.read().strip()
-    return content
+    return int(content)
 
 
 def make_nice_age(seconds):
@@ -26,13 +26,13 @@ def main():
     ret_val = NAGIOS_OK
 
     try:
-        warn_threshold = sys.argv[1]
+        warn_threshold = int(sys.argv[1])
     except IndexError:
         print("Syntax error: not enough arguments given")
         sys.exit(NAGIOS_FAIL)
 
     try:
-        crit_threshold = sys.argv[2]
+        crit_threshold = int(sys.argv[2])
     except IndexError:
         print("Syntax error: not enough arguments given")
         sys.exit(NAGIOS_FAIL)

@@ -118,8 +118,7 @@ def update_nrpe_config():
         helpers.scripts_dir(),
         'find_latest_ready_wal.py.py'
     )
-    helpers.write(check_script_path, check_script, mode=0o755,
-                  user='postgres', group='postgres')
+    helpers.write(check_script_path, check_script, mode=0o755)
 
     # create an (empty) file with appropriate permissions for the above
     check_output_path = '/var/lib/nagios/postgres-wal-e-max-age.txt'
@@ -135,7 +134,7 @@ def update_nrpe_config():
     )
 
     # create the cron job to run the above
-    check_cron = "* * * * * postgres {}".format(check_script_path)
+    check_cron = "*/2 * * * * postgres {}".format(check_script_path)
     check_cron_path = '/etc/cron.d/postgres-stale-wal-e-check'
     helpers.write(check_cron_path, check_cron, mode=0o644,
                   user='root', group='root')
@@ -161,7 +160,7 @@ def update_nrpe_config():
                    ))
 
     if reactive.is_state('postgresql.replication.is_master'):
-        # TODO: These should be calcualted from the backup schedule,
+        # TODO: These should be calculated from the backup schedule,
         # which is difficult since that is specified in crontab format.
         warn_age = 172800
         crit_age = 194400
