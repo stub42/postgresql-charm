@@ -16,19 +16,32 @@
 
 import os.path
 import sys
+import tempfile
 import unittest
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 sys.path.insert(1, os.path.join(ROOT, 'scripts'))
 
-from check_latest_ready_wal import make_nice_age
+from check_latest_ready_wal import get_val_from_file, make_nice_age
+
 
 class TestCheckLatestReadyWal(unittest.TestCase):
+    def test_get_val_from_file(self):
+        fp = tempfile.NamedTemporaryFile()
+        fp.write(b'42\n')
+        fp.flush()
+        self.assertEqual(
+            get_val_from_file(fp.name),
+            42
+        )
+        fp.close()
+
     def test_make_nice_age(self):
         seconds = 123456
         self.assertEqual(
             make_nice_age(seconds),
             '1 days, 10 hours, 17 minutes and 36 seconds'
         )
+
 
 if __name__ == '__main__':
     unittest.main()

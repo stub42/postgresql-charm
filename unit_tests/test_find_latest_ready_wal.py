@@ -24,6 +24,7 @@ sys.path.insert(1, os.path.join(ROOT, 'scripts'))
 
 from find_latest_ready_wal import file_age
 
+
 class TestFileAge(unittest.TestCase):
     def test_file_age(self):
         fp = tempfile.NamedTemporaryFile()
@@ -31,6 +32,8 @@ class TestFileAge(unittest.TestCase):
             int(file_age(fp.name)),
             0
         )
+        fp.close()
+
 
 if __name__ == '__main__':
     unittest.main()
