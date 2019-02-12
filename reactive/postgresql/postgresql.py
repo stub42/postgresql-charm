@@ -217,8 +217,12 @@ def recovery_conf_path():
     return os.path.join(data_dir(), 'recovery.conf')
 
 
+def pg_bin_dir():
+    return '/usr/lib/postgresql/{}/bin'.format(version())
+
+
 def pg_ctl_path():
-    return '/usr/lib/postgresql/{}/bin/pg_ctl'.format(version())
+    return os.path.join(pg_bin_dir(), 'pg_ctl')
 
 
 def pg_controldata_path():
@@ -324,13 +328,8 @@ def pgidentifier(token):
 def create_cluster():
     config = hookenv.config()
     cmd = ['pg_createcluster', '-e', config['encoding'],
-           '--locale', config['locale'], version(), 'main']
-    # With 9.3+, we make an opinionated decision to always enable
-    # data checksums. This seems to be best practice. We could
-    # turn this into a configuration item if there is need. There
-    # is no way to enable this option on existing clusters.
-    if has_version('9.3'):
-        cmd.extend(['--', '--data-checksums'])
+           '--locale', config['locale'], version(), 'main',
+           '--', '--data-checksums']
     subprocess.check_call(cmd, universal_newlines=True)
 
 
@@ -341,8 +340,16 @@ def drop_cluster(stop=False):
     subprocess.check_call(cmd, universal_newlines=True)
 
 
+def drop_database(database):
+    con = connect()
+    con.autocommit = True
+    cur = con.cursor()
+    cur.execute('DROP DATABASE IF EXISTS %s',
+                (pgidentifier(database),))
+
+
 # @not_unless('postgresql.replication.is_primary')
-def ensure_database(database):
+def ensure_database(database, owner=None):
     '''Create the database if it doesn't already exist.
 
     This is done outside of a transaction.
@@ -353,7 +360,13 @@ def ensure_database(database):
     cur.execute("SELECT datname FROM pg_database WHERE datname=%s",
                 (database,))
     if cur.fetchone() is None:
-        cur.execute('CREATE DATABASE %s', (pgidentifier(database),))
+        if owner is None:
+            owner = 'postgres'
+        cur.execute('CREATE DATABASE %s OWNER %s',
+                    (pgidentifier(database), pgidentifier(owner)))
+    elif owner:
+        cur.execute('ALTER DATABASE %s OWNER TO %s',
+                    (pgidentifier(database), pgidentifier(owner)))
 
 
 # @not_unless('postgresql.replication.is_primary')

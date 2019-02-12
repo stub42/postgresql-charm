@@ -406,15 +406,16 @@ class PostgreSQLClient(Endpoint):
         # Set the master/standby changed flags. The charm is
         # responsible for clearing this, if it cares. Flags are
         # cleared before being set to ensure triggers are triggered.
+        upgrade = hookenv.hook_name() == 'upgrade-charm'
         self._reset_all_flags()
         key = self.expand_name('endpoint.{endpoint_name}.master.changed')
-        if data_changed(key, [str(cs.master) for cs in self]):
+        if data_changed(key, [str(cs.master) for cs in self]) or (self.master and upgrade):
             self._clear_flag('{endpoint_name}.master.changed')
             self._set_flag('{endpoint_name}.master.changed')
             self._clear_flag('{endpoint_name}.database.changed')
             self._set_flag('{endpoint_name}.database.changed')
         key = self.expand_name('endpoint.{endpoint_name}.standbys.changed')
-        if data_changed(key, [sorted(str(s) for s in cs.standbys) for cs in self]):
+        if data_changed(key, [sorted(str(s) for s in cs.standbys) for cs in self]) or (self.standbys and upgrade):
             self._clear_flag('{endpoint_name}.standbys.changed')
             self._set_flag('{endpoint_name}.standbys.changed')
             self._clear_flag('{endpoint_name}.database.changed')

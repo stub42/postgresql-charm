@@ -10,7 +10,7 @@ from charmhelpers.core import hookenv
 
 
 _orig_call = subprocess.call
-_statuses = {}
+_statuses = {'_finalized': False}
 
 
 class WorkloadState(Enum):
@@ -99,6 +99,10 @@ def status_set(workload_state, message):
         return
     layer = _find_calling_layer()
     _statuses.setdefault(workload_state, []).append((layer, message))
+    if _statuses['_finalized']:
+        # we already finalized the status; but now we have a new one,
+        # so we need to do it again
+        _finalize_status()
 
 
 def _find_calling_layer():
@@ -115,6 +119,7 @@ def _find_calling_layer():
 
 
 def _finalize_status():
+    _statuses['_finalized'] = True
     charm_name = hookenv.charm_name()
     with Path('layer.yaml').open() as fp:
         includes = yaml.load(fp.read()).get('includes', [])
@@ -165,3 +170,4 @@ def _patched_call(cmd, *args, **kwargs):
         return _orig_call(cmd, *args, **kwargs)
     _, workload_state, message = cmd
     status_set(workload_state, message)
+    return 0  # make hookenv.status_set not emit spurious failure logs

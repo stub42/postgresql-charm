@@ -110,8 +110,57 @@ def update_nrpe_config():
                    description='Check pgsql',
                    check_cmd='check_pgsql -P {} -l {}'.format(port, user))
 
+    # copy the check script which will run cronned as postgres user
+    with open('scripts/find_latest_ready_wal.py.py') as fh:
+        check_script = fh.read()
+
+    check_script_path = '{}/{}'.format(
+        helpers.scripts_dir(),
+        'find_latest_ready_wal.py.py'
+    )
+    helpers.write(check_script_path, check_script, mode=0o755)
+
+    # create an (empty) file with appropriate permissions for the above
+    check_output_path = '/var/lib/nagios/postgres-wal-e-max-age.txt'
+    helpers.write(check_output_path, '', mode=0o644,
+                  user='postgres', group='postgres')
+
+    # retrieve the threshold values from the charm config
+    check_warn_threshold = helpers.config_yaml.get(
+        'wal_e_backup_stale_warn_threshold'
+    )
+    check_crit_threshold = helpers.config_yaml.get(
+        'wal_e_backup_stale_crit_threshold'
+    )
+
+    # create the cron job to run the above
+    check_cron = "*/2 * * * * postgres {}".format(check_script_path)
+    check_cron_path = '/etc/cron.d/postgres-stale-wal-e-check'
+    helpers.write(check_cron_path, check_cron, mode=0o644,
+                  user='root', group='root')
+
+    # copy the nagios plugin which will check the cronned output
+    with open('scripts/check_latest_ready_wal.py') as fh:
+        check_script = fh.read()
+
+    check_script_path = '{}/{}'.format(
+        '/usr/local/lib/nagios/plugins',
+        'check_latest_ready_wal.py'
+    )
+    helpers.write(check_script_path, check_script, mode=0o755,
+                  user='nagios', group='nagios')
+
+    # write the nagios check definition
+    nrpe.add_check(shortname='pgsql_stale_wal',
+                   description='Check for stale WAL backups',
+                   check_cmd='{} {} {}'.format(
+                       check_script_path,
+                       check_warn_threshold,
+                       check_crit_threshold,
+                   ))
+
     if reactive.is_state('postgresql.replication.is_master'):
-        # TODO: These should be calcualted from the backup schedule,
+        # TODO: These should be calculated from the backup schedule,
         # which is difficult since that is specified in crontab format.
         warn_age = 172800
         crit_age = 194400
