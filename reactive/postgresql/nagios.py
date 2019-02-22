@@ -111,12 +111,12 @@ def update_nrpe_config():
                    check_cmd='check_pgsql -P {} -l {}'.format(port, user))
 
     # copy the check script which will run cronned as postgres user
-    with open('scripts/find_latest_ready_wal.py.py') as fh:
+    with open('scripts/find_latest_ready_wal.py') as fh:
         check_script = fh.read()
 
     check_script_path = '{}/{}'.format(
         helpers.scripts_dir(),
-        'find_latest_ready_wal.py.py'
+        'find_latest_ready_wal.py'
     )
     helpers.write(check_script_path, check_script, mode=0o755)
 
@@ -126,10 +126,10 @@ def update_nrpe_config():
                   user='postgres', group='postgres')
 
     # retrieve the threshold values from the charm config
-    check_warn_threshold = helpers.config_yaml.get(
+    check_warn_threshold = helpers.config_yaml().get(
         'wal_e_backup_stale_warn_threshold'
     )
-    check_crit_threshold = helpers.config_yaml.get(
+    check_crit_threshold = helpers.config_yaml().get(
         'wal_e_backup_stale_crit_threshold'
     )
 

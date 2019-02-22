@@ -5,7 +5,7 @@
       "url": "layer:options"
     },
     {
-      "rev": "baf582236a7b946da4cd140fd6532a2e0c2774d5",
+      "rev": "871cdfa33f120181f6267be2db5712984c760721",
       "url": "layer:basic"
     },
     {
@@ -17,7 +17,7 @@
       "url": "layer:apt"
     },
     {
-      "rev": "8d75e41076117ffbed37441c3d0729c251f10997",
+      "rev": "ecb77a4cadd8254497353d83c5fcaf612db3af3f",
       "url": "layer:snap"
     },
     {
@@ -33,7 +33,7 @@
       "url": "layer:nagios"
     },
     {
-      "rev": "8be5b9ae4eab4d43a90a4f036e3a040120929ca5",
+      "rev": "8cd0ab0500b2358a99465eca7cd1bf5b003c1634",
       "url": "postgresql"
     },
     {
@@ -584,7 +584,7 @@
     "layer.yaml": [
       "postgresql",
       "dynamic",
-      "b278e008b9f6dd1185bffe63c215533bb2ba22bc3e48809eaa838781fbd1ee44"
+      "99edcb15841906bfa06bb3ee31dfc568310ee65d85e1386050bc5dc1d0a0854f"
     ],
     "lib/cache_settings.py": [
       "postgresql",
@@ -614,7 +614,7 @@
     "lib/charms/layer/basic.py": [
       "layer:basic",
       "static",
-      "ec4e6b7f9d6892ab74b3541337d1dc1d244ffb2155771841cc9480839f03d4c0"
+      "c3a84ecabc893ebdb2178b08daad29596ea8a0dbf6508fd2e45fe4b182e29c1d"
     ],
     "lib/charms/layer/execd.py": [
       "layer:basic",
@@ -834,7 +834,7 @@
     "reactive/postgresql/nagios.py": [
       "postgresql",
       "static",
-      "68df8f4f37adfbfccc7737b332d2d4510a4b668627456f671712153951bd7ffd"
+      "1eadf2ae2c2ed5359f6030dd68611e4597074fcce3e94cb824496bf6254785ab"
     ],
     "reactive/postgresql/postgresql.py": [
       "postgresql",
@@ -879,7 +879,7 @@
     "reactive/snap.py": [
       "layer:snap",
       "static",
-      "7c4a87d7c2ed85a859f72c77769b826c012405181b1d99f19183452399c1f16c"
+      "693ccdb90beb5f0da7a6285062fb61f2ee8c79653b26c7bc47a7e87cd8ce4c38"
     ],
     "reactive/status.py": [
       "layer:status",
@@ -1004,7 +1004,7 @@
     "version": [
       "postgresql",
       "dynamic",
-      "d44ce6785fe88b557e4b4d06683c375f7db64d5a16314be28aa94f05b69dc3fb"
+      "415134c38e935d8386b421a58be414cef9c197684075e2440a8f370def434c5d"
     ],
     "wheelhouse/Jinja2-2.10.tar.gz": [
       "layer:basic",
@@ -1026,10 +1026,10 @@
       "dynamic",
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ],
-    "wheelhouse/charmhelpers-0.19.8.tar.gz": [
+    "wheelhouse/charmhelpers-0.19.9.tar.gz": [
       "layer:basic",
       "dynamic",
-      "e032c61eb9a0deeb1a2045dbfb15b2595e67636e4c287f53bf422e16dc9231a3"
+      "eafdea2d76bc3b452adcce108ad5a394fa307587eba9cf020d250d2389dec0d0"
     ],
     "wheelhouse/charms.reactive-1.2.0.tar.gz": [
       "layer:basic",
