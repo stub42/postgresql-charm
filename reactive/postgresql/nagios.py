@@ -137,7 +137,7 @@ def update_nrpe_config():
     if check_crit_threshold is None:
         check_crit_threshold = 300
     if check_warn_threshold is None:
-        check_warn_threshold = 300
+        check_warn_threshold = 600
 
     # create the cron job to run the above
     check_cron = "*/2 * * * * postgres {}".format(check_script_path)
