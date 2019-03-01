@@ -170,7 +170,7 @@ options:
       You need enough space for this many backups plus one more, as
       an old backup will only be removed after a new one has been
       successfully made to replace it.
-  wal_e_backup_stale_warn_threshold:
+  wal_e_backup_stale_crit_threshold:
     type: int
     default: 300
     description: >

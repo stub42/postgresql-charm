@@ -133,6 +133,12 @@ def update_nrpe_config():
         'wal_e_backup_stale_crit_threshold'
     )
 
+    # deal with empty stale backup thresholds
+    if check_crit_threshold is None:
+        check_crit_threshold = 300
+    if check_warn_threshold is None:
+        check_warn_threshold = 300
+
     # create the cron job to run the above
     check_cron = "*/2 * * * * postgres {}".format(check_script_path)
     check_cron_path = '/etc/cron.d/postgres-stale-wal-e-check'
