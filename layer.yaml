@@ -21,15 +21,15 @@
     - "run-one"
     "python_packages": []
   "leadership": {}
-  "snap": {}
-  "nagios": {}
-  "postgresql": {}
-  "status":
-    "patch-hookenv": !!bool "true"
   "apt":
     "full_version": !!bool "false"
+    "packages": []
     "version_package": ""
     "keys": []
-    "packages": []
+  "snap": {}
+  "postgresql": {}
+  "nagios": {}
+  "status":
+    "patch-hookenv": !!bool "true"
 "repo": "git+ssh://git.launchpad.net/postgresql-charm"
 "is": "postgresql"

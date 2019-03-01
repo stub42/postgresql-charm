@@ -33,7 +33,7 @@
       "url": "layer:nagios"
     },
     {
-      "rev": "7f35008bca9fcd37d3ea37fcdccdd32c4c32e142",
+      "rev": "e55c7ffd8d8d1487e8264ba4cd55b8802eafb55d",
       "url": "postgresql"
     },
     {
@@ -584,7 +584,7 @@
     "layer.yaml": [
       "postgresql",
       "dynamic",
-      "88ec5b7dc12567c4fd4d8293beaff3f4742a0724f34351f526cf48229e5c4496"
+      "f32fcd4f8062d0343fccf303b295c60d6dceeed6698e8da85e027bca4d096b5b"
     ],
     "lib/cache_settings.py": [
       "postgresql",
@@ -834,7 +834,7 @@
     "reactive/postgresql/nagios.py": [
       "postgresql",
       "static",
-      "aa663b2320c9f7a9a820378013f7fc8eaea5804fe9485471c4ff813f97007fb8"
+      "486c16df2cf6298288f81ae512a38f538fab11792a4f294ee22ac596a3c42e27"
     ],
     "reactive/postgresql/postgresql.py": [
       "postgresql",
@@ -1004,7 +1004,7 @@
     "version": [
       "postgresql",
       "dynamic",
-      "93977614b181394ea00459842ac62d7e927e25692cb498914d1ac25936a6071a"
+      "5b6960af26d19c43ec44fbc34905fc28935e62834588f3409c0e117d0e41879f"
     ],
     "wheelhouse/Jinja2-2.10.tar.gz": [
       "layer:basic",

@@ -17,7 +17,7 @@
 import os.path
 
 from charmhelpers.contrib.charmsupport.nrpe import NRPE
-from charmhelpers.core import host
+from charmhelpers.core import hookenv, host
 
 from charms import leadership, reactive
 from charms.reactive import hook, only_once, when, when_any, when_not
