@@ -202,6 +202,11 @@
     "description": "Number of recent base backups and WAL files to retain. You need\
       \ enough space for this many backups plus one more, as an old backup will only\
       \ be removed after a new one has been successfully made to replace it.\n"
+  "wal_e_backup_stale_crit_threshold":
+    "type": "int"
+    "default": !!int "300"
+    "description": "How many seconds the oldest un-uploaded WAL database backup can\
+      \ be before the Nagios check will issue a warning.\n"
   "wal_e_backup_stale_warn_threshold":
     "type": "int"
     "default": !!int "600"

@@ -7,10 +7,12 @@ from functools import wraps
 from pathlib import Path
 
 from charmhelpers.core import hookenv
+from charms import layer
 
 
 _orig_call = subprocess.call
-_statuses = {'_finalized': False}
+_statuses = {'_initialized': False,
+             '_finalized': False}
 
 
 class WorkloadState(Enum):
@@ -99,10 +101,11 @@ def status_set(workload_state, message):
         return
     layer = _find_calling_layer()
     _statuses.setdefault(workload_state, []).append((layer, message))
-    if _statuses['_finalized']:
-        # we already finalized the status; but now we have a new one,
-        # so we need to do it again
-        _finalize_status()
+    if not _statuses['_initialized'] or _statuses['_finalized']:
+        # We either aren't initialized, so the finalizer may never be run,
+        # or the finalizer has already run, so it won't run again. In either
+        # case, we need to manually invoke it to ensure the status gets set.
+        _finalize()
 
 
 def _find_calling_layer():
@@ -118,8 +121,20 @@ def _find_calling_layer():
     return None
 
 
-def _finalize_status():
-    _statuses['_finalized'] = True
+def _initialize():
+    if not _statuses['_initialized']:
+        if layer.options.get('status', 'patch-hookenv'):
+            _patch_hookenv()
+        hookenv.atexit(_finalize)
+        _statuses['_initialized'] = True
+
+
+def _finalize():
+    if _statuses['_initialized']:
+        # If we haven't been initialized, we can't truly be finalized.
+        # This makes things more efficient if an action sets a status
+        # but subsequently starts the reactive bus.
+        _statuses['_finalized'] = True
     charm_name = hookenv.charm_name()
     with Path('layer.yaml').open() as fp:
         includes = yaml.load(fp.read()).get('includes', [])
