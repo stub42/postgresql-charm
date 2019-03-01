@@ -126,10 +126,10 @@ def update_nrpe_config():
                   user='postgres', group='postgres')
 
     # retrieve the threshold values from the charm config
-    check_warn_threshold = helpers.config_yaml().get(
+    check_warn_threshold = hookenv.config().get(
         'wal_e_backup_stale_warn_threshold'
     )
-    check_crit_threshold = helpers.config_yaml().get(
+    check_crit_threshold = hookenv.config().get(
         'wal_e_backup_stale_crit_threshold'
     )
 
