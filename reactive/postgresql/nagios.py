@@ -121,7 +121,7 @@ def update_nrpe_config():
     helpers.write(check_script_path, check_script, mode=0o755)
 
     # create an (empty) file with appropriate permissions for the above
-    check_output_path = '/var/lib/nagios/postgres-wal-e-max-age.txt'
+    check_output_path = '/var/lib/nagios/postgres-wal-max-age.txt'
     helpers.write(check_output_path, '', mode=0o644,
                   user='postgres', group='postgres')
 

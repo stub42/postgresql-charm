@@ -2,7 +2,7 @@
 
 import sys
 
-MAX_AGE_FILENAME = '/var/lib/nagios/postgres-wal-e-max-age.txt'
+MAX_AGE_FILENAME = '/var/lib/nagios/postgres-wal-max-age.txt'
 
 
 def get_val_from_file(filename):
@@ -40,13 +40,13 @@ def main(args=sys.argv):
     ret_val = NAGIOS_OK
 
     if max_age > crit_threshold:
-        print("CRITICAL: Last WAL-E backup was {} ago".format(nice_age))
+        print("CRITICAL: Last successful WAL archive was {} ago".format(nice_age))
         ret_val = NAGIOS_FAIL
     elif max_age > warn_threshold:
-        print("WARNING: Last WAL-E backup was {} ago".format(nice_age))
+        print("WARNING: Last successful WAL archive was {} ago".format(nice_age))
         ret_val = NAGIOS_WARN
     else:
-        print("OK: No stale WAL-E backups found")
+        print("OK: No stale WAL archival found")
     return ret_val
 
 
