@@ -127,44 +127,26 @@ def update_nrpe_config():
                       user='postgres', group='postgres')
 
     # retrieve the threshold values from the charm config
-    check_warn_threshold = hookenv.config().get(
-        'wal_e_backup_stale_warn_threshold'
-    )
-    check_crit_threshold = hookenv.config().get(
-        'wal_e_backup_stale_crit_threshold'
-    )
+    config = hookenv.config()
+    check_warn_threshold = config['wal_archive_warn_threshold'] or 0
+    check_crit_threshold = config['wal_archive_crit_threshold'] or 0
 
-    # deal with empty stale backup thresholds
-    if check_crit_threshold is None:
-        check_crit_threshold = 300
-    if check_warn_threshold is None:
-        check_warn_threshold = 600
-
-    # create the cron job to run the above
-    check_cron = "*/2 * * * * postgres {}".format(check_script_path)
-    check_cron_path = '/etc/cron.d/postgres-stale-wal-e-check'
-    helpers.write(check_cron_path, check_cron, mode=0o644,
-                  user='root', group='root')
+    check_cron_path = '/etc/cron.d/postgres-wal-archive-check'
+    if check_warn_threshold and check_crit_threshold:
+        # create the cron job to run the above
+        check_cron = "*/2 * * * * postgres {}".format(check_script_path)
+        helpers.write(check_cron_path, check_cron, mode=0o644)
 
     # copy the nagios plugin which will check the cronned output
     with open('scripts/check_latest_ready_wal.py') as fh:
         check_script = fh.read()
-
-    check_script_path = '{}/{}'.format(
-        '/usr/local/lib/nagios/plugins',
-        'check_latest_ready_wal.py'
-    )
-    helpers.write(check_script_path, check_script, mode=0o755,
-                  user='nagios', group='nagios')
+    check_script_path = '{}/{}'.format('/usr/local/lib/nagios/plugins', 'check_latest_ready_wal.py')
+    helpers.write(check_script_path, check_script, mode=0o755)
 
     # write the nagios check definition
     nrpe.add_check(shortname='pgsql_stale_wal',
                    description='Check for stale WAL backups',
-                   check_cmd='{} {} {}'.format(
-                       check_script_path,
-                       check_warn_threshold,
-                       check_crit_threshold,
-                   ))
+                   check_cmd='{} {} {}'.format(check_script_path, check_warn_threshold, check_crit_threshold))
 
     if reactive.is_state('postgresql.replication.is_master'):
         # TODO: These should be calculated from the backup schedule,
