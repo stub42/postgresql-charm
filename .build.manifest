@@ -33,7 +33,7 @@
       "url": "layer:nagios"
     },
     {
-      "rev": "80076a7d4b37b4a3e22d7f422f8eb9232fcc7d3f",
+      "rev": "f8fc9ff30f923b36975d17b41274586c29367c0b",
       "url": "postgresql"
     },
     {
@@ -134,7 +134,7 @@
     "config.yaml": [
       "postgresql",
       "dynamic",
-      "a02f947c93dccb0115a342af48effc9cb0501c8b440d2494db7f1f7fdcac6d5f"
+      "9209dd921976ab9fd6d797da2e22c719b7b8eb18ceb58413478c311319f71859"
     ],
     "copyright": [
       "postgresql",
@@ -584,7 +584,7 @@
     "layer.yaml": [
       "postgresql",
       "dynamic",
-      "f57b353a82e50d71c2f1cd36628ff22a8ba507c89df8c776d032567e739bba4a"
+      "26bc18cadfe47deb6a16d30578348416b7487dfdd817e5ac7f27a9b8d1576f74"
     ],
     "lib/cache_settings.py": [
       "postgresql",
@@ -834,7 +834,7 @@
     "reactive/postgresql/nagios.py": [
       "postgresql",
       "static",
-      "fe6f1db46cf9ffdde66e5860edd95203fde4072ac5e2e88abefff1323bfc0b50"
+      "bc72b4ffbefaac31cb69d6b77609dcefa9a4e91af030521af14dfc38ab1a1379"
     ],
     "reactive/postgresql/postgresql.py": [
       "postgresql",
@@ -1004,7 +1004,7 @@
     "version": [
       "postgresql",
       "dynamic",
-      "3a9883857ec5eebc1b7cd5194ac691bcd8a4ef0788377251a2dc02aa0a295c8d"
+      "fbf3652cd440897893d6e603c792ef697fcb5ec9c1bdb047b91a48a012740f9d"
     ],
     "wheelhouse/Jinja2-2.10.tar.gz": [
       "layer:basic",
