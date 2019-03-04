@@ -122,8 +122,9 @@ def update_nrpe_config():
 
     # create an (empty) file with appropriate permissions for the above
     check_output_path = '/var/lib/nagios/postgres-wal-max-age.txt'
-    helpers.write(check_output_path, '', mode=0o644,
-                  user='postgres', group='postgres')
+    if not os.path.exists(check_output_path):
+        helpers.write(check_output_path, b'0\n', mode=0o644,
+                      user='postgres', group='postgres')
 
     # retrieve the threshold values from the charm config
     check_warn_threshold = hookenv.config().get(
