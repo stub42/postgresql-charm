@@ -23,13 +23,13 @@
   "status":
     "patch-hookenv": !!bool "true"
   "nagios": {}
+  "postgresql": {}
   "apt":
+    "keys": []
     "packages": []
     "full_version": !!bool "false"
     "version_package": ""
-    "keys": []
   "leadership": {}
   "snap": {}
-  "postgresql": {}
 "repo": "git+ssh://git.launchpad.net/postgresql-charm"
 "is": "postgresql"
