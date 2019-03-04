@@ -33,7 +33,7 @@
       "url": "layer:nagios"
     },
     {
-      "rev": "e55c7ffd8d8d1487e8264ba4cd55b8802eafb55d",
+      "rev": "80076a7d4b37b4a3e22d7f422f8eb9232fcc7d3f",
       "url": "postgresql"
     },
     {
@@ -584,7 +584,7 @@
     "layer.yaml": [
       "postgresql",
       "dynamic",
-      "1f2c419db0869be79f7088a747f1d2e9e30f1d87294340d28b25724d643cbe66"
+      "f57b353a82e50d71c2f1cd36628ff22a8ba507c89df8c776d032567e739bba4a"
     ],
     "lib/cache_settings.py": [
       "postgresql",
@@ -834,7 +834,7 @@
     "reactive/postgresql/nagios.py": [
       "postgresql",
       "static",
-      "486c16df2cf6298288f81ae512a38f538fab11792a4f294ee22ac596a3c42e27"
+      "fe6f1db46cf9ffdde66e5860edd95203fde4072ac5e2e88abefff1323bfc0b50"
     ],
     "reactive/postgresql/postgresql.py": [
       "postgresql",
@@ -904,12 +904,12 @@
     "scripts/check_latest_ready_wal.py": [
       "postgresql",
       "static",
-      "76db5848c0088e35d24ad393a04117443cf69eac0bbb47aafce7dc91c158ad77"
+      "3212c2b6ff7eacb923de0fe3442d559d04c8fa7f1c49c69da76671519f6952f2"
     ],
     "scripts/find_latest_ready_wal.py": [
       "postgresql",
       "static",
-      "6d7bc3048b9b4f52c0ebfba75e3eb3f25685fc54e3bc4dd2452ae98a0652630b"
+      "6bad5f62377467521efc941bbbaf5e42574fc3430b3f566b654fe23bd8ab7832"
     ],
     "scripts/pgbackup.py": [
       "postgresql",
@@ -1004,7 +1004,7 @@
     "version": [
       "postgresql",
       "dynamic",
-      "5b6960af26d19c43ec44fbc34905fc28935e62834588f3409c0e117d0e41879f"
+      "3a9883857ec5eebc1b7cd5194ac691bcd8a4ef0788377251a2dc02aa0a295c8d"
     ],
     "wheelhouse/Jinja2-2.10.tar.gz": [
       "layer:basic",

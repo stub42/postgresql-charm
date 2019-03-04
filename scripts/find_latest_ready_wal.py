@@ -12,7 +12,7 @@ def file_age(filepath):
 def main():
     max_seen_age = 0
     ready_files = glob.glob('/var/lib/postgresql/*/*/pg_{xlog,wal}/archive_status/*.ready')
-    max_age_filename = '/var/lib/nagios/postgres-wal-e-max-age.txt'
+    max_age_filename = '/var/lib/nagios/postgres-wal-max-age.txt'
 
     for ready_file in ready_files:
         this_age = file_age(ready_file)
