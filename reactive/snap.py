@@ -114,7 +114,8 @@ def snapd_supported():
 
 def kernel_supported():
     kernel_version = uname().release
-    if LooseVersion(kernel_version) < LooseVersion(4.4):
+
+    if LooseVersion(kernel_version) < LooseVersion("4.4"):
         hookenv.log('Snaps do not work on kernel {}, a reboot '
                     'into a supported kernel (>4.4) is required'
                     ''.format(kernel_version))

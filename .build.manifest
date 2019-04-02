@@ -17,7 +17,7 @@
       "url": "layer:apt"
     },
     {
-      "rev": "22f726936fb2149ea52988d74556c94aa64f87a1",
+      "rev": "7b6a1efda311fb4c37b553389e0b9007865bcb05",
       "url": "layer:snap"
     },
     {
@@ -1054,7 +1054,7 @@
     "reactive/snap.py": [
       "layer:snap",
       "static",
-      "fbaa32dbf51435316b881b4106d835aaa87f61755bdf48e2a623167fdabfe630"
+      "dd661a2a3ac7c68e0d23972d737c2b16e6081754da776b468a391af9dfba1549"
     ],
     "reactive/status.py": [
       "layer:status",
