@@ -17,7 +17,7 @@
       "url": "layer:apt"
     },
     {
-      "rev": "ecb77a4cadd8254497353d83c5fcaf612db3af3f",
+      "rev": "22f726936fb2149ea52988d74556c94aa64f87a1",
       "url": "layer:snap"
     },
     {
@@ -33,7 +33,7 @@
       "url": "layer:nagios"
     },
     {
-      "rev": "f8fc9ff30f923b36975d17b41274586c29367c0b",
+      "rev": "4011357313740408f620529689c07e7a076d150f",
       "url": "postgresql"
     },
     {
@@ -69,7 +69,7 @@
     "Makefile": [
       "postgresql",
       "static",
-      "40f6c12e2c5e0ddbfe533c0431f3bc470414c64e4fdc97b5e504cf44465ff738"
+      "86fdc7ef1ac062cb26abb009641ddbd8577e3178dd4c81867df42202624ee69a"
     ],
     "README.md": [
       "postgresql",
@@ -79,7 +79,7 @@
     "actions.yaml": [
       "postgresql",
       "dynamic",
-      "f704658d73cad192fa4e0c2698281dbef76fde9b59681ace77e9c498ae51bc47"
+      "e741dfa421bfdbaf26259611291595a2874eb81618901edb07c12d00057e602f"
     ],
     "actions/actions.py": [
       "postgresql",
@@ -134,7 +134,7 @@
     "config.yaml": [
       "postgresql",
       "dynamic",
-      "9209dd921976ab9fd6d797da2e22c719b7b8eb18ceb58413478c311319f71859"
+      "9abbbbbe1df228061b9701bd55c06c5a5826c6535ca94adbbe0b38fdcace4d99"
     ],
     "copyright": [
       "postgresql",
@@ -389,7 +389,7 @@
     "hooks/relations/coordinator/peers.py": [
       "layer:coordinator",
       "static",
-      "cdddd35d361de6c4b9afe0833973f0ec9aa5ed240545cbdda18e6db35fbd62c7"
+      "d615c442396422a30a0c5f7639750d15bb59247ae5d9362c4f5dc8dd2cc7fff2"
     ],
     "hooks/relations/nrpe-external-master/README.md": [
       "interface:nrpe-external-master",
@@ -445,6 +445,181 @@
       "interface:pgsql",
       "static",
       "3a809dc407c194c4669d5ac731fd45135ce62b5cdc8609563826b5b31999b69d"
+    ],
+    "hooks/relations/pgsql/docs/build/doctrees/environment.pickle": [
+      "interface:pgsql",
+      "static",
+      "e4cae6bac50c708aa8c888033b4ebcb1173b626386390aa8ecdb4c619ae2f455"
+    ],
+    "hooks/relations/pgsql/docs/build/doctrees/index.doctree": [
+      "interface:pgsql",
+      "static",
+      "e87806457522c6ffd709f1443be4145cb6708fa4335dbc4804046c091cd713d5"
+    ],
+    "hooks/relations/pgsql/docs/build/doctrees/requires.doctree": [
+      "interface:pgsql",
+      "static",
+      "38bdcbbfe895dffa9a89af2a8ac1784d039c5b1602b198915bc917cabb0a39ae"
+    ],
+    "hooks/relations/pgsql/docs/build/html/.buildinfo": [
+      "interface:pgsql",
+      "static",
+      "287b151169893556fda29ec4b04ed0329142b2d336414641a8682000924e4a2e"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_sources/index.rst.txt": [
+      "interface:pgsql",
+      "static",
+      "a9d4dab8284dab71f2dcf9c4c3cae9ce7d52873d076484a5eb6b9987799933ae"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_sources/requires.rst.txt": [
+      "interface:pgsql",
+      "static",
+      "bc974dd0eec56a5b9008e42f2b84656c780b7846c556df28b0a2d1544d9d1f69"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/ajax-loader.gif": [
+      "interface:pgsql",
+      "static",
+      "5d045fd991ddf2b208dd9bf39a591f50e6ec793416e2867f54e8c6c7e89b68c2"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/alabaster.css": [
+      "interface:pgsql",
+      "static",
+      "cb444584d70db78836fb7cf1e45a4faf818d7398ebf05fa16f1ab3ee75b81114"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/basic.css": [
+      "interface:pgsql",
+      "static",
+      "b61fc4383784ca3ff8589a1bb48d19d06fddc78d6120cbc9ad31f275f62f4cce"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/comment-bright.png": [
+      "interface:pgsql",
+      "static",
+      "0737b92f8825f5ed0740482819f3fba7826297908bbd44ff00b64ee95d262d60"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/comment-close.png": [
+      "interface:pgsql",
+      "static",
+      "866319c7cf09c3d5b2926ea9d9f068801c8ee0724dac66604b03ac50b1829577"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/comment.png": [
+      "interface:pgsql",
+      "static",
+      "5fb8b0b215a51fc05bc152a12ab32d44cda758721c5df53f2aeab1b1e3490aa5"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/custom.css": [
+      "interface:pgsql",
+      "static",
+      "39f23a6561786e3cb4e33e4a96562a1305a8b74c0d45dc215a64018692cd5d4c"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/doctools.js": [
+      "interface:pgsql",
+      "static",
+      "ba5080dd83bfbc09c8440ecc3e163b7352073f7428a92facb9dfcd04ba29188b"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/documentation_options.js": [
+      "interface:pgsql",
+      "static",
+      "bcc8ad19dde0ec463595922b5328b127c4899541151dd2b9652125daa6ed6b06"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/down-pressed.png": [
+      "interface:pgsql",
+      "static",
+      "c89ca40639d0bb71502306afdbc8646f6ef362b79c54a8f9211aa290ad8b3635"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/down.png": [
+      "interface:pgsql",
+      "static",
+      "75fc30ab04aa494f8ab239fba636663b950ccff763bd3b95a3c214ee2344ec89"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/file.png": [
+      "interface:pgsql",
+      "static",
+      "5c4bc9a16aebf38c4b950f59b8e501ca36495328cb9eb622218bce9064a35e3e"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/jquery-3.2.1.js": [
+      "interface:pgsql",
+      "static",
+      "0d9027289ffa5d9f6c8b4e0782bb31bbff2cef5ee3708ccbcb7a22df9128bb21"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/jquery.js": [
+      "interface:pgsql",
+      "static",
+      "87083882cc6015984eb0411a99d3981817f5dc5c90ba24f0940420c5548d82de"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/minus.png": [
+      "interface:pgsql",
+      "static",
+      "47e7fc50db3699f1ca41ce9a2ffa202c00c5d1d5180c55f62ba859b1bd6cc008"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/plus.png": [
+      "interface:pgsql",
+      "static",
+      "54115199b96a130cba02147c47c0deb43dcc9b9f08b5162bba8642b34980ac63"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/pygments.css": [
+      "interface:pgsql",
+      "static",
+      "c67b5260b50a0f434e9b26585479ce67ab2184adc7b31c26d665642d3512835f"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/searchtools.js": [
+      "interface:pgsql",
+      "static",
+      "e8d039d87d8f443d02abb76df25715de53a329a7a35cb58d4767c08a574fbe00"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/underscore-1.3.1.js": [
+      "interface:pgsql",
+      "static",
+      "f808f0aa32fbe90fb9c9c846917faff3fdd4e236c284b76c02dd33753dc90177"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/underscore.js": [
+      "interface:pgsql",
+      "static",
+      "42d8fad13bc28fc726775196ec9ab953febf9bde175c5845128361c953fa17f4"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/up-pressed.png": [
+      "interface:pgsql",
+      "static",
+      "cfe678a4446900f4081ab8d74ef3d1f8b1002edbf8cae3db292fcca0637310ed"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/up.png": [
+      "interface:pgsql",
+      "static",
+      "108f280badfe5ec5168738c4f70a59bc6ea9d1e9243ff2b951386fb668e93502"
+    ],
+    "hooks/relations/pgsql/docs/build/html/_static/websupport.js": [
+      "interface:pgsql",
+      "static",
+      "3e61ad44de4625bdd7aa3b1ac8ddad355c919de8a23bd16fb36053901ff23cb9"
+    ],
+    "hooks/relations/pgsql/docs/build/html/genindex.html": [
+      "interface:pgsql",
+      "static",
+      "0caa973f08ef191b3b81c1992d5406ca29980d3830d2f5a4d525005e41075155"
+    ],
+    "hooks/relations/pgsql/docs/build/html/index.html": [
+      "interface:pgsql",
+      "static",
+      "6095f5858ac2977be828ffa4c89dcee2e21b8861cb9bedd42a14e1a22091dadf"
+    ],
+    "hooks/relations/pgsql/docs/build/html/objects.inv": [
+      "interface:pgsql",
+      "static",
+      "62d127864dd9a0c8fae99aa090cb6cfe140fee719568a7743713a29122241e20"
+    ],
+    "hooks/relations/pgsql/docs/build/html/requires.html": [
+      "interface:pgsql",
+      "static",
+      "ff91cc9d6c0f03b5aa172f1053dda9376624c68b6837680e21d0f7b98a968adc"
+    ],
+    "hooks/relations/pgsql/docs/build/html/search.html": [
+      "interface:pgsql",
+      "static",
+      "23975bdb1c3a2f38bee801b060b4119748884b4bb50a96e74284039308a57c0d"
+    ],
+    "hooks/relations/pgsql/docs/build/html/searchindex.js": [
+      "interface:pgsql",
+      "static",
+      "04dccd4f3a40b68c342107e259092c7921848bf3c139573bfc5352bf8c01ab6d"
     ],
     "hooks/relations/pgsql/docs/source/conf.py": [
       "interface:pgsql",
@@ -584,7 +759,7 @@
     "layer.yaml": [
       "postgresql",
       "dynamic",
-      "26bc18cadfe47deb6a16d30578348416b7487dfdd817e5ac7f27a9b8d1576f74"
+      "77f960ac5d4f4f66a1c339d08c3776985adb013977c3b166518a1b51839c9684"
     ],
     "lib/cache_settings.py": [
       "postgresql",
@@ -779,7 +954,7 @@
     "metadata.yaml": [
       "postgresql",
       "dynamic",
-      "766193744726da3b139263b35561f0970cf10cd0e0ed58a86a4ecb27b2113d4d"
+      "bee7b518c4331bcda41cd474945d64a8cef30bca5f33579372e97f5087872aaf"
     ],
     "pydocmd.yml": [
       "layer:status",
@@ -879,7 +1054,7 @@
     "reactive/snap.py": [
       "layer:snap",
       "static",
-      "693ccdb90beb5f0da7a6285062fb61f2ee8c79653b26c7bc47a7e87cd8ce4c38"
+      "fbaa32dbf51435316b881b4106d835aaa87f61755bdf48e2a623167fdabfe630"
     ],
     "reactive/status.py": [
       "layer:status",
@@ -1004,7 +1179,7 @@
     "version": [
       "postgresql",
       "dynamic",
-      "fbf3652cd440897893d6e603c792ef697fcb5ec9c1bdb047b91a48a012740f9d"
+      "3ad22bd57b4708fe0295ab29d49e82cc72906b6576268af7f032ca7dd3ef2fc6"
     ],
     "wheelhouse/Jinja2-2.10.tar.gz": [
       "layer:basic",
@@ -1016,20 +1191,20 @@
       "dynamic",
       "29872e92839765e546828bb7754a68c418d927cd064fd4708fab9fe9c8bb116b"
     ],
-    "wheelhouse/PyYAML-3.13.tar.gz": [
+    "wheelhouse/PyYAML-5.1.tar.gz": [
       "layer:basic",
       "dynamic",
-      "3ef3092145e9b70e3ddd2c7ad59bdd0252a94dfe3949721633e41344de00a6bf"
+      "436bc774ecf7c103814098159fbb84c2715d25980175292c648f2da143909f95"
     ],
     "wheelhouse/Tempita-0.5.2.tar.gz": [
       "layer:basic",
       "dynamic",
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ],
-    "wheelhouse/charmhelpers-0.19.11.tar.gz": [
+    "wheelhouse/charmhelpers-0.19.12.tar.gz": [
       "layer:basic",
       "dynamic",
-      "42be97a62a9a2dbe8ab8ef6049c0dc344e711672834ec34d300053c6c0aeaa9f"
+      "5872133bfe262708c10f29dfa84e4427bd3001d2848d88c7da7a745bca205eb8"
     ],
     "wheelhouse/charms.reactive-1.2.0.tar.gz": [
       "layer:basic",

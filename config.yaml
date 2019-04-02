@@ -1,46 +1,57 @@
 "options":
   "extra_packages":
-    "description": "Space separated list of extra deb packages to install.\n"
+    "description": >
+      Space separated list of extra deb packages to install.
     "type": "string"
     "default": ""
   "package_status":
     "default": "install"
     "type": "string"
-    "description": "The status of service-affecting packages will be set to this value\
-      \ in the dpkg database. Valid values are \"install\" and \"hold\".\n"
+    "description": >
+      The status of service-affecting packages will be set to this
+      value in the dpkg database. Valid values are "install" and "hold".
   "install_sources":
-    "description": "List of extra apt sources, per charm-helpers standard format (a\
-      \ yaml list of strings encoded as a string). Each source may be either a line\
-      \ that can be added directly to sources.list(5), or in the form ppa:<user>/<ppa-name>\
-      \ for adding Personal Package Archives, or a distribution component to enable.\n"
+    "description": >
+      List of extra apt sources, per charm-helpers standard
+      format (a yaml list of strings encoded as a string). Each source
+      may be either a line that can be added directly to
+      sources.list(5), or in the form ppa:<user>/<ppa-name> for adding
+      Personal Package Archives, or a distribution component to enable.
     "type": "string"
     "default": ""
   "install_keys":
-    "description": "List of signing keys for install_sources package sources, per\
-      \ charmhelpers standard format (a yaml list of strings encoded as a string).\
-      \ The keys should be the full ASCII armoured GPG public keys. While GPG key\
-      \ ids are also supported and looked up on a keyserver, operators should be aware\
-      \ that this mechanism is insecure. null can be used if a standard package signing\
-      \ key is used that will already be installed on the machine, and for PPA sources\
-      \ where the package signing key is securely retrieved from Launchpad.\n"
+    "description": >
+      List of signing keys for install_sources package sources, per
+      charmhelpers standard format (a yaml list of strings encoded as
+      a string). The keys should be the full ASCII armoured GPG public
+      keys. While GPG key ids are also supported and looked up on a
+      keyserver, operators should be aware that this mechanism is
+      insecure. null can be used if a standard package signing key is
+      used that will already be installed on the machine, and for PPA
+      sources where the package signing key is securely retrieved from
+      Launchpad.
     "type": "string"
     "default": ""
   "snap_proxy":
-    "description": "HTTP/HTTPS web proxy for Snappy to use when accessing the snap\
-      \ store.\n"
+    "description": >
+      HTTP/HTTPS web proxy for Snappy to use when accessing the snap store.
     "type": "string"
     "default": ""
   "snap_proxy_url":
     "default": ""
     "type": "string"
-    "description": "The address of a Snap Store Proxy to use for snaps e.g. http://snap-proxy.example.com\n"
+    "description": >
+      The address of a Snap Store Proxy to use for snaps
+      e.g. http://snap-proxy.example.com
   "snapd_refresh":
     "default": ""
     "type": "string"
-    "description": "How often snapd handles updates for installed snaps. The default\
-      \ (an empty string) is 4x per day. Set to \"max\" to check once per month based\
-      \ on the charm deployment date. You may also set a custom string as described\
-      \ in the 'refresh.timer' section here:\n  https://forum.snapcraft.io/t/system-options/87\n"
+    "description": >
+      How often snapd handles updates for installed snaps. The default
+      (an empty string) is 4x per day. Set to "max" to check once per month
+      based on the charm deployment date. You may also set a custom string as
+      described in the 'refresh.timer' section here:
+        https://forum.snapcraft.io/t/system-options/87
   "nagios_context":
     "default": "juju"
     "type": "string"
@@ -60,39 +71,50 @@
   "admin_addresses":
     "default": ""
     "type": "string"
-    "description": "A comma-separated list of IP Addresses (or single IP) admin tools\
-      \ like pgAdmin3 will connect from. The IP addresses added here will be included\
-      \ in the pg_hba.conf file allowing ip connections to all databases on the server\
-      \ from the given IP addresses using md5 password encryption. IP address ranges\
-      \ are also supported, using the standard format described in the PostgreSQL\
-      \ reference guide.\n"
+    "description": >
+      A comma-separated list of IP Addresses (or single IP) admin tools
+      like pgAdmin3 will connect from. The IP addresses added here will
+      be included in the pg_hba.conf file allowing ip connections to all
+      databases on the server from the given IP addresses using md5
+      password encryption. IP address ranges are also supported, using
+      the standard format described in the PostgreSQL reference guide.
   "locale":
     "default": "C"
     "type": "string"
-    "description": "Locale of service, defining language, default collation order,\
-      \ and default formatting of numbers, currency, dates & times. Can only be set\
-      \ when deploying the first unit of a service.\n"
+    "description": >
+      Locale of service, defining language, default collation order,
+      and default formatting of numbers, currency, dates & times. Can only be
+      set when deploying the first unit of a service.
   "encoding":
     "default": "UTF-8"
     "type": "string"
-    "description": "Default encoding used to store text in this service. Can only\
-      \ be set when deploying the first unit of a service.\n"
+    "description": >
+      Default encoding used to store text in this service. Can only be
+      set when deploying the first unit of a service.
   "relation_database_privileges":
     "default": "ALL"
     "type": "string"
-    "description": "A comma-separated list of database privileges to grant to relation\
-      \ users on their databases. The defaults allow to connect to the database (CONNECT),\
-      \ create objects such as tables (CREATE), and create temporary tables (TEMPORARY).\
-      \ Client charms that create objects in the database are responsible to granting\
-      \ suitable access on those objects to other roles and users (or PUBLIC) using\
-      \ standard GRANT statements.\n"
+    "description": >
+      A comma-separated list of database privileges to grant to relation
+      users on their databases. The defaults allow to connect to the
+      database (CONNECT), create objects such as tables (CREATE), and
+      create temporary tables (TEMPORARY). Client charms that create
+      objects in the database are responsible to granting suitable
+      access on those objects to other roles and users (or PUBLIC) using
+      standard GRANT statements.
   "version":
     "default": ""
     "type": "string"
-    "description": "Version of PostgreSQL that we want to install. Supported versions\
-      \ are \"9.3\", \"9.4\", \"9.5\", \"9.6\" & \"10\". The default version for the\
-      \ deployed Ubuntu release is used when the version is unspecified.\n"
+    "description": >
+      Version of PostgreSQL that we want to install. Supported versions
+      are "9.3", "9.4", "9.5", "9.6" & "10". The default version for the
+      deployed Ubuntu release is used when the version is unspecified.
   "extra_pg_conf":
+      # The defaults here match the defaults chosen by the charm,
+      # so removing them will not change them. They are listed
+      # as documentation. The charm actually loads the non-calculated
+      # defaults from this config.yaml file to make it unlikely it will
+      # get out of sync with reality.
     "default": |
       # Additional service specific postgresql.conf settings.
       listen_addresses='*'
@@ -121,41 +143,50 @@
       autovacuum_freeze_max_age=2000000000
       vacuum_freeze_table_age=1600000000
     "type": "string"
-    "description": "postgresql.conf settings, one per line in standard key=value PostgreSQL\
-      \ format. These settings will generally override any values selected by the\
-      \ charm. The charm however will attempt to ensure minimum requirements for the\
-      \ charm's operation are met.\n"
+    "description": >
+      postgresql.conf settings, one per line in standard key=value
+      PostgreSQL format. These settings will generally override
+      any values selected by the charm. The charm however will
+      attempt to ensure minimum requirements for the charm's
+      operation are met.
   "extra_pg_auth":
     "type": "string"
     "default": ""
-    "description": "A extra pg_hba.conf auth rules. This will be included as-is into\
-      \ the pg_hba.conf file. Note that this should not be needed as db relations\
-      \ already create those rules the right way. Use this feature to allow clients\
-      \ to connect from outside the environment, or to configure replication between\
-      \ unrelated PostgreSQL services using the manual_replication option.\n"
+    "description": >
+      A extra pg_hba.conf auth rules. This will be included as-is
+      into the pg_hba.conf file. Note that this should not be needed
+      as db relations already create those rules the right way. Use
+      this feature to allow clients to connect from outside the
+      environment, or to configure replication between unrelated
+      PostgreSQL services using the manual_replication option.
   "idle_reap_secs":
     "type": "int"
     "default": !!int "900"
-    "description": "Terminate transactions that have been idle more than this many\
-      \ seconds. While this may seem harsh, in most environments it is preferable\
-      \ to allowing them to create database bloat and hold locks needed by well behaved\
-      \ transactions. Set to 0 to disable.\n"
+    "description": >
+      Terminate transactions that have been idle more than this many
+      seconds. While this may seem harsh, in most environments it is
+      preferable to allowing them to create database bloat and hold
+      locks needed by well behaved transactions. Set to 0 to disable.
   "performance_tuning":
     "default": "Mixed"
     "type": "string"
-    "description": "DEPRECATED AND IGNORED. The pgtune project has been abandoned\
-      \ and the packages dropped from Debian and Ubuntu. The charm still performs\
-      \ some basic tuning, which users can tweak using extra_pg_config.\n"
+    "description": >
+      DEPRECATED AND IGNORED. The pgtune project has been abandoned
+      and the packages dropped from Debian and Ubuntu. The charm
+      still performs some basic tuning, which users can tweak using
+      extra_pg_config.
   "manual_replication":
     "type": "boolean"
     "default": !!bool "false"
-    "description": "Enable or disable charm managed replication. When manual_replication\
-      \ is True, the operator is responsible for maintaining recovery.conf and performing\
-      \ any necessary database mirroring. The charm will still advertise the unit\
-      \ as standalone, master or hot standby to relations based on whether the system\
-      \ is in recovery mode or not. Note that this option makes it possible to create\
-      \ a PostgreSQL service with multiple master units, which is a very silly thing\
-      \ to do unless you are also using multi-master software like BDR.\n"
+    "description": >
+      Enable or disable charm managed replication. When manual_replication
+      is True, the operator is responsible for maintaining recovery.conf
+      and performing any necessary database mirroring. The charm will
+      still advertise the unit as standalone, master or hot standby to
+      relations based on whether the system is in recovery mode or not.
+      Note that this option makes it possible to create a PostgreSQL
+      service with multiple master units, which is a very silly thing
+      to do unless you are also using multi-master software like BDR.
   "backup_schedule":
     "default": "13 4 * * *"
     "type": "string"
@@ -167,12 +198,14 @@
   "backup_dir":
     "default": "/var/lib/postgresql/backups"
     "type": "string"
-    "description": "Directory to place backups in.\n"
+    "description": >
+      Directory to place backups in.
   "pgdg":
-    "description": "Enable the PostgreSQL Global Development Group APT repository\
-      \ (https://wiki.postgresql.org/wiki/Apt). This package source provides official\
-      \ PostgreSQL packages for Ubuntu LTS releases beyond those provided by the main\
-      \ Ubuntu archive.\n"
+    "description": >
+      Enable the PostgreSQL Global Development Group APT repository
+      (https://wiki.postgresql.org/wiki/Apt). This package source provides
+      official PostgreSQL packages for Ubuntu LTS releases beyond those
+      provided by the main Ubuntu archive.
     "type": "boolean"
     "default": !!bool "false"
   "wal_e_storage_uri":
@@ -194,30 +227,37 @@
   "wal_e_backup_schedule":
     "type": "string"
     "default": "13 0 * * *"
-    "description": "Cron-formatted schedule for WAL-E database backups. If wal_e_backup_schedule\
-      \ is unset, WAL files will never be removed from WAL-E storage.\n"
+    "description": >
+      Cron-formatted schedule for WAL-E database backups. If
+      wal_e_backup_schedule is unset, WAL files will never be removed from
+      WAL-E storage.
   "wal_e_backup_retention":
     "type": "int"
     "default": !!int "2"
-    "description": "Number of recent base backups and WAL files to retain. You need\
-      \ enough space for this many backups plus one more, as an old backup will only\
-      \ be removed after a new one has been successfully made to replace it.\n"
+    "description": >
+      Number of recent base backups and WAL files to retain.
+      You need enough space for this many backups plus one more, as
+      an old backup will only be removed after a new one has been
+      successfully made to replace it.
   "wal_archive_warn_threshold":
     "type": "int"
     "default": !!int "300"
-    "description": "How many seconds the oldest un-uploaded WAL database backup can\
-      \ be before the Nagios check will issue a warning.\n"
+    "description": >
+      How many seconds the oldest un-uploaded WAL database backup can be
+      before the Nagios check will issue a warning.
   "wal_archive_crit_threshold":
     "type": "int"
     "default": !!int "600"
-    "description": "How many seconds the oldest un-uploaded WAL database backup can\
-      \ be before the Nagios check will issue a critical error.\n"
+    "description": >
+      How many seconds the oldest un-uploaded WAL database backup can be
+      before the Nagios check will issue a critical error.
   "streaming_replication":
     "type": "boolean"
     "default": !!bool "true"
-    "description": "Enable streaming replication. Normally, streaming replication\
-      \ is always used, and any log shipping configured is used as a fallback. Turning\
-      \ this off without configuring log shipping is an error.\n"
+    "description": >
+      Enable streaming replication. Normally, streaming replication is
+      always used, and any log shipping configured is used as a fallback.
+      Turning this off without configuring log shipping is an error.
   "os_username":
     "type": "string"
     "default": ""
@@ -257,17 +297,21 @@
   "metrics_target":
     "default": ""
     "type": "string"
-    "description": "Destination for statsd-format metrics, format \"host:port\". If\
-      \ not present and valid, metrics disabled.\n"
+    "description": >
+      Destination for statsd-format metrics, format "host:port". If
+      not present and valid, metrics disabled.
   "metrics_prefix":
     "default": "dev.$UNIT.postgresql"
     "type": "string"
-    "description": "Prefix for metrics. Special value $UNIT can be used to include\
-      \ the name of the unit in the prefix.\n"
+    "description": >
+      Prefix for metrics. Special value $UNIT can be used to include the
+      name of the unit in the prefix.
   "metrics_sample_interval":
     "default": !!int "5"
     "type": "int"
     "description": "Period for metrics cron job to run in minutes"
+
+
   "advisory_lock_restart_key":
     "default": !!int "765"
     "type": "int"

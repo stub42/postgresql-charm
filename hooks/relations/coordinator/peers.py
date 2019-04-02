@@ -1,6 +1,6 @@
-# Copyright 2016 Canonical Ltd.
+# Copyright 2016-2018 Canonical Ltd.
 #
-# This file is part of the PostgreSQL Charm for Juju.
+# This file is part of the Coordinator Layer for Juju charms.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 3, as
@@ -17,9 +17,5 @@
 from charms import reactive
 
 
-class CoordinatorPeer(reactive.relations.RelationBase):
-    '''Dead chicken, sacrificed for charms.reactive.
-
-    https://github.com/juju-solutions/charms.reactive/issues/48
-    '''
+class CoordinatorPeer(reactive.Endpoint):
     pass

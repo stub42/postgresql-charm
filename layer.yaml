@@ -11,7 +11,9 @@
 - "interface:pgsql"
 "options":
   "coordinator":
+        # Absolute path to the charmhelpers.coordinator.BaseCoordinator to use.
     "class": "charms.coordinator.SimpleCoordinator"
+        # Layer log level (debug, info, warning, error, critical)
     "log_level": "debug"
   "basic":
     "use_venv": !!bool "true"
@@ -20,16 +22,16 @@
     - "python3-psycopg2"
     - "run-one"
     "python_packages": []
-  "leadership": {}
-  "postgresql": {}
-  "snap": {}
-  "nagios": {}
-  "apt":
-    "version_package": ""
-    "full_version": !!bool "false"
-    "packages": []
-    "keys": []
   "status":
     "patch-hookenv": !!bool "true"
+  "apt":
+    "packages": []
+    "version_package": ""
+    "full_version": !!bool "false"
+    "keys": []
+  "snap": {}
+  "leadership": {}
+  "nagios": {}
+  "postgresql": {}
 "repo": "git+ssh://git.launchpad.net/postgresql-charm"
 "is": "postgresql"
