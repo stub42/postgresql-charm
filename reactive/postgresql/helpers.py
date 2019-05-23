@@ -104,7 +104,7 @@ def switch_cwd(new_working_directory='/tmp'):
 def config_yaml():
     config_yaml_path = os.path.join(hookenv.charm_dir(), 'config.yaml')
     with open(config_yaml_path, 'r') as f:
-        return yaml.load(f)
+        return yaml.safe_load(f)
 
 
 def deprecated_config_in_use():
