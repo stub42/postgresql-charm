@@ -19,7 +19,7 @@ from charms.reactive.bus import _short_action_id
 
 
 def preflight(action):
-    '''
+    """
     Decorator to run a handler before the main hook phase.
 
     preflight hooks are used to initialize state for use by the
@@ -31,9 +31,8 @@ def preflight(action):
     risk failing to run handlers that rely on @when_file_changed,
     reactive.helpers.data_changed or other state tied to
     charmhelpers.core.unitdata transactions.
-    '''
+    """
     _id = _short_action_id(action)
-    hookenv.atstart(hookenv.log,
-                    'preflight handler: {}'.format(_id))
+    hookenv.atstart(hookenv.log, "preflight handler: {}".format(_id))
     hookenv.atstart(action)
     return action

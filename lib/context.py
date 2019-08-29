@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-'''
+"""
 A Pythonic API to interact with the charm hook environment.
 
 :author: Stuart Bishop <stuart.bishop@canonical.com>
-'''
+"""
 
 import six
 
@@ -25,6 +25,7 @@ import subprocess
 from charmhelpers.core import hookenv
 
 from collections import OrderedDict
+
 if six.PY3:
     from collections import UserDict  # pragma: nocover
 else:
@@ -32,7 +33,7 @@ else:
 
 
 class Relations(OrderedDict):
-    '''Mapping relation name -> relation id -> Relation.
+    """Mapping relation name -> relation id -> Relation.
 
     >>> rels = Relations()
     >>> rels['sprog']['sprog:12']['client/6']['widget']
@@ -42,13 +43,14 @@ class Relations(OrderedDict):
     'local widget'
     >>> rels.peer.local['widget']
     'local widget on the peer relation'
-    '''
+    """
+
     def __init__(self):
         super(Relations, self).__init__()
         for relname in sorted(hookenv.relation_types()):
             self[relname] = OrderedDict()
             relids = hookenv.relation_ids(relname)
-            relids.sort(key=lambda x: int(x.split(':', 1)[-1]))
+            relids.sort(key=lambda x: int(x.split(":", 1)[-1]))
             for relid in relids:
                 self[relname][relid] = Relation(relid)
 
@@ -61,7 +63,7 @@ class Relations(OrderedDict):
 
 
 class Relation(OrderedDict):
-    '''Mapping of unit -> remote RelationInfo for a relation.
+    """Mapping of unit -> remote RelationInfo for a relation.
 
     This is an OrderedDict mapping, ordered numerically by
     by unit number.
@@ -76,20 +78,22 @@ class Relation(OrderedDict):
     'remote widget'
     >>> r.local['widget']         # The local RelationInfo setting
     'local widget'
-    '''
-    relid = None    # The relation id.
+    """
+
+    relid = None  # The relation id.
     relname = None  # The relation name (also known as relation type).
     service = None  # The remote service name, if known.
-    local = None    # The local end's RelationInfo.
-    peers = None    # Map of peer -> RelationInfo. None if no peer relation.
+    local = None  # The local end's RelationInfo.
+    peers = None  # Map of peer -> RelationInfo. None if no peer relation.
 
     def __init__(self, relid):
         remote_units = hookenv.related_units(relid)
-        remote_units.sort(key=lambda u: int(u.split('/', 1)[-1]))
-        super(Relation, self).__init__((unit, RelationInfo(relid, unit))
-                                       for unit in remote_units)
+        remote_units.sort(key=lambda u: int(u.split("/", 1)[-1]))
+        super(Relation, self).__init__(
+            (unit, RelationInfo(relid, unit)) for unit in remote_units
+        )
 
-        self.relname = relid.split(':', 1)[0]
+        self.relname = relid.split(":", 1)[0]
         self.relid = relid
         self.local = RelationInfo(relid, hookenv.local_unit())
 
@@ -104,20 +108,21 @@ class Relation(OrderedDict):
         if peer_relid and peer_relid != relid:
             peers = hookenv.related_units(peer_relid)
             if peers:
-                peers.sort(key=lambda u: int(u.split('/', 1)[-1]))
-                self.peers = OrderedDict((peer, RelationInfo(relid, peer))
-                                         for peer in peers)
+                peers.sort(key=lambda u: int(u.split("/", 1)[-1]))
+                self.peers = OrderedDict(
+                    (peer, RelationInfo(relid, peer)) for peer in peers
+                )
             else:
                 self.peers = OrderedDict()
         else:
             self.peers = None
 
     def __str__(self):
-        return '{} ({})'.format(self.relid, self.service)
+        return "{} ({})".format(self.relid, self.service)
 
 
 class RelationInfo(UserDict):
-    '''The bag of data at an end of a relation.
+    """The bag of data at an end of a relation.
 
     Every unit participating in a relation has a single bag of
     data associated with that relation. This is that bag.
@@ -143,22 +148,23 @@ class RelationInfo(UserDict):
     This class wraps hookenv.relation_get and hookenv.relation_set.
     All caching is left up to these two methods to avoid synchronization
     issues. Data is only loaded on demand.
-    '''
-    relid = None    # The relation id.
+    """
+
+    relid = None  # The relation id.
     relname = None  # The relation name (also know as the relation type).
-    unit = None     # The unit id.
-    number = None   # The unit number (integer).
+    unit = None  # The unit id.
+    number = None  # The unit number (integer).
     service = None  # The service name.
 
     def __init__(self, relid, unit):
-        self.relname = relid.split(':', 1)[0]
+        self.relname = relid.split(":", 1)[0]
         self.relid = relid
         self.unit = unit
-        self.service, num = self.unit.split('/', 1)
+        self.service, num = self.unit.split("/", 1)
         self.number = int(num)
 
     def __str__(self):
-        return '{} ({})'.format(self.relid, self.unit)
+        return "{} ({})".format(self.relid, self.unit)
 
     @property
     def data(self):
@@ -173,14 +179,15 @@ class RelationInfo(UserDict):
 
     def __setitem__(self, key, value):
         if self.unit != hookenv.local_unit():
-            raise TypeError('Attempting to set {} on remote unit {}'
-                            ''.format(key, self.unit))
+            raise TypeError(
+                "Attempting to set {} on remote unit {}" "".format(key, self.unit)
+            )
         if value is not None and not isinstance(value, six.string_types):
             # We don't do implicit casting. This would cause simple
             # types like integers to be read back as strings in subsequent
             # hooks, and mutable types would require a lot of wrapping
             # to ensure relation-set gets called when they are mutated.
-            raise ValueError('Only string values allowed')
+            raise ValueError("Only string values allowed")
         hookenv.relation_set(self.relid, {key: value})
 
     def __delitem__(self, key):
@@ -199,13 +206,13 @@ class Leader(UserDict):
 
     def __setitem__(self, key, value):
         if not hookenv.is_leader():
-            raise TypeError('Not the leader. Cannot change leader settings.')
+            raise TypeError("Not the leader. Cannot change leader settings.")
         if value is not None and not isinstance(value, six.string_types):
             # We don't do implicit casting. This would cause simple
             # types like integers to be read back as strings in subsequent
             # hooks, and mutable types would require a lot of wrapping
             # to ensure leader-set gets called when they are mutated.
-            raise ValueError('Only string values allowed')
+            raise ValueError("Only string values allowed")
         hookenv.leader_set({key: value})
 
     def __delitem__(self, key):

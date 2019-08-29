@@ -19,7 +19,7 @@ from charms.reactive.bus import Handler
 
 
 def everyhook(action):
-    '''
+    """
     Decorator to run a handler each and every hook, during the hook phase.
 
     Charms should to minimize code that can only run in a specific hook
@@ -34,10 +34,11 @@ def everyhook(action):
     and relations. The simplest way of avoiding this entire class of
     races is to have a single, general hook instead of several specific
     ones tied to particular events.
-    '''
+    """
+
     def in_hook_phase():
-        dispatch_phase = unitdata.kv().get('reactive.dispatch.phase')
-        return dispatch_phase == 'hooks'
+        dispatch_phase = unitdata.kv().get("reactive.dispatch.phase")
+        return dispatch_phase == "hooks"
 
     handler = Handler.get(action)
     handler.add_predicate(in_hook_phase)
