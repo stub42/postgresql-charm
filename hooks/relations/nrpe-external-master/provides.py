@@ -89,4 +89,3 @@ define service {
             'timestamp': datetime.datetime.now().isoformat(),
         }
         self.set_remote(**relation_info)
-        self.remove_state('{relation_name}.available')

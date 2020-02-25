@@ -1,4 +1,4 @@
-# Copyright 2016-2017 Canonical Ltd.
+# Copyright 2016-2019 Canonical Ltd.
 #
 # This file is part of the Snap layer for Juju.
 #
@@ -17,16 +17,25 @@
 import os
 import subprocess
 
+import yaml
+
 from charmhelpers.core import hookenv
 from charms import layer
 from charms import reactive
 from charms.reactive.helpers import any_file_changed, data_changed
-from time import sleep
 from datetime import datetime, timedelta
 
 
 def get_installed_flag(snapname):
     return 'snap.installed.{}'.format(snapname)
+
+
+def get_refresh_available_flag(snapname):
+    return 'snap.refresh-available.{}'.format(snapname)
+
+
+def get_local_flag(snapname):
+    return 'snap.local.{}'.format(snapname)
 
 
 def get_disabled_flag(snapname):
@@ -45,6 +54,7 @@ def install(snapname, **kw):
     function is called.
     '''
     installed_flag = get_installed_flag(snapname)
+    local_flag = get_local_flag(snapname)
     if reactive.is_flag_set(installed_flag):
         refresh(snapname, **kw)
     else:
@@ -54,6 +64,7 @@ def install(snapname, **kw):
                 _install_store(snapname, **kw)
             else:
                 _install_local(res_path, **kw)
+                reactive.set_flag(local_flag)
         else:
             _install_store(snapname, **kw)
         reactive.set_flag(installed_flag)
@@ -67,6 +78,19 @@ def install(snapname, **kw):
 
 def is_installed(snapname):
     return reactive.is_flag_set(get_installed_flag(snapname))
+
+
+def is_local(snapname):
+    return reactive.is_flag_set(get_local_flag(snapname))
+
+
+def get_installed_snaps():
+    '''Return a list of snaps which are installed by this layer.
+    '''
+    flag_prefix = 'snap.installed.'
+    return [flag[len(flag_prefix):]
+            for flag in reactive.get_flags()
+            if flag.startswith(flag_prefix)]
 
 
 def refresh(snapname, **kw):
@@ -84,20 +108,23 @@ def refresh(snapname, **kw):
     # upload a zero byte resource, but then we would need to uninstall
     # the snap before reinstalling from the store and that has the
     # potential for data loss.
+    local_flag = get_local_flag(snapname)
     if hookenv.has_juju_version('2.0'):
         res_path = _resource_get(snapname)
         if res_path is False:
             _refresh_store(snapname, **kw)
+            reactive.clear_flag(local_flag)
         else:
             _install_local(res_path, **kw)
+            reactive.set_flag(local_flag)
     else:
         _refresh_store(snapname, **kw)
+        reactive.clear_flag(local_flag)
 
 
 def remove(snapname):
     hookenv.log('Removing snap {}'.format(snapname))
-    subprocess.check_call(['snap', 'remove', snapname],
-                          universal_newlines=True)
+    subprocess.check_call(['snap', 'remove', snapname])
     reactive.clear_flag(get_installed_flag(snapname))
 
 
@@ -108,8 +135,7 @@ def connect(plug, slot):
     the two arguments to the 'snap connect' command.
     '''
     hookenv.log('Connecting {} to {}'.format(plug, slot), hookenv.DEBUG)
-    subprocess.check_call(['snap', 'connect', plug, slot],
-                          universal_newlines=True)
+    subprocess.check_call(['snap', 'connect', plug, slot])
 
 
 def connect_all():
@@ -139,8 +165,7 @@ def disable(snapname):
                 snapname), hookenv.WARNING)
         return
 
-    subprocess.check_call(['snap', 'disable', snapname],
-                          universal_newlines=True)
+    subprocess.check_call(['snap', 'disable', snapname])
     reactive.set_flag(get_disabled_flag(snapname))
 
 
@@ -159,8 +184,7 @@ def enable(snapname):
                 snapname), hookenv.WARNING)
         return
 
-    subprocess.check_call(['snap', 'enable', snapname],
-                          universal_newlines=True)
+    subprocess.check_call(['snap', 'enable', snapname])
     reactive.clear_flag(get_disabled_flag(snapname))
 
 
@@ -177,8 +201,7 @@ def restart(snapname):
                 snapname), hookenv.WARNING)
         return
 
-    subprocess.check_call(['snap', 'restart', snapname],
-                          universal_newlines=True)
+    subprocess.check_call(['snap', 'restart', snapname])
 
 
 def set(snapname, key, value):
@@ -235,8 +258,8 @@ def set_refresh_timer(timer=''):
 def get(snapname, key):
     '''Gets configuration options for a snap
 
-    This method returns the output that snapctl get command prints out.
-    This method will fail if snapname is not an installed snap
+    This method returns the stripped output from the snap get command.
+    This method will fail if snapname is not an installed snap.
     '''
     hookenv.log('Get config {} for snap {}'.format(key, snapname))
     if not reactive.is_flag_set(get_installed_flag(snapname)):
@@ -245,7 +268,8 @@ def get(snapname, key):
                 snapname), hookenv.WARNING)
         return
 
-    return subprocess.check_output(['snap', 'get', snapname, key])
+    return subprocess.check_output(['snap', 'get', snapname, key]).strip()
+
 
 def get_installed_version(snapname):
     '''Gets the installed version of a snapname.
@@ -255,10 +279,11 @@ def get_installed_version(snapname):
     hookenv.log('Get installed key for snap {}'.format(snapname))
     if not reactive.is_flag_set(get_installed_flag(snapname)):
         hookenv.log(
-            'Cannot get {} snap installed version because it is not installed'.format(
-                snapname), hookenv.WARNING)
+            'Cannot get {} snap installed version because it is not installed'
+            .format(snapname), hookenv.WARNING)
         return
-    return subprocess.check_output(cmd, encoding='utf-8').partition('installed:')[-1].split()[0]
+    return subprocess.check_output(cmd).decode('utf-8', errors='replace').partition(
+        'installed:')[-1].split()[0]
 
 
 def get_installed_channel(snapname):
@@ -269,10 +294,12 @@ def get_installed_channel(snapname):
     hookenv.log('Get channel for snap {}'.format(snapname))
     if not reactive.is_flag_set(get_installed_flag(snapname)):
         hookenv.log(
-            'Cannot get snap tracking (channel) because it is not installed'.format(
-                snapname), hookenv.WARNING)
+            'Cannot get snap tracking (channel) because it is not installed'
+            .format(snapname), hookenv.WARNING)
         return
-    return subprocess.check_output(cmd, encoding='utf-8').partition('tracking:')[-1].split()[0]
+    return subprocess.check_output(cmd).decode('utf-8', errors='replace').partition(
+        'tracking:')[-1].split()[0]
+
 
 def _snap_args(channel='stable', devmode=False, jailmode=False,
                dangerous=False, force_dangerous=False, connect=None,
@@ -298,34 +325,33 @@ def _install_local(path, **kw):
         cmd.append('--dangerous')
         cmd.append(path)
         hookenv.log('Installing {} from local resource'.format(path))
-        subprocess.check_call(cmd, universal_newlines=True)
+        subprocess.check_call(cmd)
 
 
 def _install_store(snapname, **kw):
+    """Install snap from store
+
+    :param snapname: Name of snap to install
+    :type snapname: str
+    :param kw: Keyword arguments to pass on to ``snap install``
+    :type kw: Dict[str, str]
+    :raises: subprocess.CalledProcessError
+    """
     cmd = ['snap', 'install']
     cmd.extend(_snap_args(**kw))
     cmd.append(snapname)
     hookenv.log('Installing {} from store'.format(snapname))
-    # Attempting the snap install 3 times to resolve unexpected EOF.
-    # This is a work around to lp:1677557. Stop doing this once it
-    # is resolved everywhere.
-    for attempt in range(3):
-        try:
-            out = subprocess.check_output(cmd, universal_newlines=True,
-                                          stderr=subprocess.STDOUT)
-            print(out)
-            break
-        except subprocess.CalledProcessError as x:
-            print(x.output)
-            # Per https://bugs.launchpad.net/bugs/1622782, we don't
-            # get a useful error code out of 'snap install', much like
-            # 'snap refresh' below. Remove this when we can rely on
-            # snap installs everywhere returning 0 for 'already insatlled'
-            if "already installed" in x.output:
-                break
-            if attempt == 2:
-                raise
-            sleep(5)
+    try:
+        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        hookenv.log('Installation successful cmd="{}" output="{}"'
+                    .format(cmd, out),
+                    level=hookenv.DEBUG)
+        reactive.clear_flag(get_local_flag(snapname))
+    except subprocess.CalledProcessError as cp:
+        hookenv.log('Installation failed cmd="{}" returncode={} output="{}"'
+                    .format(cmd, cp.returncode, cp.output),
+                    level=hookenv.ERROR)
+        raise
 
 
 def _refresh_store(snapname, **kw):
@@ -337,18 +363,8 @@ def _refresh_store(snapname, **kw):
     cmd.extend(_snap_args(**kw))
     cmd.append(snapname)
     hookenv.log('Refreshing {} from store'.format(snapname))
-    # Per https://bugs.launchpad.net/layer-snap/+bug/1588322 we don't get
-    # a useful error code out of 'snap refresh'. We are forced to parse
-    # the output to see if it is a non-fatal error.
-    # subprocess.check_call(cmd, universal_newlines=True)
-    try:
-        out = subprocess.check_output(cmd, universal_newlines=True,
-                                      stderr=subprocess.STDOUT)
-        print(out)
-    except subprocess.CalledProcessError as x:
-        print(x.output)
-        if "has no updates available" not in x.output:
-            raise
+    out = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+    print(out)
 
 
 def _resource_get(snapname):
@@ -361,3 +377,60 @@ def _resource_get(snapname):
     if res_path and os.stat(res_path).st_size != 0:
         return res_path
     return False
+
+
+def get_available_refreshes():
+    '''Return a list of snaps which have refreshes available.
+    '''
+    out = subprocess.check_output(['snap', 'refresh', '--list']).decode('utf8')
+    if out == 'All snaps up to date.':
+        return []
+    else:
+        return [l.split()[0] for l in out.splitlines()[1:]]
+
+
+def is_refresh_available(snapname):
+    '''Check whether a new revision is available for the given snap.
+    '''
+    return reactive.is_flag_set(get_refresh_available_flag(snapname))
+
+
+def _check_refresh_available(snapname):
+    return snapname in get_available_refreshes()
+
+
+def create_cohort_snapshot(snapname):
+    '''Create a new cohort key for the given snap.
+
+    Cohort keys represent a snapshot of the revision of a snap at the time
+    the key was created. These keys can then be used on any machine to lock
+    the revision of the snap until a new cohort is joined (or the key expires,
+    after 90 days). This is used to maintain consistency of the revision of
+    the snap across units or applications, and to manage the refresh of the
+    snap in a controlled manner.
+
+    Returns a cohort key.
+    '''
+    out = subprocess.check_output(['snap', 'create-cohort', snapname])
+    data = yaml.safe_load(out.decode('utf8'))
+    return data['cohorts'][snapname]['cohort-key']
+
+
+def join_cohort_snapshot(snapname, cohort_key):
+    '''Refresh the snap into the given cohort.
+
+    If the snap was previously in a cohort, this will update the revision
+    to that of the new cohort snapshot. Note that this does not change the
+    channel that the snap is in, only the revision within that channel.
+    '''
+    if is_local(snapname):
+        # joining a cohort can override a locally installed snap
+        hookenv.log('Skipping joining cohort for local snap: '
+                    '{}'.format(snapname))
+        return
+    subprocess.check_output(['snap', 'refresh', snapname,
+                             '--cohort', cohort_key])
+    # even though we just refreshed to the latest in the cohort, it's
+    # slightly possible that there's a newer rev available beyond the cohort
+    reactive.toggle_flag(get_refresh_available_flag(snapname),
+                         _check_refresh_available(snapname))

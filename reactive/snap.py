@@ -1,4 +1,4 @@
-# Copyright 2016 Canonical Ltd.
+# Copyright 2016-2019 Canonical Ltd.
 #
 # This file is part of the Snap layer for Juju.
 #
@@ -16,6 +16,7 @@
 '''
 charms.reactive helpers for dealing with Snap packages.
 '''
+from collections import OrderedDict
 from distutils.version import LooseVersion
 import os.path
 from os import uname
@@ -31,7 +32,7 @@ from charmhelpers.core.host import write_file
 from charms import layer
 from charms import reactive
 from charms.layer import snap
-from charms.reactive import register_trigger, when, when_not
+from charms.reactive import register_trigger, when, when_not, toggle_flag
 from charms.reactive.helpers import data_changed
 
 
@@ -51,12 +52,19 @@ class InvalidBundleError(Exception):
     pass
 
 
+def sorted_snap_opts():
+    opts = layer.options('snap')
+    opts = sorted(opts.items(), key=lambda item: item[0] != 'core')
+    opts = OrderedDict(opts)
+    return opts
+
+
 def install():
     # Do nothing if we don't have kernel support yet
     if not kernel_supported():
         return
 
-    opts = layer.options('snap')
+    opts = sorted_snap_opts()
     # supported-architectures is EXPERIMENTAL and undocumented.
     # It probably should live in the base layer, blocking the charm
     # during bootstrap if the arch is unsupported.
@@ -77,12 +85,23 @@ def install():
         snap.connect_all()
 
 
+def check_refresh_available():
+    # Do nothing if we don't have kernel support yet
+    if not kernel_supported():
+        return
+
+    available_refreshes = snap.get_available_refreshes()
+    for snapname in snap.get_installed_snaps():
+        toggle_flag(snap.get_refresh_available_flag(snapname),
+                    snapname in available_refreshes)
+
+
 def refresh():
     # Do nothing if we don't have kernel support yet
     if not kernel_supported():
         return
 
-    opts = layer.options('snap')
+    opts = sorted_snap_opts()
     # supported-architectures is EXPERIMENTAL and undocumented.
     # It probably should live in the base layer, blocking the charm
     # during bootstrap if the arch is unsupported.
@@ -224,7 +243,7 @@ def _get_snapd_version():
         stdin=subprocess.DEVNULL,
         universal_newlines=True
     )
-    version_info = dict(line.split() for line in stdout.splitlines())
+    version_info = dict(line.split(None, 1) for line in stdout.splitlines())
     return LooseVersion(version_info['snapd'])
 
 
@@ -324,3 +343,4 @@ hookenv.atstart(ensure_path)
 hookenv.atstart(update_snap_proxy)
 hookenv.atstart(configure_snap_store_proxy)
 hookenv.atstart(install)
+hookenv.atstart(check_refresh_available)

@@ -24,8 +24,8 @@ from preflight import preflight
 
 @preflight
 def block_on_bad_juju():
-    if not hookenv.has_juju_version('1.24'):
-        status_set('blocked', 'Requires Juju 1.24 or higher')
+    if not hookenv.has_juju_version("1.24"):
+        status_set("blocked", "Requires Juju 1.24 or higher")
         # Error state, since we don't have 1.24 to give a nice blocked state.
         raise SystemExit(1)
 
@@ -45,47 +45,56 @@ def block_on_invalid_config():
     valid = True
     config = hookenv.config()
 
-    enums = dict(version=set(['', '9.3', '9.4', '9.5', '9.6', '10']),
-                 package_status=set(['install', 'hold']))
+    enums = dict(
+        version=set(["", "9.3", "9.4", "9.5", "9.6", "10"]),
+        package_status=set(["install", "hold"]),
+    )
     for key, vals in enums.items():
-        config[key] = (config.get(key) or '').lower()
+        config[key] = (config.get(key) or "").lower()
         if config[key] not in vals:
             valid = False
-            status_set('blocked',
-                       'Invalid value for {} ({!r})'.format(key, config[key]))
+            status_set(
+                "blocked", "Invalid value for {} ({!r})".format(key, config[key])
+            )
 
-    unchangeable_config = ['locale', 'encoding', 'pgdg', 'manual_replication']
+    unchangeable_config = ["locale", "encoding", "pgdg", "manual_replication"]
     if config._prev_dict is not None:
         for name in unchangeable_config:
             if config.changed(name):
                 config[name] = config.previous(name)
                 valid = False
-                status_set('blocked',
-                           'Cannot change {!r} after install '
-                           '(from {!r} to {!r}).'
-                           .format(name, config.previous(name),
-                                   config.get('name')))
-        if config.changed('version') and (config.previous('version') !=
-                                          postgresql.version()):
+                status_set(
+                    "blocked",
+                    "Cannot change {!r} after install "
+                    "(from {!r} to {!r}).".format(
+                        name, config.previous(name), config.get("name")
+                    ),
+                )
+        if config.changed("version") and (
+            config.previous("version") != postgresql.version()
+        ):
             valid = False
-            status_set('blocked',
-                       'Cannot change version after install '
-                       '(from {!r} to {!r}).'
-                       .format(config.previous('version'), config['version']))
-            config['version'] = config.previous('version')
+            status_set(
+                "blocked",
+                "Cannot change version after install "
+                "(from {!r} to {!r}).".format(
+                    config.previous("version"), config["version"]
+                ),
+            )
+            config["version"] = config.previous("version")
             valid = False
 
-    metrics_target = config['metrics_target'].strip()
+    metrics_target = config["metrics_target"].strip()
     if metrics_target:
-        if ':' not in metrics_target:
-            status_set('blocked',
-                       'Invalid metrics_target {}'.format(metrics_target))
+        if ":" not in metrics_target:
+            status_set("blocked", "Invalid metrics_target {}".format(metrics_target))
             valid = False
-        metrics_interval = config['metrics_sample_interval']
+        metrics_interval = config["metrics_sample_interval"]
         if not metrics_interval:
-            status_set('blocked',
-                       'metrics_sample_interval is required when '
-                       'metrics_target is set')
+            status_set(
+                "blocked",
+                "metrics_sample_interval is required when " "metrics_target is set",
+            )
             valid = False
 
     if not valid:

@@ -2,7 +2,7 @@ import os
 import sys
 import shutil
 from glob import glob
-from subprocess import check_call, CalledProcessError
+from subprocess import check_call, check_output, CalledProcessError
 from time import sleep
 
 from charms import layer
@@ -43,6 +43,9 @@ def bootstrap_charm_deps():
     post_upgrade = os.path.exists('wheelhouse/.upgrade')
     is_upgrade = not post_upgrade and (is_charm_upgrade or is_series_upgrade)
     if is_bootstrapped and not is_upgrade:
+        # older subordinates might have downgraded charm-env, so we should
+        # restore it if necessary
+        install_or_update_charm_env()
         activate_venv()
         # the .upgrade file prevents us from getting stuck in a loop
         # when re-execing to activate the venv; at this point, we've
@@ -110,8 +113,8 @@ def bootstrap_charm_deps():
         check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse',
                     'setuptools', 'setuptools-scm'])
         # install the rest of the wheelhouse deps
-        check_call([pip, 'install', '-U', '--no-index', '-f', 'wheelhouse'] +
-                   glob('wheelhouse/*'))
+        check_call([pip, 'install', '-U', '--ignore-installed', '--no-index',
+                   '-f', 'wheelhouse'] + glob('wheelhouse/*'))
         # re-enable installation from pypi
         os.remove('/root/.pydistutils.cfg')
         # install python packages from layer options
@@ -124,7 +127,7 @@ def bootstrap_charm_deps():
                 shutil.copy2('/usr/bin/pip.save', '/usr/bin/pip')
                 os.remove('/usr/bin/pip.save')
         # setup wrappers to ensure envs are used for scripts
-        shutil.copy2('bin/charm-env', '/usr/local/sbin/')
+        install_or_update_charm_env()
         for wrapper in ('charms.reactive', 'charms.reactive.sh',
                         'chlp', 'layer_option'):
             src = os.path.join('/usr/local/sbin', 'charm-env')
@@ -146,6 +149,30 @@ def bootstrap_charm_deps():
         # Non-namespace-package libs (e.g., charmhelpers) are available
         # without having to reload the interpreter. :/
         reload_interpreter(vpy if cfg.get('use_venv') else sys.argv[0])
+
+
+def install_or_update_charm_env():
+    # On Trusty python3-pkg-resources is not installed
+    try:
+        from pkg_resources import parse_version
+    except ImportError:
+        apt_install(['python3-pkg-resources'])
+        from pkg_resources import parse_version
+
+    try:
+        installed_version = parse_version(
+            check_output(['/usr/local/sbin/charm-env',
+                          '--version']).decode('utf8'))
+    except (CalledProcessError, FileNotFoundError):
+        installed_version = parse_version('0.0.0')
+    try:
+        bundled_version = parse_version(
+            check_output(['bin/charm-env',
+                          '--version']).decode('utf8'))
+    except (CalledProcessError, FileNotFoundError):
+        bundled_version = parse_version('0.0.0')
+    if installed_version < bundled_version:
+        shutil.copy2('bin/charm-env', '/usr/local/sbin/')
 
 
 def activate_venv():

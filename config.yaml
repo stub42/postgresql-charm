@@ -34,6 +34,7 @@
     "default": ""
   "snap_proxy":
     "description": >
+      DEPRECATED. Use snap-http-proxy and snap-https-proxy model configuration settings.
       HTTP/HTTPS web proxy for Snappy to use when accessing the snap store.
     "type": "string"
     "default": ""
@@ -41,8 +42,8 @@
     "default": ""
     "type": "string"
     "description": >
-      The address of a Snap Store Proxy to use for snaps
-      e.g. http://snap-proxy.example.com
+      DEPRECATED. Use snap-store-proxy model configuration setting.
+      The address of a Snap Store Proxy to use for snaps e.g. http://snap-proxy.example.com
   "snapd_refresh":
     "default": ""
     "type": "string"
@@ -294,6 +295,7 @@
     "type": "string"
     "default": ""
     "description": "EXPERIMENTAL. Windows Azure access key."
+  # statsd-compatible metrics
   "metrics_target":
     "default": ""
     "type": "string"
@@ -312,6 +314,9 @@
     "description": "Period for metrics cron job to run in minutes"
 
 
+  # DEPRECATED SETTINGS.
+  # Remove them one day. They remain here to avoid making existing
+  # configurations fail.
   "advisory_lock_restart_key":
     "default": !!int "765"
     "type": "int"

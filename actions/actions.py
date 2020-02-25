@@ -30,7 +30,7 @@ from reactive.postgresql import wal_e
 
 def replication_pause(params):
     if not postgresql.is_secondary():
-        hookenv.action_fail('Not a hot standby')
+        hookenv.action_fail("Not a hot standby")
         return
 
     con = postgresql.connect()
@@ -40,24 +40,24 @@ def replication_pause(params):
     hookenv.action_set(dict(offset=offset))
 
     cur = con.cursor()
-    if postgresql.has_version('10'):
-        cur.execute('SELECT pg_is_wal_replay_paused()')
+    if postgresql.has_version("10"):
+        cur.execute("SELECT pg_is_wal_replay_paused()")
     else:
-        cur.execute('SELECT pg_is_xlog_replay_paused()')
+        cur.execute("SELECT pg_is_xlog_replay_paused()")
     if cur.fetchone()[0] is True:
         # Not a failure, per lp:1670613
-        hookenv.action_set(dict(result='Already paused'))
+        hookenv.action_set(dict(result="Already paused"))
         return
-    if postgresql.has_version('10'):
-        cur.execute('SELECT pg_wal_replay_pause()')
+    if postgresql.has_version("10"):
+        cur.execute("SELECT pg_wal_replay_pause()")
     else:
-        cur.execute('SELECT pg_xlog_replay_pause()')
-    hookenv.action_set(dict(result='Paused'))
+        cur.execute("SELECT pg_xlog_replay_pause()")
+    hookenv.action_set(dict(result="Paused"))
 
 
 def replication_resume(params):
     if not postgresql.is_secondary():
-        hookenv.action_fail('Not a hot standby')
+        hookenv.action_fail("Not a hot standby")
         return
 
     con = postgresql.connect()
@@ -67,68 +67,71 @@ def replication_resume(params):
     hookenv.action_set(dict(offset=offset))
 
     cur = con.cursor()
-    if postgresql.has_version('10'):
-        cur.execute('SELECT pg_is_wal_replay_paused()')
+    if postgresql.has_version("10"):
+        cur.execute("SELECT pg_is_wal_replay_paused()")
     else:
-        cur.execute('SELECT pg_is_xlog_replay_paused()')
+        cur.execute("SELECT pg_is_xlog_replay_paused()")
     if cur.fetchone()[0] is False:
         # Not a failure, per lp:1670613
-        hookenv.action_set(dict(result='Already resumed'))
+        hookenv.action_set(dict(result="Already resumed"))
         return
-    if postgresql.has_version('10'):
-        cur.execute('SELECT pg_wal_replay_resume()')
+    if postgresql.has_version("10"):
+        cur.execute("SELECT pg_wal_replay_resume()")
     else:
-        cur.execute('SELECT pg_xlog_replay_resume()')
-    hookenv.action_set(dict(result='Resumed'))
+        cur.execute("SELECT pg_xlog_replay_resume()")
+    hookenv.action_set(dict(result="Resumed"))
 
 
 def wal_e_backup(params):
     if not postgresql.is_primary():
-        hookenv.action_fail('Not a primary. Run this action on the master')
+        hookenv.action_fail("Not a primary. Run this action on the master")
         return
 
     backup_cmd = wal_e.wal_e_backup_command()
-    if params['prune']:
+    if params["prune"]:
         prune_cmd = wal_e.wal_e_prune_command()
     else:
         prune_cmd = None
 
-    hookenv.action_set({"wal-e-backup-cmd": backup_cmd,
-                        "wal-e-prune-cmd": prune_cmd})
+    hookenv.action_set({"wal-e-backup-cmd": backup_cmd, "wal-e-prune-cmd": prune_cmd})
 
     try:
-        hookenv.log('Running wal-e backup')
+        hookenv.log("Running wal-e backup")
         hookenv.log(backup_cmd)
-        subprocess.check_call('sudo -Hu postgres -- ' + backup_cmd,
-                              stderr=subprocess.STDOUT,
-                              shell=True, universal_newlines=True)
+        subprocess.check_call(
+            "sudo -Hu postgres -- " + backup_cmd,
+            stderr=subprocess.STDOUT,
+            shell=True,
+            universal_newlines=True,
+        )
         hookenv.action_set({"backup-return-code": 0})
     except subprocess.CalledProcessError as x:
         hookenv.action_set({"backup-return-code": x.returncode})
-        hookenv.action_fail('Backup failed')
+        hookenv.action_fail("Backup failed")
         return
 
     if prune_cmd is None:
         return
 
     try:
-        hookenv.log('Running wal-e prune')
+        hookenv.log("Running wal-e prune")
         hookenv.log(prune_cmd)
-        subprocess.check_call('sudo -Hu postgres -- ' + prune_cmd,
-                              stderr=subprocess.STDOUT,
-                              shell=True, universal_newlines=True)
+        subprocess.check_call(
+            "sudo -Hu postgres -- " + prune_cmd,
+            stderr=subprocess.STDOUT,
+            shell=True,
+            universal_newlines=True,
+        )
         hookenv.action_set({"prune-return-code": 0})
     except subprocess.CalledProcessError as x:
         hookenv.action_set({"prune-return-code": x.returncode})
-        hookenv.action_fail('Backup succeeded, pruning failed')
+        hookenv.action_fail("Backup succeeded, pruning failed")
         return
 
 
 def wal_e_list_backups(params):
-    storage_uri = (params['storage-uri'] or
-                   hookenv.config()['wal_e_storage_uri'])
-    with tempfile.TemporaryDirectory(prefix='wal-e',
-                                     suffix='envdir') as envdir:
+    storage_uri = params["storage-uri"] or hookenv.config()["wal_e_storage_uri"]
+    with tempfile.TemporaryDirectory(prefix="wal-e", suffix="envdir") as envdir:
         wal_e.update_wal_e_env_dir(envdir, storage_uri)
         details = wal_e.wal_e_list_backups(envdir)
 
@@ -137,10 +140,10 @@ def wal_e_list_backups(params):
     # remaining usable.
     m = {}
     for detail in details:
-        detail_key = detail['name'].replace('_', '-').lower()
+        detail_key = detail["name"].replace("_", "-").lower()
         for value_key, value in detail.items():
-            value_key = value_key.replace('_', '-')
-            m['{}.{}'.format(detail_key, value_key)] = value
+            value_key = value_key.replace("_", "-")
+            m["{}.{}".format(detail_key, value_key)] = value
     hookenv.action_set(m)
 
 
@@ -181,27 +184,27 @@ def main(argv):
     action = os.path.basename(argv[0])
     params = hookenv.action_get()
     try:
-        if action == 'replication-pause':
+        if action == "replication-pause":
             replication_pause(params)
-        elif action == 'replication-resume':
+        elif action == "replication-resume":
             replication_resume(params)
-        elif action == 'wal-e-backup':
+        elif action == "wal-e-backup":
             wal_e_backup(params)
-        elif action == 'wal-e-list-backups':
+        elif action == "wal-e-list-backups":
             wal_e_list_backups(params)
-        elif action == 'wal-e-restore':
-            reactive_action('action.wal-e-restore')
-        elif action == 'switchover':
-            reactive_action('action.switchover')
+        elif action == "wal-e-restore":
+            reactive_action("action.wal-e-restore")
+        elif action == "switchover":
+            reactive_action("action.switchover")
         else:
-            hookenv.action_fail('Action {} not implemented'.format(action))
+            hookenv.action_fail("Action {} not implemented".format(action))
     except Exception:
-        hookenv.action_fail('Unhandled exception')
+        hookenv.action_fail("Unhandled exception")
         tb = traceback.format_exc()
         hookenv.action_set(dict(traceback=tb))
-        hookenv.log('Unhandled exception in action {}'.format(action))
+        hookenv.log("Unhandled exception in action {}".format(action))
         print(tb)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main(sys.argv)
