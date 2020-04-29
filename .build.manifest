@@ -5,7 +5,7 @@
       "url": "layer:options"
     },
     {
-      "rev": "07c858e3cd3434c775a43a4d60068f1dac6cb82b",
+      "rev": "f8629dbe4eba480677eb613f218f8a0a384709e4",
       "url": "layer:basic"
     },
     {
@@ -13,11 +13,11 @@
       "url": "layer:status"
     },
     {
-      "rev": "4775099d92a15b6062e2b5859397aea70cb3ea45",
+      "rev": "3caa4a8951b9efbba2174e0deca36ae9edb4a75e",
       "url": "layer:apt"
     },
     {
-      "rev": "9bf203fd51d04afc48e67fa40410b8a661726b7e",
+      "rev": "9c69a33ea0586ac68a4e47d6b55b3a0374b96b26",
       "url": "layer:snap"
     },
     {
@@ -60,6 +60,11 @@
       "postgresql",
       "static",
       "4502b8bbfb3dbc9a99bb59f935cf26aa64247347a6a5949d1da41b5f44bd95f8"
+    ],
+    ".travis/profile-update.yaml": [
+      "layer:basic",
+      "static",
+      "731e20aa59bf61c024d317ad630e478301a9386ccc0afe56e6c1c09db07ac83b"
     ],
     "LICENSE": [
       "layer:status",
@@ -759,7 +764,7 @@
     "layer.yaml": [
       "postgresql",
       "dynamic",
-      "30d6b5b6b1b25f65acfd132a30a0a1173cac5a64deddb75323fcd904944ea5c9"
+      "3d0ea319e87d5998e65a0c2992cf9983730407d7fb1eb19423ec0fb5806a8fe5"
     ],
     "lib/cache_settings.py": [
       "postgresql",
@@ -774,7 +779,7 @@
     "lib/charms/apt.py": [
       "layer:apt",
       "static",
-      "76e20b0e60ee8c5ee845386d1948e4ac0ace0e3490dc75d96bd5436808f0101a"
+      "379c0f6bebbf589df6738d7c46bbd4ccb397927051a4ebbe3c946a6330099199"
     ],
     "lib/charms/coordinator.py": [
       "layer:coordinator",
@@ -789,7 +794,7 @@
     "lib/charms/layer/basic.py": [
       "layer:basic",
       "static",
-      "445652dbaa1f0b84a7215da185bcbdff097bb9bbbce11b4c2dbbff90f77719a9"
+      "fee521489b7738534927ff063b5b609c9f3097d573128149de25ee0dd0fe4eba"
     ],
     "lib/charms/layer/execd.py": [
       "layer:basic",
@@ -809,7 +814,7 @@
     "lib/charms/layer/snap.py": [
       "layer:snap",
       "static",
-      "9a86853e7220dc9d5d8cd8c0b1a114878ee8e01655867974339cea33709b9db2"
+      "ee48a37d3f58be26642e13933397789492b5783b44986b0d150c407bc2edd742"
     ],
     "lib/charms/layer/status.py": [
       "layer:status",
@@ -1226,10 +1231,10 @@
       "dynamic",
       "c0a292bd977ef590379a3f05d7b7f65135487b67470f6281289a94e015650ea1"
     ],
-    "wheelhouse/pyaml-19.12.0.tar.gz": [
+    "wheelhouse/pyaml-20.4.0.tar.gz": [
       "layer:basic",
       "dynamic",
-      "b3f636b467864319d7ded1558f86bb305b8612a274f5d443a62dc5eceb1b7176"
+      "29a5c2a68660a799103d6949167bd6c7953d031449d08802386372de1db6ad71"
     ],
     "wheelhouse/setuptools-41.6.0.zip": [
       "layer:basic",
