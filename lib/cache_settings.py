@@ -17,11 +17,15 @@
 
 import json
 import os.path
+import sys
 
 import psycopg2
 import psycopg2.extras
 
-con = psycopg2.connect("user=postgres dbname=postgres")
+if len(sys.argv) > 1:
+    con = psycopg2.connect(" ".join(sys.argv[1:]))
+else:
+    con = psycopg2.connect("dbname=postgres")
 
 cur = con.cursor()
 cur.execute("show server_version")
