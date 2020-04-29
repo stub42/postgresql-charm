@@ -17,6 +17,7 @@ maintainer: Stuart Bishop <stuart.bishop@canonical.com>
 tags:
     - databases
 series:
+    - focal
     - bionic
     - xenial
     - trusty
