@@ -33,7 +33,6 @@ import psycopg2.extras
 
 from charmhelpers.core import hookenv, host, unitdata
 from charmhelpers.core.hookenv import DEBUG
-from charms import reactive
 
 # This module is unit tested, so we can't use not_unless until we
 # deal with charms.reactive Issue #46.
@@ -223,6 +222,14 @@ def recovery_conf_path():
     return os.path.join(data_dir(), "recovery.conf")
 
 
+def hot_standby_conf_path():
+    return os.path.join(config_dir(), "juju_recovery.conf")
+
+
+def hot_standby_signal_path():
+    return os.path.join(data_dir(), "standby.signal")
+
+
 def pg_bin_dir():
     return "/usr/lib/postgresql/{}/bin".format(version())
 
@@ -279,6 +286,8 @@ def is_secondary():
 
     Hot standbys are read only replicas.
     """
+    if has_version("12"):
+        return os.path.exists(hot_standby_signal_path())
     return os.path.exists(recovery_conf_path())
 
 
@@ -554,6 +563,9 @@ def emit_pg_log(lines=100):
     if os.path.exists(rec_conf):
         # Don't dump the actual file, as one day it might contain passwords.
         print("recovery.conf exists at {}".format(rec_conf))
+    sig = hot_standby_signal_path()
+    if os.path.exists(sig):
+        print("standby.signal exists at {}".format(sig))
     subprocess.call([pg_controldata_path(), "-D", data_dir()], universal_newlines=True)
     subprocess.call(
         ["tail", "-{:d}".format(lines), pg_log_path()], universal_newlines=True
@@ -603,9 +615,9 @@ def parse_config(unparsed_config, fatal=True):
             if not keqv:
                 continue
             if key is None:
-                raise SyntaxError("Missing key".format(keqv))
+                raise SyntaxError("Missing key {!r}".format(keqv))
             if bad_value is not None:
-                raise SyntaxError("Badly quoted value".format(bad_value))
+                raise SyntaxError("Badly quoted value {!r}".format(bad_value))
             assert value is None or q_value is None
             if q_value is not None:
                 value = re.sub(r"''|\\'", "'", q_value)
@@ -787,38 +799,13 @@ def promote():
     assert is_secondary(), "Cannot promote primary"
     assert is_running(), "Attempting to promote a stopped server"
 
-    wal_e_enabled = reactive.is_state("postgresql.wal_e.enabled")
-
-    if wal_e_enabled or has_version("9.3"):
-        # If we have PostgreSQL 9.3 or WAL archiving enabled, promote
-        # and do a timeline switch. We have to assume WAL-E is configured
-        # properly and is working.
-        rc = subprocess.call(
-            [
-                "sudo",
-                "-u",
-                "postgres",
-                "-H",
-                pg_ctl_path(),
-                "promote",
-                "-D",
-                data_dir(),
-            ],
-            universal_newlines=True,
-        )
-        if rc != 0:
-            helpers.status_set("blocked", "Failed to promote to primary")
-            raise SystemExit(0)
-    else:
-        # Removing recovery.conf will promote the unit to master without
-        # a timeline switch when PostgreSQL is restarted.
-        os.unlink(recovery_conf_path())
-        # Restart now. No need to request permission, as this unit was
-        # previously a secondary and not being used by anything. This
-        # also ensures the unit is a functioning primary before returning,
-        # like the newer 'promote' code path above.
-        stop()
-        start()
+    rc = subprocess.call(
+        ["sudo", "-u", "postgres", "-H", pg_ctl_path(), "promote", "-D", data_dir()],
+        universal_newlines=True,
+    )
+    if rc != 0:
+        helpers.status_set("blocked", "Failed to promote to primary")
+        raise SystemExit(0)
 
 
 def is_replicating(parent, ip=None, user=None):

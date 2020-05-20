@@ -104,20 +104,13 @@ def update_replication_states():
     if peers:
         reactive.set_state("postgresql.replication.had_peers")
 
-    reactive.toggle_state(
-        "postgresql.replication.manual", hookenv.config()["manual_replication"]
-    )
+    reactive.toggle_state("postgresql.replication.manual", hookenv.config()["manual_replication"])
 
     master = get_master()  # None if postgresql.replication.manual state.
+    reactive.toggle_state("postgresql.replication.is_master", master == hookenv.local_unit())
+    reactive.toggle_state("postgresql.replication.master.peered", peers and master in peers)
     reactive.toggle_state(
-        "postgresql.replication.is_master", master == hookenv.local_unit()
-    )
-    reactive.toggle_state(
-        "postgresql.replication.master.peered", peers and master in peers
-    )
-    reactive.toggle_state(
-        "postgresql.replication.master.authorized",
-        peers and master in peers and authorized_by(master),
+        "postgresql.replication.master.authorized", peers and master in peers and authorized_by(master),
     )
     ready = reactive.is_state("postgresql.replication.is_master") or reactive.is_state(
         "postgresql.replication.master.authorized"
@@ -125,14 +118,10 @@ def update_replication_states():
     reactive.toggle_state("postgresql.replication.has_master", ready)
 
     anointed = get_anointed()
-    reactive.toggle_state(
-        "postgresql.replication.switchover", anointed is not None and anointed != master
-    )
+    reactive.toggle_state("postgresql.replication.switchover", anointed is not None and anointed != master)
     reactive.toggle_state(
         "postgresql.replication.is_anointed",
-        anointed is not None
-        and anointed != master
-        and anointed == hookenv.local_unit(),
+        anointed is not None and anointed != master and anointed == hookenv.local_unit(),
     )
 
     reactive.toggle_state("postgresql.replication.is_primary", postgresql.is_primary())
@@ -297,9 +286,7 @@ def coordinate_failover():
         set_master(new_master)
     else:
         status_set(
-            None,
-            "Coordinating failover. Waiting on {}"
-            "".format(",".join(sorted(waiting_on))),
+            None, "Coordinating failover. Waiting on {}" "".format(",".join(sorted(waiting_on))),
         )
 
 
@@ -354,9 +341,7 @@ def create_replication_user():
     username = replication_username()
     hookenv.log("Creating replication user {}".format(username))
     con = postgresql.connect()
-    postgresql.ensure_user(
-        con, username, leader_get("replication_password"), replication=True
-    )
+    postgresql.ensure_user(con, username, leader_get("replication_password"), replication=True)
     con.commit()
     reactive.set_state("postgresql.replication.replication_user_created")
 
@@ -489,9 +474,10 @@ def promote_to_master():
         status_set("maintenance", "Waiting for startup")
         time.sleep(1)
 
-    assert not os.path.exists(
-        postgresql.recovery_conf_path()
-    ), "recovery.conf still exists after promotion"
+    if postgresql.has_version("12"):
+        assert not os.path.exists(postgresql.hot_standby_signal_path()), "standby.signal still exists after promotion"
+    else:
+        assert not os.path.exists(postgresql.recovery_conf_path()), "recovery.conf still exists after promotion"
 
     update_replication_states()
     helpers.ping_peers()
@@ -521,8 +507,6 @@ def follow_anointed():
 def update_recovery_conf(follow):
     assert follow != hookenv.local_unit()
 
-    path = postgresql.recovery_conf_path()
-
     peer_rel = helpers.get_peer_relation()
     follow_relinfo = peer_rel.get(follow)
     assert follow_relinfo is not None, "Invalid upstream {}".format(follow)
@@ -541,6 +525,14 @@ def update_recovery_conf(follow):
         # have changed.
         hookenv.log("Continuing to follow {}".format(follow))
 
+    pg12 = postgresql.has_version("12")
+    if pg12:
+        path = postgresql.hot_standby_conf_path()
+        template = 'hot_standby.conf.tmpl'
+    else:
+        path = postgresql.recovery_conf_path()
+        template = 'recovery.conf.tmpl'
+
     config = hookenv.config()
 
     data = dict(
@@ -554,20 +546,21 @@ def update_recovery_conf(follow):
     if reactive.helpers.is_state("postgresql.wal_e.enabled"):
         data["restore_command"] = wal_e.wal_e_restore_command()
 
-    templating.render(
-        "recovery.conf.tmpl",
-        path,
-        data,
-        owner="postgres",
-        group="postgres",
-        perms=0o600,
-    )
+    templating.render(template, path, data, owner="postgres", group="postgres", perms=0o600)
+
+    if pg12:
+        touch(postgresql.hot_standby_signal_path())
 
     # Use @when_file_changed for this when Issue #44 is resolved.
     if reactive.helpers.any_file_changed([path]):
         reactive.set_state("postgresql.cluster.needs_restart")
         if reactive.is_state("postgresql.replication.cloned"):
             reactive.set_state("postgresql.replication.check_following")
+
+
+def touch(path):
+    if not os.path.exists(path):
+        open(path, "w")
 
 
 def get_following():
@@ -654,8 +647,7 @@ def drain_master_and_promote_anointed():
                 break
         except (psycopg2.Error, postgresql.InvalidConnection) as x:
             status_set(
-                "waiting",
-                "Waiting to query replication state of {}: {}" "".format(master, x),
+                "waiting", "Waiting to query replication state of {}: {}" "".format(master, x),
             )
             time.sleep(1)
             continue
@@ -664,8 +656,7 @@ def drain_master_and_promote_anointed():
             break  # In sync. Proceed to promotion.
 
         status_set(
-            "waiting",
-            "{} bytes to sync before promotion" "".format(remote_offset - local_offset),
+            "waiting", "{} bytes to sync before promotion" "".format(remote_offset - local_offset),
         )
         time.sleep(1)
 
@@ -704,8 +695,7 @@ def elect_master():
             offsets.append((postgresql.wal_replay_offset(con), unit))
         except (psycopg2.Error, postgresql.InvalidConnection) as x:
             hookenv.log(
-                "Unable to query replication state of {}: {}" "".format(unit, x),
-                WARNING,
+                "Unable to query replication state of {}: {}" "".format(unit, x), WARNING,
             )
             # TODO: Signal re-cloning required. Or autodetect
             # based on timeline switch. Or PG9.3+ could use pg_rewind.
@@ -732,9 +722,7 @@ def switchover_action_requires_leader():
 @when("leadership.is_leader")
 @when("leadership.set.anointed_master")
 def switchover_in_progress():
-    hookenv.action_fail(
-        "switchover to {} already in progress" "".format(get_anointed())
-    )
+    hookenv.action_fail("switchover to {} already in progress" "".format(get_anointed()))
     reactive.remove_state("action.switchover")
 
 
@@ -769,9 +757,7 @@ def switchover_action():
 
         switchover_status()
 
-        hookenv.action_set(
-            dict(result="Initiated switchover of master to {}" "".format(anointed))
-        )
+        hookenv.action_set(dict(result="Initiated switchover of master to {}" "".format(anointed)))
 
     finally:
         reactive.remove_state("action.switchover")
@@ -815,13 +801,8 @@ def switchover_status():
     peer_rel = helpers.get_peer_relation()
     following = peer_rel.local.get("following")
 
-    mode = (
-        "Primary"
-        if reactive.is_state("postgresql.replication.is_primary")
-        else "Secondary"
-    )
+    mode = "Primary" if reactive.is_state("postgresql.replication.is_primary") else "Secondary"
 
     hookenv.status_set(
-        "maintenance",
-        "Switchover to {}. {} following {}" "".format(anointed, mode, str(following)),
+        "maintenance", "Switchover to {}. {} following {}" "".format(anointed, mode, str(following)),
     )

@@ -1,0 +1,9 @@
+#------------------------------------------------------------------------------
+# This file is managed by Juju
+#------------------------------------------------------------------------------
+{% if streaming_replication %}
+primary_conninfo = 'host={{host}} port={{port}} user={{user}} password={{password}} requirepeer=postgres'
+{% endif %}
+{% if restore_command %}
+restore_command = '{{restore_command}}'
+{% endif %}
