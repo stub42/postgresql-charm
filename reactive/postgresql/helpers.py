@@ -158,11 +158,11 @@ def split_extra_pg_auth(raw_extra_pg_auth):
     # with 'local' or 'host'.
     valid_re = re.compile(r"^\s*(host.*|local.*|#.*)?\s*$")
 
-    def valid_line(l):
-        return valid_re.search(l) is not None
+    def valid_line(ln):
+        return valid_re.search(ln) is not None
 
     lines = list(raw_extra_pg_auth.split(","))
-    if len(lines) > 1 and all(valid_line(l) for l in lines):
+    if len(lines) > 1 and all(valid_line(ln) for ln in lines):
         hookenv.log("Falling back to comma separated extra_pg_auth", WARNING)
         return lines
     else:

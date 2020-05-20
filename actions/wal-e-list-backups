@@ -21,6 +21,9 @@ import sys
 import tempfile
 import traceback
 
+from charms.layer.basic import activate_venv  # noqa
+activate_venv()
+
 from charmhelpers.core import hookenv
 from charms import reactive
 

@@ -17,11 +17,15 @@
 
 import json
 import os.path
+import sys
 
 import psycopg2
 import psycopg2.extras
 
-con = psycopg2.connect("user=postgres dbname=postgres")
+if len(sys.argv) > 1:
+    con = psycopg2.connect(" ".join(sys.argv[1:]))
+else:
+    con = psycopg2.connect("dbname=postgres")
 
 cur = con.cursor()
 cur.execute("show server_version")
@@ -31,12 +35,12 @@ ver = ver.split(".")[0]
 cur = con.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 cur.execute(
     """
-            SELECT name, unit, category, short_desc, extra_desc,
-                   context, vartype, min_val, max_val, enumvals,
-                   boot_val
-            FROM pg_settings
-            WHERE context <> 'internal'
-            """
+    SELECT name, unit, category, short_desc, extra_desc,
+            context, vartype, min_val, max_val, enumvals,
+            boot_val
+    FROM pg_settings
+    WHERE context <> 'internal'
+    """
 )
 
 cache = os.path.join(os.path.dirname(__file__), "pg_settings_{}.json".format(ver))

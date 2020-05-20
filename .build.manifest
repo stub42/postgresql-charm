@@ -33,7 +33,7 @@
       "url": "layer:nagios"
     },
     {
-      "rev": "cc4527c35ad7452e90cd73c697e5abd33d23c73c",
+      "rev": "20929d216373c978a9d892664061b941b1383adc",
       "url": "postgresql"
     },
     {
@@ -79,7 +79,7 @@
     "README.md": [
       "postgresql",
       "static",
-      "1882eb9dcbfe4cb9bd8e7e0e92359ffc9d0de51ae56fd8b42acddd5c3c773c0c"
+      "577213a955ac471bb2a1b31dce5fd7c7f6106df82f4dd50b7c791e3ce9a14d05"
     ],
     "actions.yaml": [
       "postgresql",
@@ -89,37 +89,37 @@
     "actions/actions.py": [
       "postgresql",
       "static",
-      "c68ce590e47853f0bbd3cd9d2708ed6e858ce49e5723f88def29af3c94505a4b"
+      "802765b32d00ee75ce085ff3178630e697c5821328283652596f2eddb63f49d6"
     ],
     "actions/replication-pause": [
       "postgresql",
       "static",
-      "c68ce590e47853f0bbd3cd9d2708ed6e858ce49e5723f88def29af3c94505a4b"
+      "802765b32d00ee75ce085ff3178630e697c5821328283652596f2eddb63f49d6"
     ],
     "actions/replication-resume": [
       "postgresql",
       "static",
-      "c68ce590e47853f0bbd3cd9d2708ed6e858ce49e5723f88def29af3c94505a4b"
+      "802765b32d00ee75ce085ff3178630e697c5821328283652596f2eddb63f49d6"
     ],
     "actions/switchover": [
       "postgresql",
       "static",
-      "c68ce590e47853f0bbd3cd9d2708ed6e858ce49e5723f88def29af3c94505a4b"
+      "802765b32d00ee75ce085ff3178630e697c5821328283652596f2eddb63f49d6"
     ],
     "actions/wal-e-backup": [
       "postgresql",
       "static",
-      "c68ce590e47853f0bbd3cd9d2708ed6e858ce49e5723f88def29af3c94505a4b"
+      "802765b32d00ee75ce085ff3178630e697c5821328283652596f2eddb63f49d6"
     ],
     "actions/wal-e-list-backups": [
       "postgresql",
       "static",
-      "c68ce590e47853f0bbd3cd9d2708ed6e858ce49e5723f88def29af3c94505a4b"
+      "802765b32d00ee75ce085ff3178630e697c5821328283652596f2eddb63f49d6"
     ],
     "actions/wal-e-restore": [
       "postgresql",
       "static",
-      "c68ce590e47853f0bbd3cd9d2708ed6e858ce49e5723f88def29af3c94505a4b"
+      "802765b32d00ee75ce085ff3178630e697c5821328283652596f2eddb63f49d6"
     ],
     "bin/charm-env": [
       "layer:basic",
@@ -139,7 +139,7 @@
     "config.yaml": [
       "postgresql",
       "dynamic",
-      "130c864370e3f0edb96a4e44de2626f687450d72ac69176f5333005a46720952"
+      "f1089000072f9be535d4ffa1c9d707bc77e01db3f4281acadf3d197812b4264b"
     ],
     "copyright": [
       "postgresql",
@@ -769,7 +769,7 @@
     "lib/cache_settings.py": [
       "postgresql",
       "static",
-      "0c60963c63fbe9f88520e0afc6398e41b822f7ed16ce48952c42d27b6505ed7d"
+      "af2ee8ad21549c5bf6676fcd0a2f8ccc6a8f07c0f133686f428fa905349a1178"
     ],
     "lib/charms/apt.py": [
       "layer:apt",
@@ -845,6 +845,16 @@
       "postgresql",
       "static",
       "c0d5f91e1dee0de4bae57b3e6b99bb60638f823a8199373fe93a03af167e544d"
+    ],
+    "lib/pg_settings_11.json": [
+      "postgresql",
+      "static",
+      "98a7d1ccfdcccfaf2b8a19778ad29ec0a70dc49043c58568e46ad0ff53c6b713"
+    ],
+    "lib/pg_settings_12.json": [
+      "postgresql",
+      "static",
+      "ddc2a36fe2b9d842f848324ccabe77efc111a1aedb7e719d4d11408efd2f7937"
     ],
     "lib/pg_settings_9.3.json": [
       "postgresql",
@@ -964,7 +974,7 @@
     "metadata.yaml": [
       "postgresql",
       "dynamic",
-      "855a727c2f926f507e3e75c485375fd68b19520e041eabe154d79cbc3d2ed701"
+      "37eeb71c8e0ea786ae73e401d390fe74bd9f49c52e11fb6f4362a1f1776398f3"
     ],
     "pydocmd.yml": [
       "layer:status",
@@ -1009,7 +1019,7 @@
     "reactive/postgresql/helpers.py": [
       "postgresql",
       "static",
-      "98b2c7394dad2b90c065567f95656969ea6a0e61fe9e3c56b43c099f589e9774"
+      "0340be7d16842d00e52701de67bed94e7df0c4286a8d287c00a4f01675567633"
     ],
     "reactive/postgresql/metrics.py": [
       "postgresql",
@@ -1024,7 +1034,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql",
       "static",
-      "efca7b64e42dee6439852c2c1c603a335c2f4faba3079228531ca52f5c673a3b"
+      "0bd3ed51a99f7d245bd246f3b94f12b79da32f7d5effe1c0f87cf71ba2f718ab"
     ],
     "reactive/postgresql/preflight.py": [
       "postgresql",
@@ -1034,12 +1044,12 @@
     "reactive/postgresql/replication.py": [
       "postgresql",
       "static",
-      "498dc5b028bca221a01a872cee03c4a78b9a98372284269975f075a3ef903c5e"
+      "d8729019536911e5f5e7655f27f75620b790d0df17a58ad0fcb9f2eb6f678157"
     ],
     "reactive/postgresql/service.py": [
       "postgresql",
       "static",
-      "33a511954aabbafd82c0e074900769ca83bb6c116467b1b6f19ca7c20f893110"
+      "7c67a8a369adb51ad4e7e3fea4f978a701ec3146fe84820f071e63bb6d17e770"
     ],
     "reactive/postgresql/storage.py": [
       "postgresql",
@@ -1106,6 +1116,11 @@
       "static",
       "eab206ea6846a5f59bb079a336ff2f4ccf3b9467d99626798df6062498d74d65"
     ],
+    "templates/hot_standby.conf.tmpl": [
+      "postgresql",
+      "static",
+      "815e0d93266411f27afed21fc6274e122f9566d451b301ca259f4e1d0ffa2b37"
+    ],
     "templates/metrics_cronjob.template": [
       "postgresql",
       "static",
@@ -1164,7 +1179,7 @@
     "tox.ini": [
       "postgresql",
       "static",
-      "1a68c8eccdea92a0d6481ac1d33210bbe37d9ca30efaa43de92eb3cc285b5b65"
+      "93a86565ef21931ddf3c5afa10a9c48006f47ee362e014c289cbb2ec528f71f2"
     ],
     "unit_tests/test_check_latest_ready_wal.py": [
       "postgresql",
@@ -1189,7 +1204,7 @@
     "version": [
       "postgresql",
       "dynamic",
-      "03c8aed252ec8ddab1b35c4820e4fe5b9e64212be253d2114af565c8314cd917"
+      "86bef532f43293782b717669f2871bee502034dc1637ab2d55bd06a44007d2a4"
     ],
     "wheelhouse/Jinja2-2.10.1.tar.gz": [
       "layer:basic",
