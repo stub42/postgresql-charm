@@ -5,7 +5,7 @@
       "url": "layer:options"
     },
     {
-      "rev": "f8629dbe4eba480677eb613f218f8a0a384709e4",
+      "rev": "c49a26e9ec96012aff03b3a43170240fd2faf163",
       "url": "layer:basic"
     },
     {
@@ -21,11 +21,11 @@
       "url": "layer:snap"
     },
     {
-      "rev": "3ff88f98a02d4bff0b3c235b8acaa658da033d9d",
+      "rev": "cc5bd3f49b2fa5e6c3ab2336763c313ec8bf083f",
       "url": "layer:leadership"
     },
     {
-      "rev": "009142e2d7349bcd6f0836e4c06cd6159361c7ed",
+      "rev": "fa27fc93e0b08000963e83a6bfe49812d890dfcf",
       "url": "layer:coordinator"
     },
     {
@@ -771,11 +771,6 @@
       "static",
       "0c60963c63fbe9f88520e0afc6398e41b822f7ed16ce48952c42d27b6505ed7d"
     ],
-    "lib/charms/__init__.py": [
-      "layer:coordinator",
-      "static",
-      "4032724b98ed267185b12b8ec78dd9bcb0423ab1c89a6f0dad99397fd51159d9"
-    ],
     "lib/charms/apt.py": [
       "layer:apt",
       "static",
@@ -794,7 +789,7 @@
     "lib/charms/layer/basic.py": [
       "layer:basic",
       "static",
-      "fee521489b7738534927ff063b5b609c9f3097d573128149de25ee0dd0fe4eba"
+      "76e644b815b9775c3e7dd8052706826fb0f0b1d410bb8f66d22ca7d5b4dc48c9"
     ],
     "lib/charms/layer/execd.py": [
       "layer:basic",
@@ -825,6 +820,11 @@
       "layer:leadership",
       "static",
       "20ffcbbc08147506759726ad51567420659ffb8a2e0121079240b8706658e332"
+    ],
+    "lib/charms/old.__init__.py": [
+      "layer:coordinator",
+      "static",
+      "4032724b98ed267185b12b8ec78dd9bcb0423ab1c89a6f0dad99397fd51159d9"
     ],
     "lib/context.py": [
       "postgresql",
@@ -1211,10 +1211,10 @@
       "dynamic",
       "cacecf0baa674d356641f1d406b8bff1d756d739c46b869a54de515d08e6fc9c"
     ],
-    "wheelhouse/charmhelpers-0.20.10.tar.gz": [
+    "wheelhouse/charmhelpers-0.20.14.tar.gz": [
       "layer:basic",
       "dynamic",
-      "b383c51d7f0bbf7c93607110c299d579c1a8868e167b42ef2c3a94eb0c1e15fc"
+      "7fde9087b1efaf92bf4117a13be8754c30cc29995afbea462d39eacc3c94102e"
     ],
     "wheelhouse/charms.reactive-1.3.0.tar.gz": [
       "layer:basic",
