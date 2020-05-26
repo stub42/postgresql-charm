@@ -46,16 +46,13 @@ def block_on_invalid_config():
     config = hookenv.config()
 
     enums = dict(
-        version=set(["", "9.3", "9.4", "9.5", "9.6", "10"]),
-        package_status=set(["install", "hold"]),
+        version=set(["", "9.3", "9.4", "9.5", "9.6", "10", "11", "12"]), package_status=set(["install", "hold"]),
     )
     for key, vals in enums.items():
         config[key] = (config.get(key) or "").lower()
         if config[key] not in vals:
             valid = False
-            status_set(
-                "blocked", "Invalid value for {} ({!r})".format(key, config[key])
-            )
+            status_set("blocked", "Invalid value for {} ({!r})".format(key, config[key]))
 
     unchangeable_config = ["locale", "encoding", "pgdg", "manual_replication"]
     if config._prev_dict is not None:
@@ -66,20 +63,14 @@ def block_on_invalid_config():
                 status_set(
                     "blocked",
                     "Cannot change {!r} after install "
-                    "(from {!r} to {!r}).".format(
-                        name, config.previous(name), config.get("name")
-                    ),
+                    "(from {!r} to {!r}).".format(name, config.previous(name), config.get("name")),
                 )
-        if config.changed("version") and (
-            config.previous("version") != postgresql.version()
-        ):
+        if config.changed("version") and (config.previous("version") != postgresql.version()):
             valid = False
             status_set(
                 "blocked",
                 "Cannot change version after install "
-                "(from {!r} to {!r}).".format(
-                    config.previous("version"), config["version"]
-                ),
+                "(from {!r} to {!r}).".format(config.previous("version"), config["version"]),
             )
             config["version"] = config.previous("version")
             valid = False
@@ -92,8 +83,7 @@ def block_on_invalid_config():
         metrics_interval = config["metrics_sample_interval"]
         if not metrics_interval:
             status_set(
-                "blocked",
-                "metrics_sample_interval is required when " "metrics_target is set",
+                "blocked", "metrics_sample_interval is required when " "metrics_target is set",
             )
             valid = False
 

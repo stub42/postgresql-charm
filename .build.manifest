@@ -33,7 +33,7 @@
       "url": "layer:nagios"
     },
     {
-      "rev": "20929d216373c978a9d892664061b941b1383adc",
+      "rev": "ca821ad6a5422e4e66746f08c6bab35052ffdbc7",
       "url": "postgresql"
     },
     {
@@ -1039,7 +1039,7 @@
     "reactive/postgresql/preflight.py": [
       "postgresql",
       "static",
-      "6bbfd8fe7fafb6ad66bd5abda45ed04290864dc50a4e5465e22d7fc3c6d15f3f"
+      "5788c80bcd64a1797c40cbcdcc4fff427cb0c7f3b92ba8e831a6b6bc8dc2ded6"
     ],
     "reactive/postgresql/replication.py": [
       "postgresql",
@@ -1204,7 +1204,7 @@
     "version": [
       "postgresql",
       "dynamic",
-      "86bef532f43293782b717669f2871bee502034dc1637ab2d55bd06a44007d2a4"
+      "9799296154bd1b462347df6d3192f4a0e7ccae6d05f531a16c91b46e191df9b8"
     ],
     "wheelhouse/Jinja2-2.10.1.tar.gz": [
       "layer:basic",
@@ -1261,10 +1261,10 @@
       "dynamic",
       "70a4cf5584e966ae92f54a764e6437af992ba42ac4bca7eb37cc5d02b98ec40a"
     ],
-    "wheelhouse/six-1.14.0.tar.gz": [
+    "wheelhouse/six-1.15.0.tar.gz": [
       "layer:basic",
       "dynamic",
-      "236bdbdce46e6e6a3d61a337c0f8b763ca1e8717c03b369e87a7ec7ce1319c0a"
+      "30639c035cdb23534cd4aa2dd52c3bf48f06e5f4a941509c8bafd8ce11080259"
     ],
     "wheelhouse/wheel-0.33.6.tar.gz": [
       "layer:basic",
