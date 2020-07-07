@@ -1,4 +1,4 @@
-# Copyright 2015-2016 Canonical Ltd.
+# Copyright 2015-2020 Canonical Ltd.
 #
 # This file is part of the Apt layer for Juju.
 #
@@ -23,6 +23,7 @@ once the apt.installed.{packagename} flag is set.
 '''
 import os.path
 import subprocess
+import re
 
 from charmhelpers import fetch
 from charmhelpers.core import hookenv
@@ -55,9 +56,23 @@ def filter_installed_packages(packages):
     # Don't use fetch.filter_installed_packages, as it depends on python-apt
     # and not available if the basic layer's use_site_packages option is off
     cmd = ['dpkg-query', '--show', r'--showformat=${Package}\n']
-    installed = set(subprocess.check_output(cmd,
-                                            universal_newlines=True).split())
-    return set(packages) - installed
+    installed = set(subprocess.check_output(cmd, universal_newlines=True).split())
+
+    # list of packages that are not installed
+    not_installed = set(packages) - installed
+
+    # now we want to check for any regex in the installation of the packages
+    not_installed_iterable = not_installed.copy()
+    for pkg in not_installed_iterable:
+        # grab the pattern that we want to match against the packages
+        p = re.compile(pkg)
+        for pkg2 in installed:
+            matched = p.search(pkg2)
+            if matched:
+                not_installed.remove(pkg)
+                break
+
+    return not_installed
 
 
 def clear_removed_package_flags():
@@ -85,10 +100,12 @@ def add_implicit_signing_keys():
         full_p = os.path.join(hookenv.charm_dir(), p)
         if os.path.exists(full_p):
             hookenv.log("Adding key {}".format(p), DEBUG)
-            subprocess.check_call(['apt-key', 'add', full_p],
-                                  stdin=subprocess.DEVNULL,
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
+            subprocess.check_call(
+                ['apt-key', 'add', full_p],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         else:
             hookenv.log('Key {!r} does not exist'.format(full_p), ERROR)
 
@@ -112,9 +129,7 @@ def configure_sources():
     sources = config.get('install_sources') or ''
     keys = config.get('install_keys') or ''
     if reactive.helpers.data_changed('apt.configure_sources', (sources, keys)):
-        fetch.configure_sources(update=False,
-                                sources_var='install_sources',
-                                keys_var='install_keys')
+        fetch.configure_sources(update=False, sources_var='install_sources', keys_var='install_keys')
         reactive.set_flag('apt.needs_update')
 
     # Clumsy 'config.get() or' per Bug #1641362
