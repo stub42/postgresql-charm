@@ -55,11 +55,7 @@ def rewrite(path, content):
     """Rewrite a file atomically, preserving ownership and permissions."""
     attr = os.lstat(path)
     write(
-        path,
-        content,
-        mode=stat.S_IMODE(attr.st_mode),
-        user=attr[stat.ST_UID],
-        group=attr[stat.ST_GID],
+        path, content, mode=stat.S_IMODE(attr.st_mode), user=attr[stat.ST_UID], group=attr[stat.ST_GID],
     )
 
 
@@ -116,10 +112,7 @@ def deprecated_config_in_use():
     deprecated = [
         key
         for key in options
-        if (
-            "DEPRECATED" in options[key]["description"]
-            and config[key] != options[key]["default"]
-        )
+        if ("DEPRECATED" in options[key]["description"] and config[key] != options[key]["default"])
     ]
     return set(deprecated)
 

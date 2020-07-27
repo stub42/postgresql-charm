@@ -93,9 +93,7 @@ def version():
     try:
         version = version_map[helpers.distro_codename()]
     except KeyError:
-        raise NotImplementedError(
-            "No default version for distro {}".format(helpers.distro_codename())
-        )
+        raise NotImplementedError("No default version for distro {}".format(helpers.distro_codename()))
     unitdata.kv().set("postgresql.pg_version", version)
     return version
 
@@ -122,9 +120,7 @@ def connect(user="postgres", database="postgres", unit=None):
     else:
         relinfo = helpers.get_peer_relation()[unit]
         if "host" not in relinfo or "port" not in relinfo:
-            raise InvalidConnection(
-                "{} has not published connection details" "".format(unit)
-            )
+            raise InvalidConnection("{} has not published connection details" "".format(unit))
         host = relinfo["host"]
         port_ = relinfo["port"]
     return psycopg2.connect(user=user, database=database, host=host, port=port_)
@@ -383,13 +379,10 @@ def ensure_database(database, owner=None):
     if cur.fetchone() is None:
         if owner is None:
             owner = "postgres"
-        cur.execute(
-            "CREATE DATABASE %s OWNER %s", (pgidentifier(database), pgidentifier(owner))
-        )
+        cur.execute("CREATE DATABASE %s OWNER %s", (pgidentifier(database), pgidentifier(owner)))
     elif owner:
         cur.execute(
-            "ALTER DATABASE %s OWNER TO %s",
-            (pgidentifier(database), pgidentifier(owner)),
+            "ALTER DATABASE %s OWNER TO %s", (pgidentifier(database), pgidentifier(owner)),
         )
 
 
@@ -419,8 +412,7 @@ def grant_database_privileges(con, role, database, privs):
     cur = con.cursor()
     for priv in privs:
         cur.execute(
-            "GRANT %s ON DATABASE %s TO %s",
-            (AsIs(priv), pgidentifier(database), pgidentifier(role)),
+            "GRANT %s ON DATABASE %s TO %s", (AsIs(priv), pgidentifier(database), pgidentifier(role)),
         )
 
 
@@ -484,9 +476,7 @@ def ensure_extensions(con, extensions):
                    WHERE pg_namespace.oid = extnamespace"""
     )
     installed_extensions = frozenset((x[0], x[1]) for x in cur.fetchall())
-    hookenv.log(
-        "ensure_extensions({}), have {}".format(extensions, installed_extensions), DEBUG
-    )
+    hookenv.log("ensure_extensions({}), have {}".format(extensions, installed_extensions), DEBUG)
     extensions_set = frozenset(set(extensions))
     extensions_to_create = extensions_set.difference(installed_extensions)
     for ext, schema in extensions_to_create:
@@ -495,8 +485,7 @@ def ensure_extensions(con, extensions):
             cur.execute("CREATE SCHEMA IF NOT EXISTS %s", (pgidentifier(schema),))
             cur.execute("GRANT USAGE ON SCHEMA %s TO PUBLIC", (pgidentifier(schema),))
         cur.execute(
-            "CREATE EXTENSION %s WITH SCHEMA %s",
-            (pgidentifier(ext), pgidentifier(schema)),
+            "CREATE EXTENSION %s WITH SCHEMA %s", (pgidentifier(ext), pgidentifier(schema)),
         )
 
 
@@ -567,9 +556,7 @@ def emit_pg_log(lines=100):
     if os.path.exists(sig):
         print("standby.signal exists at {}".format(sig))
     subprocess.call([pg_controldata_path(), "-D", data_dir()], universal_newlines=True)
-    subprocess.call(
-        ["tail", "-{:d}".format(lines), pg_log_path()], universal_newlines=True
-    )
+    subprocess.call(["tail", "-{:d}".format(lines), pg_log_path()], universal_newlines=True)
 
 
 def reload_config():
@@ -630,9 +617,7 @@ def parse_config(unparsed_config, fatal=True):
                 x.lineno = lineno
                 x.text = line
                 raise x
-            workloadstatus.status_set(
-                "blocked", "{} line {}: {}".format(x, lineno, line)
-            )
+            workloadstatus.status_set("blocked", "{} line {}: {}".format(x, lineno, line))
             raise SystemExit(0)
     return parsed
 
@@ -647,9 +632,7 @@ def pg_settings_schema():
 
     Generate the file using lib/cache_settings.py.
     """
-    cache = os.path.join(
-        hookenv.charm_dir(), "lib", "pg_settings_{}.json".format(version())
-    )
+    cache = os.path.join(hookenv.charm_dir(), "lib", "pg_settings_{}.json".format(version()))
     assert os.path.exists(cache), "No pg_settings cache {}".format(cache)
     with open(cache, "r") as f:
         schema = json.load(f)
@@ -714,13 +697,10 @@ def convert_unit(value_with_unit, dest_unit):
                 return v * conv[source_unit] / conv[dest_unit]
             else:
                 raise ValueError(
-                    value_with_unit,
-                    "Cannot convert {} to {}".format(source_unit, dest_unit),
+                    value_with_unit, "Cannot convert {} to {}".format(source_unit, dest_unit),
                 )
     raise ValueError(
-        value_with_unit,
-        "Unknown conversion unit {!r}. "
-        "Units are case sensitive.".format(source_unit),
+        value_with_unit, "Unknown conversion unit {!r}. " "Units are case sensitive.".format(source_unit),
     )
 
 
@@ -800,8 +780,7 @@ def promote():
     assert is_running(), "Attempting to promote a stopped server"
 
     rc = subprocess.call(
-        ["sudo", "-u", "postgres", "-H", pg_ctl_path(), "promote", "-D", data_dir()],
-        universal_newlines=True,
+        ["sudo", "-u", "postgres", "-H", pg_ctl_path(), "promote", "-D", data_dir()], universal_newlines=True,
     )
     if rc != 0:
         helpers.status_set("blocked", "Failed to promote to primary")

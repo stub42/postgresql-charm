@@ -46,9 +46,5 @@ cur.execute(
 cache = os.path.join(os.path.dirname(__file__), "pg_settings_{}.json".format(ver))
 with open(cache, "w") as f:
     json.dump(
-        {d["name"].lower(): d for d in cur.fetchall()},
-        f,
-        ensure_ascii=True,
-        indent=4,
-        sort_keys=True,
+        {d["name"].lower(): d for d in cur.fetchall()}, f, ensure_ascii=True, indent=4, sort_keys=True,
     )

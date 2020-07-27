@@ -89,9 +89,7 @@ class Relation(OrderedDict):
     def __init__(self, relid):
         remote_units = hookenv.related_units(relid)
         remote_units.sort(key=lambda u: int(u.split("/", 1)[-1]))
-        super(Relation, self).__init__(
-            (unit, RelationInfo(relid, unit)) for unit in remote_units
-        )
+        super(Relation, self).__init__((unit, RelationInfo(relid, unit)) for unit in remote_units)
 
         self.relname = relid.split(":", 1)[0]
         self.relid = relid
@@ -109,9 +107,7 @@ class Relation(OrderedDict):
             peers = hookenv.related_units(peer_relid)
             if peers:
                 peers.sort(key=lambda u: int(u.split("/", 1)[-1]))
-                self.peers = OrderedDict(
-                    (peer, RelationInfo(relid, peer)) for peer in peers
-                )
+                self.peers = OrderedDict((peer, RelationInfo(relid, peer)) for peer in peers)
             else:
                 self.peers = OrderedDict()
         else:
@@ -179,9 +175,7 @@ class RelationInfo(UserDict):
 
     def __setitem__(self, key, value):
         if self.unit != hookenv.local_unit():
-            raise TypeError(
-                "Attempting to set {} on remote unit {}" "".format(key, self.unit)
-            )
+            raise TypeError("Attempting to set {} on remote unit {}" "".format(key, self.unit))
         if value is not None and not isinstance(value, six.string_types):
             # We don't do implicit casting. This would cause simple
             # types like integers to be read back as strings in subsequent

@@ -64,9 +64,7 @@ def ensure_nagios_credentials():
 @when_not("postgresql.nagios.user_ensured")
 def ensure_nagios_user():
     con = postgresql.connect()
-    postgresql.ensure_user(
-        con, nagios_username(), leadership.leader_get("nagios_password")
-    )
+    postgresql.ensure_user(con, nagios_username(), leadership.leader_get("nagios_password"))
     con.commit()
     reactive.set_state("postgresql.nagios.user_ensured")
 
@@ -86,9 +84,7 @@ def update_nagios_pgpass():
     leader = context.Leader()
     nagios_password = leader["nagios_password"]
     content = "*:*:*:{}:{}".format(nagios_username(), nagios_password)
-    helpers.write(
-        nagios_pgpass_path(), content, mode=0o600, user="nagios", group="nagios"
-    )
+    helpers.write(nagios_pgpass_path(), content, mode=0o600, user="nagios", group="nagios")
 
 
 @when("postgresql.nagios.enabled")
@@ -108,26 +104,20 @@ def update_nrpe_config():
     user = nagios_username()
     port = postgresql.port()
     nrpe.add_check(
-        shortname="pgsql",
-        description="Check pgsql",
-        check_cmd="check_pgsql -P {} -l {}".format(port, user),
+        shortname="pgsql", description="Check pgsql", check_cmd="check_pgsql -P {} -l {}".format(port, user),
     )
 
     # copy the check script which will run cronned as postgres user
     with open("scripts/find_latest_ready_wal.py") as fh:
         check_script = fh.read()
 
-    check_script_path = "{}/{}".format(
-        helpers.scripts_dir(), "find_latest_ready_wal.py"
-    )
+    check_script_path = "{}/{}".format(helpers.scripts_dir(), "find_latest_ready_wal.py")
     helpers.write(check_script_path, check_script, mode=0o755)
 
     # create an (empty) file with appropriate permissions for the above
     check_output_path = "/var/lib/nagios/postgres-wal-max-age.txt"
     if not os.path.exists(check_output_path):
-        helpers.write(
-            check_output_path, b"0\n", mode=0o644, user="postgres", group="postgres"
-        )
+        helpers.write(check_output_path, b"0\n", mode=0o644, user="postgres", group="postgres")
 
     # retrieve the threshold values from the charm config
     config = hookenv.config()
@@ -143,18 +133,14 @@ def update_nrpe_config():
     # copy the nagios plugin which will check the cronned output
     with open("scripts/check_latest_ready_wal.py") as fh:
         check_script = fh.read()
-    check_script_path = "{}/{}".format(
-        "/usr/local/lib/nagios/plugins", "check_latest_ready_wal.py"
-    )
+    check_script_path = "{}/{}".format("/usr/local/lib/nagios/plugins", "check_latest_ready_wal.py")
     helpers.write(check_script_path, check_script, mode=0o755)
 
     # write the nagios check definition
     nrpe.add_check(
         shortname="pgsql_stale_wal",
         description="Check for stale WAL backups",
-        check_cmd="{} {} {}".format(
-            check_script_path, check_warn_threshold, check_crit_threshold
-        ),
+        check_cmd="{} {} {}".format(check_script_path, check_warn_threshold, check_crit_threshold),
     )
 
     if reactive.is_state("postgresql.replication.is_master"):
@@ -166,10 +152,7 @@ def update_nrpe_config():
         nrpe.add_check(
             shortname="pgsql_backups",
             description="Check pgsql backups",
-            check_cmd=(
-                "check_file_age -w {} -c {} -f {}"
-                "".format(warn_age, crit_age, backups_log)
-            ),
+            check_cmd=("check_file_age -w {} -c {} -f {}" "".format(warn_age, crit_age, backups_log)),
         )
     else:
         # Standbys don't do backups. We still generate a check though,

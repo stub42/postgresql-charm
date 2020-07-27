@@ -52,10 +52,7 @@ def config_changed():
 
 @everyhook
 def main():
-    if not (
-        reactive.is_state("postgresql.cluster.created")
-        or reactive.is_state("postgresql.cluster.initial-check")
-    ):
+    if not (reactive.is_state("postgresql.cluster.created") or reactive.is_state("postgresql.cluster.initial-check")):
         # We need to check for existance of an existing database,
         # before the main PostgreSQL package has been installed.
         # If there is one, abort rather than risk destroying data.
@@ -65,16 +62,12 @@ def main():
         if os.path.exists(postgresql.postgresql_conf_path()):
             hookenv.status_set(
                 "blocked",
-                "PostgreSQL config from previous install found at {}".format(
-                    postgresql.postgresql_conf_path()
-                ),
+                "PostgreSQL config from previous install found at {}".format(postgresql.postgresql_conf_path()),
             )
         elif os.path.exists(postgresql.data_dir()):
             hookenv.status_set(
                 "blocked",
-                "PostgreSQL database from previous install found at {}".format(
-                    postgresql.postgresql.data_dir()
-                ),
+                "PostgreSQL database from previous install found at {}".format(postgresql.postgresql.data_dir()),
             )
         else:
             hookenv.log("No pre-existing PostgreSQL database found")
@@ -84,14 +77,11 @@ def main():
     # crashed and servers rebooted since then.
     if reactive.is_state("postgresql.cluster.created"):
         try:
-            reactive.toggle_state(
-                "postgresql.cluster.is_running", postgresql.is_running()
-            )
+            reactive.toggle_state("postgresql.cluster.is_running", postgresql.is_running())
         except subprocess.CalledProcessError as x:
             if not reactive.is_state("workloadstatus.blocked"):
                 status_set(
-                    "blocked",
-                    "Local PostgreSQL cluster is corrupt: {}".format(x.stderr),
+                    "blocked", "Local PostgreSQL cluster is corrupt: {}".format(x.stderr),
                 )
 
     # Reconfigure PostgreSQL. While we don't strictly speaking need
@@ -115,10 +105,7 @@ def emit_deprecated_option_warnings():
     deprecated = sorted(helpers.deprecated_config_in_use())
     if deprecated:
         hookenv.log(
-            "Deprecated configuration settings in use: {}".format(
-                ", ".join(deprecated)
-            ),
-            WARNING,
+            "Deprecated configuration settings in use: {}".format(", ".join(deprecated)), WARNING,
         )
 
 
@@ -138,10 +125,7 @@ def generate_locale():
     if config["locale"] != "C":
         status_set("maintenance", "Generating {} locale".format(config["locale"]))
         subprocess.check_call(
-            [
-                "locale-gen",
-                "{}.{}".format(hookenv.config("locale"), hookenv.config("encoding")),
-            ],
+            ["locale-gen", "{}.{}".format(hookenv.config("locale"), hookenv.config("encoding")),],
             universal_newlines=True,
         )
     reactive.set_state("postgresql.cluster.locale.set")
@@ -212,11 +196,7 @@ def create_pg_ctl_conf():
                         """
     )
     helpers.write(
-        postgresql.pg_ctl_conf_path(),
-        contents,
-        mode=0o644,
-        user="postgres",
-        group="postgres",
+        postgresql.pg_ctl_conf_path(), contents, mode=0o644, user="postgres", group="postgres",
     )
     reactive.set_flag("postgresql.cluster.pg_ctl_conf.created")
 
@@ -268,21 +248,12 @@ def update_pg_ident_conf():
     with open(path, "r") as f:
         current_pg_ident = f.read()
     for sysuser, pguser in entries:
-        if (
-            re.search(
-                r"^\s*juju_charm\s+{}\s+{}\s*$".format(sysuser, pguser),
-                current_pg_ident,
-                re.M,
-            )
-            is None
-        ):
+        if re.search(r"^\s*juju_charm\s+{}\s+{}\s*$".format(sysuser, pguser), current_pg_ident, re.M,) is None:
             with open(path, "a") as f:
                 f.write("\njuju_charm {} {}".format(sysuser, pguser))
 
     # Use @when_file_changed for this when Issue #44 is resolved.
-    if reactive.helpers.any_file_changed([path]) and reactive.is_state(
-        "postgresql.cluster.is_running"
-    ):
+    if reactive.helpers.any_file_changed([path]) and reactive.is_state("postgresql.cluster.is_running"):
         hookenv.log("pg_ident.conf has changed. PostgreSQL needs reload.")
         reactive.set_state("postgresql.cluster.needs_reload")
 
@@ -302,9 +273,7 @@ def update_pg_hba_conf():
     helpers.rewrite(path, pg_hba_content)
 
     # Use @when_file_changed for this when Issue #44 is resolved.
-    if reactive.helpers.any_file_changed([path]) and reactive.is_state(
-        "postgresql.cluster.is_running"
-    ):
+    if reactive.helpers.any_file_changed([path]) and reactive.is_state("postgresql.cluster.is_running"):
         hookenv.log("pg_hba.conf has changed. PostgreSQL needs reload.")
         reactive.set_state("postgresql.cluster.needs_reload")
 
@@ -343,21 +312,11 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
                 qaddr = postgresql.quote_identifier(addr)
                 # Magic replication database, for replication.
                 add(
-                    "host",
-                    "replication",
-                    replication.replication_username(),
-                    qaddr,
-                    "md5",
-                    "# {}".format(relinfo),
+                    "host", "replication", replication.replication_username(), qaddr, "md5", "# {}".format(relinfo),
                 )
                 # postgres db, so leader can query replication status.
                 add(
-                    "host",
-                    "postgres",
-                    replication.replication_username(),
-                    qaddr,
-                    "md5",
-                    "# {}".format(relinfo),
+                    "host", "postgres", replication.replication_username(), qaddr, "md5", "# {}".format(relinfo),
                 )
 
     # Clients need access to the relation database as the relation users.
@@ -393,12 +352,7 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
             for relinfo in rel.values():
                 for addr in incoming_addresses(relinfo):
                     add(
-                        "host",
-                        "all",
-                        "all",
-                        postgresql.quote_identifier(addr),
-                        "md5",
-                        "# {}".format(relinfo),
+                        "host", "all", "all", postgresql.quote_identifier(addr), "md5", "# {}".format(relinfo),
                     )
 
     # External replication connections. Somewhat different than before
@@ -654,9 +608,7 @@ def postgresql_conf_deprecated_overrides():
 
     # The simple deprecated options map directly to postgresql.conf settings.
     # Strip the deprecated options that no longer exist at all here.
-    settings = {
-        k: config[k] for k in in_use if k in simple_options and k in valid_options
-    }
+    settings = {k: config[k] for k in in_use if k in simple_options and k in valid_options}
 
     # The listen_port and collapse_limit options were special.
     config_yaml_options = helpers.config_yaml()["options"]
@@ -725,10 +677,7 @@ def ensure_viable_postgresql_conf(opts):
 
     # Having two config options for the one setting is confusing. Perhaps
     # we should deprecate this.
-    if num_standbys and (
-        int(config["replicated_wal_keep_segments"])
-        > int(opts.get("wal_keep_segments", 0))
-    ):
+    if num_standbys and (int(config["replicated_wal_keep_segments"]) > int(opts.get("wal_keep_segments", 0))):
         force(wal_keep_segments=config["replicated_wal_keep_segments"])
 
     # Log shipping with WAL-E.
@@ -743,8 +692,7 @@ def ensure_viable_postgresql_conf(opts):
     # so much easier to parse.
     if context.Relations()["syslog"]:
         force(
-            log_destination="stderr,syslog",
-            syslog_ident=hookenv.local_unit().replace("/", "_"),
+            log_destination="stderr,syslog", syslog_ident=hookenv.local_unit().replace("/", "_"),
         )
 
 
@@ -783,9 +731,7 @@ def validate_postgresql_conf(conf):
             elif r.vartype == "enum":
                 v = v.lower()
                 if v not in r.enumvals:
-                    raise ValueError(
-                        "Must be one of {}. Got {}".format(",".join(r.enumvals), v)
-                    )
+                    raise ValueError("Must be one of {}. Got {}".format(",".join(r.enumvals), v))
 
             elif r.vartype == "integer":
                 if r.unit:
@@ -835,12 +781,7 @@ def update_postgresql_conf():
     for k in settings:
         # Comment out conflicting options. We could just allow later
         # options to override earlier ones, but this is less surprising.
-        pg_conf = re.sub(
-            r"^\s*({}[\s=].*)$".format(re.escape(k)),
-            r"# juju # \1",
-            pg_conf,
-            flags=re.M | re.I,
-        )
+        pg_conf = re.sub(r"^\s*({}[\s=].*)$".format(re.escape(k)), r"# juju # \1", pg_conf, flags=re.M | re.I,)
 
     # Store the updated charm options. This is compared with the
     # live config to detect if a restart is required.
@@ -860,9 +801,7 @@ def update_postgresql_conf():
             v = "'{}'".format(v.replace("'", "''"))
         override_section.append("{} = {}".format(k, v))
     if postgresql.has_version("12"):
-        override_section.append(
-            "include_if_exists '{}'".format(postgresql.hot_standby_conf_path())
-        )
+        override_section.append("include_if_exists '{}'".format(postgresql.hot_standby_conf_path()))
     override_section.append(end_mark)
     pg_conf += "\n" + "\n".join(override_section)
 
@@ -900,9 +839,7 @@ def postgresql_conf_changed():
 
     if not live or not current:
         hookenv.log(
-            "PostgreSQL started without current config being saved. "
-            "Was the server rebooted unexpectedly?",
-            WARNING,
+            "PostgreSQL started without current config being saved. " "Was the server rebooted unexpectedly?", WARNING,
         )
         reactive.set_state("postgresql.cluster.needs_restart")
         return
@@ -916,10 +853,7 @@ def postgresql_conf_changed():
         old = live.get(key)
         new = current.get(key)
         if old != new:
-            hookenv.log(
-                "{} changed from {!r} to {!r}. "
-                "Restart required.".format(key, old, new)
-            )
+            hookenv.log("{} changed from {!r} to {!r}. " "Restart required.".format(key, old, new))
             needs_restart = True
     if needs_restart:
         reactive.set_state("postgresql.cluster.needs_restart")
@@ -1008,12 +942,7 @@ def install_administrative_scripts():
     )
     destination = os.path.join(helpers.scripts_dir(), "pg_backup_job")
     templating.render(
-        "pg_backup_job.tmpl",
-        destination,
-        data,
-        owner="root",
-        group="postgres",
-        perms=0o755,
+        "pg_backup_job.tmpl", destination, data, owner="root", group="postgres", perms=0o755,
     )
 
     # Install the reaper scripts.
@@ -1030,11 +959,7 @@ def install_administrative_scripts():
         # does not exist, in order to trigger spurious alerts when a
         # unit is installed, per Bug #1329816.
         helpers.write(
-            helpers.backups_log_path(),
-            "",
-            mode=0o644,
-            user="postgres",
-            group="postgres",
+            helpers.backups_log_path(), "", mode=0o644, user="postgres", group="postgres",
         )
 
     reactive.set_state("postgresql.cluster.support-scripts")
@@ -1058,12 +983,7 @@ def update_postgresql_crontab():
 
     destination = os.path.join(helpers.cron_dir(), "juju-postgresql")
     templating.render(
-        "postgres.cron.tmpl",
-        destination,
-        data,
-        owner="root",
-        group="postgres",
-        perms=0o640,
+        "postgres.cron.tmpl", destination, data, owner="root", group="postgres", perms=0o640,
     )
 
 

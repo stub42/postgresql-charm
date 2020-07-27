@@ -34,9 +34,7 @@ class AmuletFixture(amulet.Deployment):
         # We use a wrapper around juju-deployer so we can adjust how it is
         # invoked. In particular, only make noise on failure.
         juju_deployer = os.path.abspath(
-            os.path.join(
-                os.path.dirname(__file__), os.pardir, "lib", "juju-deployer-wrapper.py"
-            )
+            os.path.join(os.path.dirname(__file__), os.pardir, "lib", "juju-deployer-wrapper.py")
         )
         super(AmuletFixture, self).__init__(series=series, juju_deployer=juju_deployer)
 
@@ -108,15 +106,11 @@ class AmuletFixture(amulet.Deployment):
         if not isinstance(units, int) or units < 1:
             raise ValueError("Only positive integers can be used for units")
         if target is not None and units != 1:
-            raise ValueError(
-                "Can't deploy more than one unit when specifying a target."
-            )
+            raise ValueError("Can't deploy more than one unit when specifying a target.")
         if service not in self.services:
             raise ValueError("Service needs to be added before you can scale")
 
-        self.services[service]["num_units"] = (
-            self.services[service].get("num_units", 1) + units
-        )
+        self.services[service]["num_units"] = self.services[service].get("num_units", 1) + units
 
         if self.deployed:
             args = ["add-unit", service, "-n", str(units)]
@@ -129,9 +123,7 @@ class AmuletFixture(amulet.Deployment):
 
     def get_status(self):
         try:
-            raw = subprocess.check_output(
-                ["juju", "status", "--format=json"], universal_newlines=True
-            )
+            raw = subprocess.check_output(["juju", "status", "--format=json"], universal_newlines=True)
         except subprocess.CalledProcessError as x:
             print(x.output)
             raise
@@ -181,9 +173,7 @@ class AmuletFixture(amulet.Deployment):
             for service_name, service in service_items:
                 if service_name in keep:
                     # Don't mess with this service.
-                    keep_machines.update(
-                        [unit["machine"] for unit in service["units"].values()]
-                    )
+                    keep_machines.update([unit["machine"] for unit in service["units"].values()])
                     continue
 
                 if service.get("life", "") not in ("dying", "dead"):
@@ -191,9 +181,7 @@ class AmuletFixture(amulet.Deployment):
                         cmd = ["juju", "remove-application", service_name]
                     else:
                         cmd = ["juju", "destroy-service", service_name]
-                    subprocess.call(
-                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
-                    )
+                    subprocess.call(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
                 for unit_name, unit in service.get("units", {}).items():
                     if unit.get("agent-state", None) == "error":
@@ -207,9 +195,7 @@ class AmuletFixture(amulet.Deployment):
 
         harvest_machines = []
         for machine, state in status.get("machines", {}).items():
-            if machine not in keep_machines and (
-                state.get("life") not in ("dying", "dead")
-            ):
+            if machine not in keep_machines and (state.get("life") not in ("dying", "dead")):
                 harvest_machines.append(machine)
 
         if harvest_machines:
@@ -252,16 +238,11 @@ class AmuletFixture(amulet.Deployment):
         # due to a) it containing symlinks juju will reject and b) to avoid
         # infinite recursion.
         shutil.copytree(
-            src_charm_dir,
-            self.charm_dir,
-            symlinks=True,
-            ignore=shutil.ignore_patterns(".bzr", ".tox"),
+            src_charm_dir, self.charm_dir, symlinks=True, ignore=shutil.ignore_patterns(".bzr", ".tox"),
         )
 
     def juju_version(self):
-        return subprocess.check_output(
-            ["juju", "--version"], universal_newlines=True
-        ).strip()
+        return subprocess.check_output(["juju", "--version"], universal_newlines=True).strip()
 
     def has_juju_version(self, minver):
         return LooseVersion(self.juju_version()) >= LooseVersion(minver)

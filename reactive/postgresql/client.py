@@ -63,9 +63,7 @@ def set_client_passwords():
         for rel in rels[relname].values():
             superuser, replication = _credential_types(rel)
             for remote in rel.values():
-                user = postgresql.username(
-                    remote.service, superuser=superuser, replication=replication
-                )
+                user = postgresql.username(remote.service, superuser=superuser, replication=replication)
                 if user not in pwds:
                     password = host.pwgen()
                     pwds[user] = password
@@ -157,9 +155,7 @@ def db_relation_master(rel):
     superuser, replication = _credential_types(rel)
 
     if "user" not in master:
-        user = postgresql.username(
-            remote.service, superuser=superuser, replication=replication
-        )
+        user = postgresql.username(remote.service, superuser=superuser, replication=replication)
         password = get_client_password(user)
         if not password:
             hookenv.log("** Master waiting for {} password".format(user))
@@ -172,9 +168,7 @@ def db_relation_master(rel):
             master["schema_user"] = user
             master["schema_password"] = password
 
-    hookenv.log(
-        "** Master providing {} ({}/{})".format(rel, master["database"], master["user"])
-    )
+    hookenv.log("** Master providing {} ({}/{})".format(rel, master["database"], master["user"]))
 
     # Reflect these settings back so the client knows when they have
     # taken effect.
@@ -246,22 +240,13 @@ def db_relation_common(rel):
     # This is to avoid the race condition where a new client unit
     # joins an existing client relation and sees valid credentials,
     # before we have had a chance to grant it access.
-    local["allowed-units"] = " ".join(
-        unit for unit, relinfo in rel.items() if len(incoming_addresses(relinfo)) > 0
-    )
+    local["allowed-units"] = " ".join(unit for unit, relinfo in rel.items() if len(incoming_addresses(relinfo)) > 0)
 
     # The list of IP address ranges on this relation granted access.
     # This will replace allowed-units, which does not work with cross
     # model ralations due to the anonymization of the external client.
     local["allowed-subnets"] = ",".join(
-        sorted(
-            {
-                r: True
-                for r in chain(
-                    *[incoming_addresses(relinfo) for relinfo in rel.values()]
-                )
-            }.keys()
-        )
+        sorted({r: True for r in chain(*[incoming_addresses(relinfo) for relinfo in rel.values()])}.keys())
     )
 
     # v2 protocol. Publish connection strings for this unit and its peers.
@@ -278,10 +263,7 @@ def db_relation_common(rel):
         all_relinfo = rel.peers.values()
     all_relinfo = list(rel.peers.values()) if rel.peers else []
     all_relinfo.append(rel.local)
-    standbys = filter(
-        None,
-        [relinfo_to_cs(relinfo) for relinfo in all_relinfo if relinfo.unit != master],
-    )
+    standbys = filter(None, [relinfo_to_cs(relinfo) for relinfo in all_relinfo if relinfo.unit != master],)
     local["standbys"] = "\n".join(sorted(standbys)) or None
 
 
@@ -314,10 +296,7 @@ def ensure_db_relation_resources(rel):
     if "password" not in master:
         return
 
-    hookenv.log(
-        "Ensuring database {!r} and user {!r} exist for {}"
-        "".format(master["database"], master["user"], rel)
-    )
+    hookenv.log("Ensuring database {!r} and user {!r} exist for {}" "".format(master["database"], master["user"], rel))
 
     # First create the database, if it isn't already.
     postgresql.ensure_database(master["database"])
@@ -327,11 +306,7 @@ def ensure_db_relation_resources(rel):
 
     superuser, replication = _credential_types(rel)
     postgresql.ensure_user(
-        con,
-        master["user"],
-        master["password"],
-        superuser=superuser,
-        replication=replication,
+        con, master["user"], master["password"], superuser=superuser, replication=replication,
     )
     if not superuser:
         postgresql.ensure_user(con, master["schema_user"], master["schema_password"])
@@ -343,9 +318,7 @@ def ensure_db_relation_resources(rel):
     privs = set(filter(None, config["relation_database_privileges"].split(",")))
     postgresql.grant_database_privileges(con, master["user"], master["database"], privs)
     if not superuser:
-        postgresql.grant_database_privileges(
-            con, master["schema_user"], master["database"], privs
-        )
+        postgresql.grant_database_privileges(con, master["schema_user"], master["database"], privs)
 
     # Reset the roles granted to the user as requested.
     if "roles" in master:
@@ -379,7 +352,6 @@ def ingress_address(endpoint, relid):
     except NotImplementedError:
         # Warn, although this is normal with older Juju.
         hookenv.log(
-            "Unable to determine ingress address, " "falling back to private ip",
-            hookenv.WARNING,
+            "Unable to determine ingress address, " "falling back to private ip", hookenv.WARNING,
         )
         return hookenv.unit_private_ip()

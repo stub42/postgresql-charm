@@ -58,8 +58,7 @@ def rebuild_all_relations():
         if config["database"] != relation.get("database", ""):
             log(
                 "Switching from database {} to {}".format(
-                    relation.get("database", "") or def_str,
-                    config["database"] or def_str,
+                    relation.get("database", "") or def_str, config["database"] or def_str,
                 ),
                 INFO,
             )
@@ -121,19 +120,13 @@ def build_script(script_name, relation):
         pgpass=pgpass_path,
     )
     log("Generating wrapper {}".format(script_path), INFO)
-    host.write_file(
-        script_path, script.encode("UTF8"), owner="ubuntu", group="ubuntu", perms=0o700
-    )
+    host.write_file(script_path, script.encode("UTF8"), owner="ubuntu", group="ubuntu", perms=0o700)
 
     # The wrapper requires access to the password, stored in a .pgpass
     # file so it isn't exposed in an environment variable or on the
     # command line.
-    pgpass = "*:*:*:{user}:{password}".format(
-        user=relation["user"], password=relation["password"]
-    )
-    host.write_file(
-        pgpass_path, pgpass.encode("UTF8"), owner="ubuntu", group="ubuntu", perms=0o400
-    )
+    pgpass = "*:*:*:{user}:{password}".format(user=relation["user"], password=relation["password"])
+    host.write_file(pgpass_path, pgpass.encode("UTF8"), owner="ubuntu", group="ubuntu", perms=0o400)
 
 
 hooks = hookenv.Hooks()
@@ -141,9 +134,7 @@ hooks = hookenv.Hooks()
 
 @hooks.hook()
 def install():
-    fetch.apt_install(
-        ["language-pack-en", "postgresql-client", "python3-psycopg2"], fatal=True
-    )
+    fetch.apt_install(["language-pack-en", "postgresql-client", "python3-psycopg2"], fatal=True)
     update_system_path()
 
 

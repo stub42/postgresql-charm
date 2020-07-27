@@ -80,17 +80,14 @@ def remount():
         service.stop()
 
     old_data_dir = postgresql.data_dir()
-    new_data_dir = os.path.join(
-        external_volume_mount, "postgresql", postgresql.version(), "main"
-    )
+    new_data_dir = os.path.join(external_volume_mount, "postgresql", postgresql.version(), "main")
     backup_data_dir = "{}-{}".format(old_data_dir, int(time.time()))
 
     if os.path.isdir(new_data_dir):
         hookenv.log("Remounting existing database at {}".format(new_data_dir), WARNING)
     else:
         status_set(
-            "maintenance",
-            "Migrating data from {} to {}".format(old_data_dir, new_data_dir),
+            "maintenance", "Migrating data from {} to {}".format(old_data_dir, new_data_dir),
         )
         helpers.makedirs(new_data_dir, mode=0o770, user="postgres", group="postgres")
         try:
@@ -99,9 +96,7 @@ def remount():
             subprocess.check_call(rsync_cmd)
         except subprocess.CalledProcessError:
             status_set(
-                "blocked",
-                "Failed to sync data from {} to {}"
-                "".format(old_data_dir, new_data_dir),
+                "blocked", "Failed to sync data from {} to {}" "".format(old_data_dir, new_data_dir),
             )
             return
 
