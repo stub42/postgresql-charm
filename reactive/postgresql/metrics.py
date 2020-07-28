@@ -28,8 +28,7 @@ from reactive.postgresql import helpers
 def update_metrics():
     config = hookenv.config()
     if reactive.helpers.data_changed(
-        "postgresql.metrics",
-        (config["metrics_target"], config["metrics_sample_interval"]),
+        "postgresql.metrics", (config["metrics_target"], config["metrics_sample_interval"]),
     ):
         reactive.set_state("postgresql.metrics.needs_update")
 
@@ -54,9 +53,7 @@ def write_metrics_cronjob():
     charm_dir = hookenv.charm_dir()
     statsd_host, statsd_port = metrics_target.split(":", 1)
     metrics_prefix = config["metrics_prefix"].strip()
-    metrics_prefix = metrics_prefix.replace(
-        "$UNIT", hookenv.local_unit().replace(".", "-").replace("/", "-")
-    )
+    metrics_prefix = metrics_prefix.replace("$UNIT", hookenv.local_unit().replace(".", "-").replace("/", "-"))
 
     # ensure script installed
     charm_script = os.path.join(charm_dir, "files", "metrics", "postgres_to_statsd.py")

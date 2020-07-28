@@ -50,9 +50,7 @@ class SyslogProvides(reactive.relations.RelationBase):
             remote_unit = conv.scope
             remote_addr = conv.get_remote("private-address")
 
-            if reactive.helpers.data_changed(
-                "syslog.{}".format(remote_unit), (remote_unit, remote_addr)
-            ):
+            if reactive.helpers.data_changed("syslog.{}".format(remote_unit), (remote_unit, remote_addr)):
                 path = self._rsyslog_conf_path(remote_unit)
 
                 templating.render(

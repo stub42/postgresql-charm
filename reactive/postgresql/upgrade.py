@@ -127,9 +127,7 @@ def upgrade_charm():
     reactive.remove_state("postgresql.cluster.support-scripts")
 
     # Ensure that systemd is managing the PostgreSQL process
-    if host.init_is_systemd() and not reactive.is_flag_set(
-        "postgresql.upgrade.systemd"
-    ):
+    if host.init_is_systemd() and not reactive.is_flag_set("postgresql.upgrade.systemd"):
         reactive.set_flag("postgresql.upgrade.systemd")
         if reactive.is_flag_set("postgresql.cluster.is_running"):
             hookenv.log("Restarting PostgreSQL under systemd", hookenv.WARNING)
@@ -146,18 +144,10 @@ def migrate_user(old_username, new_username, password, superuser=False):
         con = postgresql.connect()
         postgresql.ensure_user(con, new_username, password, superuser=superuser)
         cur = con.cursor()
-        hookenv.log(
-            "Granting old role {} to new role {}" "".format(old_username, new_username)
-        )
+        hookenv.log("Granting old role {} to new role {}" "".format(old_username, new_username))
         cur.execute(
-            "GRANT %s TO %s",
-            (
-                postgresql.pgidentifier(old_username),
-                postgresql.pgidentifier(new_username),
-            ),
+            "GRANT %s TO %s", (postgresql.pgidentifier(old_username), postgresql.pgidentifier(new_username),),
         )
         con.commit()
     else:
-        hookenv.log(
-            "Primary must map role {!r} to {!r}" "".format(old_username, new_username)
-        )
+        hookenv.log("Primary must map role {!r} to {!r}" "".format(old_username, new_username))

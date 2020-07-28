@@ -528,10 +528,10 @@ def update_recovery_conf(follow):
     pg12 = postgresql.has_version("12")
     if pg12:
         path = postgresql.hot_standby_conf_path()
-        template = 'hot_standby.conf.tmpl'
+        template = "hot_standby.conf.tmpl"
     else:
         path = postgresql.recovery_conf_path()
-        template = 'recovery.conf.tmpl'
+        template = "recovery.conf.tmpl"
 
     config = hookenv.config()
 

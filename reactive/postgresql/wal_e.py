@@ -39,17 +39,20 @@ from reactive.workloadstatus import status_set
 def main():
     storage_uri = hookenv.config()["wal_e_storage_uri"].strip()
     reactive.helpers.toggle_state("postgresql.wal_e.enabled", storage_uri)
-    reactive.helpers.toggle_state(
-        "postgresql.wal_e.swift", storage_uri.startswith("swift:")
-    )
+    reactive.helpers.toggle_state("postgresql.wal_e.swift", storage_uri.startswith("swift:"))
     reactive.remove_state("postgresql.wal_e.configured")
 
 
 @when_any(
+    "config.set.os_auth_url",
     "config.set.os_username",
     "config.set.os_password",
-    "config.set.os_auth_url",
     "config.set.os_tenant_name",
+    "config.set.os_region_name",
+    "config.set.os_identity_api_version",
+    "config.set.os_user_domain_name",
+    "config.set.os_project_name",
+    "config.set.os_project_domain_name",
     "config.set.aws_access_key_id",
     "config.set.aws_secret_access_key",
     "config.set.aws_region",
@@ -89,9 +92,14 @@ def update_wal_e_env_dir(dirpath, storage_uri):
     env = dict(
         # wal-e Swift creds
         SWIFT_AUTHURL=config.get("os_auth_url", ""),
-        SWIFT_TENANT=config.get("os_tenant_name", ""),
         SWIFT_USER=config.get("os_username", ""),
         SWIFT_PASSWORD=config.get("os_password", ""),
+        SWIFT_TENANT=config.get("os_tenant_name", ""),
+        SWIFT_REGION=config.get("os_region_name", ""),
+        SWIFT_AUTH_VERSION=config.get("os_identity_api_version", ""),
+        SWIFT_USER_DOMAIN_NAME=config.get("os_user_domain_name", ""),
+        SWIFT_PROJECT_NAME=config.get("os_project_name", ""),
+        SWIFT_PROJECT_DOMAIN_NAME=config.get("os_project_domain_name", ""),
         # wal-e AWS creds
         AWS_ACCESS_KEY_ID=config.get("aws_access_key_id", ""),
         AWS_SECRET_ACCESS_KEY=config.get("aws_secret_access_key", ""),
@@ -104,6 +112,11 @@ def update_wal_e_env_dir(dirpath, storage_uri):
         OS_USERNAME=config.get("os_username", ""),
         OS_PASSWORD=config.get("os_password", ""),
         OS_TENANT_NAME=config.get("os_tenant_name", ""),
+        OS_REGION_NAME=config.get("os_region_name", ""),
+        OS_IDENTITY_API_VERSION=config.get("os_identity_api_version", ""),
+        OS_USER_DOMAIN_NAME=config.get("os_user_domain_name", ""),
+        OS_PROJECT_NAME=config.get("os_project_name", ""),
+        OS_PROJECT_DOMAIN_NAME=config.get("os_project_domain_name", ""),
         WALE_SWIFT_PREFIX="",
         WALE_S3_PREFIX="",
         WALE_WABS_PREFIX="",
@@ -117,7 +130,6 @@ def update_wal_e_env_dir(dirpath, storage_uri):
             env["WALE_SWIFT_PREFIX"] = uri
             required_env = [
                 "SWIFT_AUTHURL",
-                "SWIFT_TENANT",
                 "SWIFT_USER",
                 "SWIFT_PASSWORD",
             ]
@@ -139,11 +151,7 @@ def update_wal_e_env_dir(dirpath, storage_uri):
     helpers.makedirs(dirpath, mode=0o750, user="postgres", group="postgres")
     for k, v in env.items():
         helpers.write(
-            os.path.join(dirpath, k),
-            v.strip(),
-            mode=0o640,
-            user="postgres",
-            group="postgres",
+            os.path.join(dirpath, k), v.strip(), mode=0o640, user="postgres", group="postgres",
         )
 
 
@@ -167,21 +175,15 @@ def ensure_swift_container():
 
 def wal_e_archive_command():
     """Return the archive_command needed in postgresql.conf."""
-    return "/snap/bin/wal-e.envdir {} /snap/bin/wal-e wal-push %p".format(
-        wal_e_env_dir()
-    )
+    return "/snap/bin/wal-e.envdir {} /snap/bin/wal-e wal-push %p".format(wal_e_env_dir())
 
 
 def wal_e_restore_command(envdir=None):
-    return "/snap/bin/wal-e.envdir {} /snap/bin/wal-e " 'wal-fetch "%f" "%p"'.format(
-        envdir or wal_e_env_dir()
-    )
+    return "/snap/bin/wal-e.envdir {} /snap/bin/wal-e " 'wal-fetch "%f" "%p"'.format(envdir or wal_e_env_dir())
 
 
 def wal_e_backup_command():
-    return "/snap/bin/wal-e.envdir {} /snap/bin/wal-e backup-push {}".format(
-        wal_e_env_dir(), postgresql.data_dir()
-    )
+    return "/snap/bin/wal-e.envdir {} /snap/bin/wal-e backup-push {}".format(wal_e_env_dir(), postgresql.data_dir())
 
 
 def wal_e_prune_command():
@@ -200,11 +202,7 @@ def wal_e_run(args, envdir=None, timeout=None):
     with output on x.output and returncode on x.returncode. stderr goes
     to stderr, and likely the juju logs.
     """
-    cmd = [
-        "/snap/bin/wal-e.envdir",
-        envdir or wal_e_env_dir(),
-        "/snap/bin/wal-e",
-    ] + args
+    cmd = ["/snap/bin/wal-e.envdir", envdir or wal_e_env_dir(), "/snap/bin/wal-e",] + args
     # wal-e spits diagnostics to stderr, so leave them there for the juju logs.
     return subprocess.check_output(cmd, universal_newlines=True, timeout=timeout)
 

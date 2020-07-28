@@ -260,6 +260,10 @@
       Enable streaming replication. Normally, streaming replication is
       always used, and any log shipping configured is used as a fallback.
       Turning this off without configuring log shipping is an error.
+  "os_auth_url":
+    "type": "string"
+    "default": ""
+    "description": "OpenStack Swift authentication URL."
   "os_username":
     "type": "string"
     "default": ""
@@ -268,14 +272,30 @@
     "type": "string"
     "default": ""
     "description": "OpenStack Swift password."
-  "os_auth_url":
+  "os_project_name":
     "type": "string"
     "default": ""
-    "description": "OpenStack Swift authentication URL."
+    "description": "OpenStack Swift project name."
   "os_tenant_name":
     "type": "string"
     "default": ""
     "description": "OpenStack Swift tenant name."
+  "os_region_name":
+    "type": "string"
+    "default": ""
+    "description": "OpenStack Swift authentication region name."
+  "os_identity_api_version":
+    "type": "string"
+    "default": ""
+    "description": "OpenStack authentication protocol version."
+  "os_project_domain_name":
+    "type": "string"
+    "default": ""
+    "description": "OpenStack Swift domain name or ID containing project."
+  "os_user_domain_name":
+    "type": "string"
+    "default": ""
+    "description": "OpenStack Swift domain name or ID containing user."
   "aws_access_key_id":
     "type": "string"
     "default": ""
