@@ -28,7 +28,8 @@ from reactive.postgresql import helpers
 def update_metrics():
     config = hookenv.config()
     if reactive.helpers.data_changed(
-        "postgresql.metrics", (config["metrics_target"], config["metrics_sample_interval"]),
+        "postgresql.metrics",
+        (config["metrics_target"], config["metrics_sample_interval"]),
     ):
         reactive.set_state("postgresql.metrics.needs_update")
 

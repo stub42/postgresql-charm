@@ -38,8 +38,8 @@ from reactive.postgresql import wal_e
 @everyhook
 def replication_states():
     """Update the replication state every hook, or risk failures
-       when leadership or peer relation settings are visible before
-       the leadership or peer relation hooks are fired.
+    when leadership or peer relation settings are visible before
+    the leadership or peer relation hooks are fired.
     """
     update_replication_states()
 
@@ -110,7 +110,8 @@ def update_replication_states():
     reactive.toggle_state("postgresql.replication.is_master", master == hookenv.local_unit())
     reactive.toggle_state("postgresql.replication.master.peered", peers and master in peers)
     reactive.toggle_state(
-        "postgresql.replication.master.authorized", peers and master in peers and authorized_by(master),
+        "postgresql.replication.master.authorized",
+        peers and master in peers and authorized_by(master),
     )
     ready = reactive.is_state("postgresql.replication.is_master") or reactive.is_state(
         "postgresql.replication.master.authorized"
@@ -286,7 +287,8 @@ def coordinate_failover():
         set_master(new_master)
     else:
         status_set(
-            None, "Coordinating failover. Waiting on {}" "".format(",".join(sorted(waiting_on))),
+            None,
+            "Coordinating failover. Waiting on {}" "".format(",".join(sorted(waiting_on))),
         )
 
 
@@ -647,7 +649,8 @@ def drain_master_and_promote_anointed():
                 break
         except (psycopg2.Error, postgresql.InvalidConnection) as x:
             status_set(
-                "waiting", "Waiting to query replication state of {}: {}" "".format(master, x),
+                "waiting",
+                "Waiting to query replication state of {}: {}" "".format(master, x),
             )
             time.sleep(1)
             continue
@@ -656,7 +659,8 @@ def drain_master_and_promote_anointed():
             break  # In sync. Proceed to promotion.
 
         status_set(
-            "waiting", "{} bytes to sync before promotion" "".format(remote_offset - local_offset),
+            "waiting",
+            "{} bytes to sync before promotion" "".format(remote_offset - local_offset),
         )
         time.sleep(1)
 
@@ -695,7 +699,8 @@ def elect_master():
             offsets.append((postgresql.wal_replay_offset(con), unit))
         except (psycopg2.Error, postgresql.InvalidConnection) as x:
             hookenv.log(
-                "Unable to query replication state of {}: {}" "".format(unit, x), WARNING,
+                "Unable to query replication state of {}: {}" "".format(unit, x),
+                WARNING,
             )
             # TODO: Signal re-cloning required. Or autodetect
             # based on timeline switch. Or PG9.3+ could use pg_rewind.
@@ -804,5 +809,6 @@ def switchover_status():
     mode = "Primary" if reactive.is_state("postgresql.replication.is_primary") else "Secondary"
 
     hookenv.status_set(
-        "maintenance", "Switchover to {}. {} following {}" "".format(anointed, mode, str(following)),
+        "maintenance",
+        "Switchover to {}. {} following {}" "".format(anointed, mode, str(following)),
     )

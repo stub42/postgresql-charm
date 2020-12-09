@@ -81,7 +81,8 @@ def main():
         except subprocess.CalledProcessError as x:
             if not reactive.is_state("workloadstatus.blocked"):
                 status_set(
-                    "blocked", "Local PostgreSQL cluster is corrupt: {}".format(x.stderr),
+                    "blocked",
+                    "Local PostgreSQL cluster is corrupt: {}".format(x.stderr),
                 )
 
     # Reconfigure PostgreSQL. While we don't strictly speaking need
@@ -105,7 +106,8 @@ def emit_deprecated_option_warnings():
     deprecated = sorted(helpers.deprecated_config_in_use())
     if deprecated:
         hookenv.log(
-            "Deprecated configuration settings in use: {}".format(", ".join(deprecated)), WARNING,
+            "Deprecated configuration settings in use: {}".format(", ".join(deprecated)),
+            WARNING,
         )
 
 
@@ -125,7 +127,10 @@ def generate_locale():
     if config["locale"] != "C":
         status_set("maintenance", "Generating {} locale".format(config["locale"]))
         subprocess.check_call(
-            ["locale-gen", "{}.{}".format(hookenv.config("locale"), hookenv.config("encoding")),],
+            [
+                "locale-gen",
+                "{}.{}".format(hookenv.config("locale"), hookenv.config("encoding")),
+            ],
             universal_newlines=True,
         )
     reactive.set_state("postgresql.cluster.locale.set")
@@ -196,7 +201,11 @@ def create_pg_ctl_conf():
                         """
     )
     helpers.write(
-        postgresql.pg_ctl_conf_path(), contents, mode=0o644, user="postgres", group="postgres",
+        postgresql.pg_ctl_conf_path(),
+        contents,
+        mode=0o644,
+        user="postgres",
+        group="postgres",
     )
     reactive.set_flag("postgresql.cluster.pg_ctl_conf.created")
 
@@ -248,7 +257,14 @@ def update_pg_ident_conf():
     with open(path, "r") as f:
         current_pg_ident = f.read()
     for sysuser, pguser in entries:
-        if re.search(r"^\s*juju_charm\s+{}\s+{}\s*$".format(sysuser, pguser), current_pg_ident, re.M,) is None:
+        if (
+            re.search(
+                r"^\s*juju_charm\s+{}\s+{}\s*$".format(sysuser, pguser),
+                current_pg_ident,
+                re.M,
+            )
+            is None
+        ):
             with open(path, "a") as f:
                 f.write("\njuju_charm {} {}".format(sysuser, pguser))
 
@@ -312,11 +328,21 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
                 qaddr = postgresql.quote_identifier(addr)
                 # Magic replication database, for replication.
                 add(
-                    "host", "replication", replication.replication_username(), qaddr, "md5", "# {}".format(relinfo),
+                    "host",
+                    "replication",
+                    replication.replication_username(),
+                    qaddr,
+                    "md5",
+                    "# {}".format(relinfo),
                 )
                 # postgres db, so leader can query replication status.
                 add(
-                    "host", "postgres", replication.replication_username(), qaddr, "md5", "# {}".format(relinfo),
+                    "host",
+                    "postgres",
+                    replication.replication_username(),
+                    qaddr,
+                    "md5",
+                    "# {}".format(relinfo),
                 )
 
     # Clients need access to the relation database as the relation users.
@@ -352,7 +378,12 @@ def generate_pg_hba_conf(pg_hba, config, rels, _peer_rel=None):
             for relinfo in rel.values():
                 for addr in incoming_addresses(relinfo):
                     add(
-                        "host", "all", "all", postgresql.quote_identifier(addr), "md5", "# {}".format(relinfo),
+                        "host",
+                        "all",
+                        "all",
+                        postgresql.quote_identifier(addr),
+                        "md5",
+                        "# {}".format(relinfo),
                     )
 
     # External replication connections. Somewhat different than before
@@ -692,7 +723,8 @@ def ensure_viable_postgresql_conf(opts):
     # so much easier to parse.
     if context.Relations()["syslog"]:
         force(
-            log_destination="stderr,syslog", syslog_ident=hookenv.local_unit().replace("/", "_"),
+            log_destination="stderr,syslog",
+            syslog_ident=hookenv.local_unit().replace("/", "_"),
         )
 
 
@@ -781,7 +813,12 @@ def update_postgresql_conf():
     for k in settings:
         # Comment out conflicting options. We could just allow later
         # options to override earlier ones, but this is less surprising.
-        pg_conf = re.sub(r"^\s*({}[\s=].*)$".format(re.escape(k)), r"# juju # \1", pg_conf, flags=re.M | re.I,)
+        pg_conf = re.sub(
+            r"^\s*({}[\s=].*)$".format(re.escape(k)),
+            r"# juju # \1",
+            pg_conf,
+            flags=re.M | re.I,
+        )
 
     # Store the updated charm options. This is compared with the
     # live config to detect if a restart is required.
@@ -839,7 +876,8 @@ def postgresql_conf_changed():
 
     if not live or not current:
         hookenv.log(
-            "PostgreSQL started without current config being saved. " "Was the server rebooted unexpectedly?", WARNING,
+            "PostgreSQL started without current config being saved. " "Was the server rebooted unexpectedly?",
+            WARNING,
         )
         reactive.set_state("postgresql.cluster.needs_restart")
         return
@@ -942,7 +980,12 @@ def install_administrative_scripts():
     )
     destination = os.path.join(helpers.scripts_dir(), "pg_backup_job")
     templating.render(
-        "pg_backup_job.tmpl", destination, data, owner="root", group="postgres", perms=0o755,
+        "pg_backup_job.tmpl",
+        destination,
+        data,
+        owner="root",
+        group="postgres",
+        perms=0o755,
     )
 
     # Install the reaper scripts.
@@ -959,7 +1002,11 @@ def install_administrative_scripts():
         # does not exist, in order to trigger spurious alerts when a
         # unit is installed, per Bug #1329816.
         helpers.write(
-            helpers.backups_log_path(), "", mode=0o644, user="postgres", group="postgres",
+            helpers.backups_log_path(),
+            "",
+            mode=0o644,
+            user="postgres",
+            group="postgres",
         )
 
     reactive.set_state("postgresql.cluster.support-scripts")
@@ -983,7 +1030,12 @@ def update_postgresql_crontab():
 
     destination = os.path.join(helpers.cron_dir(), "juju-postgresql")
     templating.render(
-        "postgres.cron.tmpl", destination, data, owner="root", group="postgres", perms=0o640,
+        "postgres.cron.tmpl",
+        destination,
+        data,
+        owner="root",
+        group="postgres",
+        perms=0o640,
     )
 
 

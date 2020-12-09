@@ -238,7 +238,10 @@ class AmuletFixture(amulet.Deployment):
         # due to a) it containing symlinks juju will reject and b) to avoid
         # infinite recursion.
         shutil.copytree(
-            src_charm_dir, self.charm_dir, symlinks=True, ignore=shutil.ignore_patterns(".bzr", ".tox"),
+            src_charm_dir,
+            self.charm_dir,
+            symlinks=True,
+            ignore=shutil.ignore_patterns(".bzr", ".tox"),
         )
 
     def juju_version(self):

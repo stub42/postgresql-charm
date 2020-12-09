@@ -382,7 +382,8 @@ def ensure_database(database, owner=None):
         cur.execute("CREATE DATABASE %s OWNER %s", (pgidentifier(database), pgidentifier(owner)))
     elif owner:
         cur.execute(
-            "ALTER DATABASE %s OWNER TO %s", (pgidentifier(database), pgidentifier(owner)),
+            "ALTER DATABASE %s OWNER TO %s",
+            (pgidentifier(database), pgidentifier(owner)),
         )
 
 
@@ -412,7 +413,8 @@ def grant_database_privileges(con, role, database, privs):
     cur = con.cursor()
     for priv in privs:
         cur.execute(
-            "GRANT %s ON DATABASE %s TO %s", (AsIs(priv), pgidentifier(database), pgidentifier(role)),
+            "GRANT %s ON DATABASE %s TO %s",
+            (AsIs(priv), pgidentifier(database), pgidentifier(role)),
         )
 
 
@@ -485,7 +487,8 @@ def ensure_extensions(con, extensions):
             cur.execute("CREATE SCHEMA IF NOT EXISTS %s", (pgidentifier(schema),))
             cur.execute("GRANT USAGE ON SCHEMA %s TO PUBLIC", (pgidentifier(schema),))
         cur.execute(
-            "CREATE EXTENSION %s WITH SCHEMA %s", (pgidentifier(ext), pgidentifier(schema)),
+            "CREATE EXTENSION %s WITH SCHEMA %s",
+            (pgidentifier(ext), pgidentifier(schema)),
         )
 
 
@@ -697,10 +700,12 @@ def convert_unit(value_with_unit, dest_unit):
                 return v * conv[source_unit] / conv[dest_unit]
             else:
                 raise ValueError(
-                    value_with_unit, "Cannot convert {} to {}".format(source_unit, dest_unit),
+                    value_with_unit,
+                    "Cannot convert {} to {}".format(source_unit, dest_unit),
                 )
     raise ValueError(
-        value_with_unit, "Unknown conversion unit {!r}. " "Units are case sensitive.".format(source_unit),
+        value_with_unit,
+        "Unknown conversion unit {!r}. " "Units are case sensitive.".format(source_unit),
     )
 
 
@@ -780,7 +785,8 @@ def promote():
     assert is_running(), "Attempting to promote a stopped server"
 
     rc = subprocess.call(
-        ["sudo", "-u", "postgres", "-H", pg_ctl_path(), "promote", "-D", data_dir()], universal_newlines=True,
+        ["sudo", "-u", "postgres", "-H", pg_ctl_path(), "promote", "-D", data_dir()],
+        universal_newlines=True,
     )
     if rc != 0:
         helpers.status_set("blocked", "Failed to promote to primary")

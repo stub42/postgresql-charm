@@ -263,7 +263,10 @@ def db_relation_common(rel):
         all_relinfo = rel.peers.values()
     all_relinfo = list(rel.peers.values()) if rel.peers else []
     all_relinfo.append(rel.local)
-    standbys = filter(None, [relinfo_to_cs(relinfo) for relinfo in all_relinfo if relinfo.unit != master],)
+    standbys = filter(
+        None,
+        [relinfo_to_cs(relinfo) for relinfo in all_relinfo if relinfo.unit != master],
+    )
     local["standbys"] = "\n".join(sorted(standbys)) or None
 
 
@@ -306,7 +309,11 @@ def ensure_db_relation_resources(rel):
 
     superuser, replication = _credential_types(rel)
     postgresql.ensure_user(
-        con, master["user"], master["password"], superuser=superuser, replication=replication,
+        con,
+        master["user"],
+        master["password"],
+        superuser=superuser,
+        replication=replication,
     )
     if not superuser:
         postgresql.ensure_user(con, master["schema_user"], master["schema_password"])
@@ -352,6 +359,7 @@ def ingress_address(endpoint, relid):
     except NotImplementedError:
         # Warn, although this is normal with older Juju.
         hookenv.log(
-            "Unable to determine ingress address, " "falling back to private ip", hookenv.WARNING,
+            "Unable to determine ingress address, " "falling back to private ip",
+            hookenv.WARNING,
         )
         return hookenv.unit_private_ip()

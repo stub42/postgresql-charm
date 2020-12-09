@@ -58,7 +58,8 @@ def rebuild_all_relations():
         if config["database"] != relation.get("database", ""):
             log(
                 "Switching from database {} to {}".format(
-                    relation.get("database", "") or def_str, config["database"] or def_str,
+                    relation.get("database", "") or def_str,
+                    config["database"] or def_str,
                 ),
                 INFO,
             )

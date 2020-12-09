@@ -151,7 +151,11 @@ def update_wal_e_env_dir(dirpath, storage_uri):
     helpers.makedirs(dirpath, mode=0o750, user="postgres", group="postgres")
     for k, v in env.items():
         helpers.write(
-            os.path.join(dirpath, k), v.strip(), mode=0o640, user="postgres", group="postgres",
+            os.path.join(dirpath, k),
+            v.strip(),
+            mode=0o640,
+            user="postgres",
+            group="postgres",
         )
 
 
@@ -202,7 +206,11 @@ def wal_e_run(args, envdir=None, timeout=None):
     with output on x.output and returncode on x.returncode. stderr goes
     to stderr, and likely the juju logs.
     """
-    cmd = ["/snap/bin/wal-e.envdir", envdir or wal_e_env_dir(), "/snap/bin/wal-e",] + args
+    cmd = [
+        "/snap/bin/wal-e.envdir",
+        envdir or wal_e_env_dir(),
+        "/snap/bin/wal-e",
+    ] + args
     # wal-e spits diagnostics to stderr, so leave them there for the juju logs.
     return subprocess.check_output(cmd, universal_newlines=True, timeout=timeout)
 

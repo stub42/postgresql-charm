@@ -55,7 +55,11 @@ def rewrite(path, content):
     """Rewrite a file atomically, preserving ownership and permissions."""
     attr = os.lstat(path)
     write(
-        path, content, mode=stat.S_IMODE(attr.st_mode), user=attr[stat.ST_UID], group=attr[stat.ST_GID],
+        path,
+        content,
+        mode=stat.S_IMODE(attr.st_mode),
+        user=attr[stat.ST_UID],
+        group=attr[stat.ST_GID],
     )
 
 

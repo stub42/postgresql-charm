@@ -104,7 +104,9 @@ def update_nrpe_config():
     user = nagios_username()
     port = postgresql.port()
     nrpe.add_check(
-        shortname="pgsql", description="Check pgsql", check_cmd="check_pgsql -P {} -l {}".format(port, user),
+        shortname="pgsql",
+        description="Check pgsql",
+        check_cmd="check_pgsql -P {} -l {}".format(port, user),
     )
 
     # copy the check script which will run cronned as postgres user

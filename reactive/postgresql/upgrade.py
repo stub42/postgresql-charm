@@ -146,7 +146,11 @@ def migrate_user(old_username, new_username, password, superuser=False):
         cur = con.cursor()
         hookenv.log("Granting old role {} to new role {}" "".format(old_username, new_username))
         cur.execute(
-            "GRANT %s TO %s", (postgresql.pgidentifier(old_username), postgresql.pgidentifier(new_username),),
+            "GRANT %s TO %s",
+            (
+                postgresql.pgidentifier(old_username),
+                postgresql.pgidentifier(new_username),
+            ),
         )
         con.commit()
     else:

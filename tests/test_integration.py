@@ -104,7 +104,10 @@ class PGBaseTestCase(object):
 
         # Add and configure the PostgreSQL units.
         deployment.add(
-            "postgresql", postgresql_charm_dir, units=cls.num_units, constraints=dict(mem="512M"),
+            "postgresql",
+            postgresql_charm_dir,
+            units=cls.num_units,
+            constraints=dict(mem="512M"),
         )
         deployment.expose("postgresql")
         config = dict(cls.common_config)
@@ -132,7 +135,12 @@ class PGBaseTestCase(object):
         for service in ["postgresql", "nagios", "storage"]:
             while True:
                 cmd = ["juju-deployer", "-f", service]
-                rv = subprocess.call(cmd, stderr=subprocess.STDOUT, stdout=subprocess.DEVNULL, universal_newlines=True,)
+                rv = subprocess.call(
+                    cmd,
+                    stderr=subprocess.STDOUT,
+                    stdout=subprocess.DEVNULL,
+                    universal_newlines=True,
+                )
                 if rv == 1:
                     break  # Its gone according to juju-deployer.
                 time.sleep(1)
@@ -274,7 +282,11 @@ class PGBaseTestCase(object):
             "{}:{}:{}".format(local_port, relinfo["host"], relinfo["port"]),
         ]
         tunnel_proc = subprocess.Popen(
-            tunnel_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setpgrp,
+            tunnel_cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            preexec_fn=os.setpgrp,
         )
         tunnel_proc.stdin.close()
 
@@ -336,7 +348,13 @@ class PGBaseTestCase(object):
                 cur.execute("select * from pg_stat_activity")
 
                 # db-admin relations can connect as any user to any database.
-                con = self.connect(unit, admin=True, database="postgres", user=newuser, password=newpass,)
+                con = self.connect(
+                    unit,
+                    admin=True,
+                    database="postgres",
+                    user=newuser,
+                    password=newpass,
+                )
                 cur = con.cursor()
                 cur.execute("select * from pg_stat_activity")
                 cur.fetchone()
@@ -390,7 +408,13 @@ class PGBaseTestCase(object):
         else:
             subcmd = "set"
         subprocess.check_call(
-            ["juju", subcmd, "postgresql", "admin_addresses={}".format(",".join(my_ips)),], universal_newlines=True,
+            [
+                "juju",
+                subcmd,
+                "postgresql",
+                "admin_addresses={}".format(",".join(my_ips)),
+            ],
+            universal_newlines=True,
         )
         self.deployment.wait()
 
@@ -409,7 +433,13 @@ class PGBaseTestCase(object):
             universal_newlines=True,
         ).strip()
         subprocess.check_call(
-            ["juju", "run", "--unit", client_unit, "relation-set -r {} database=explicit" "".format(relid),],
+            [
+                "juju",
+                "run",
+                "--unit",
+                client_unit,
+                "relation-set -r {} database=explicit" "".format(relid),
+            ],
             stderr=subprocess.DEVNULL,
             universal_newlines=True,
         )
@@ -441,11 +471,18 @@ class PGBaseTestCase(object):
         else:
             mount = "/srv/pgdata"
         self.assertEqual(
-            details, "lrwxrwxrwx root root " "'/var/lib/postgresql/{}/main' -> " "'{}/{}/main'".format(ver, mount, ver),
+            details,
+            "lrwxrwxrwx root root " "'/var/lib/postgresql/{}/main' -> " "'{}/{}/main'".format(ver, mount, ver),
         )
 
         details = subprocess.check_output(
-            ["juju", "run", "--unit", client_unit, 'stat --format "%A %U %G %N" ' "{}/{}/main".format(mount, ver),],
+            [
+                "juju",
+                "run",
+                "--unit",
+                client_unit,
+                'stat --format "%A %U %G %N" ' "{}/{}/main".format(mount, ver),
+            ],
             stderr=subprocess.DEVNULL,
             universal_newlines=True,
         ).strip()
@@ -514,7 +551,8 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         action_id = amulet.actions.run_action(leader, "switchover", dict(master=new_master))
         result = amulet.actions.get_action_output(action_id, raise_on_timeout=True)
         self.assertEqual(
-            result["result"], "Initiated switchover of master to {}" "".format(new_master),
+            result["result"],
+            "Initiated switchover of master to {}" "".format(new_master),
         )
 
         self.deployment.wait()
@@ -526,7 +564,10 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         now = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         container = "_juju_pg_tests"
 
-        config = dict(streaming_replication=False, wal_e_storage_uri="swift://{}/{}".format(container, now),)
+        config = dict(
+            streaming_replication=False,
+            wal_e_storage_uri="swift://{}/{}".format(container, now),
+        )
 
         # OpenStack credentials
         os_keys = set(["OS_TENANT_NAME", "OS_AUTH_URL", "OS_USERNAME", "OS_PASSWORD"])
@@ -603,7 +644,10 @@ class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     nagios_subordinate = True if SERIES == "trusty" else False
 
     version = "9.3"
-    test_config = dict(version=("" if SERIES == "trusty" else "9.3"), pgdg=(False if SERIES == "trusty" else True),)
+    test_config = dict(
+        version=("" if SERIES == "trusty" else "9.3"),
+        pgdg=(False if SERIES == "trusty" else True),
+    )
 
 
 class PG95Tests(PGBaseTestCase, unittest.TestCase):
@@ -620,18 +664,27 @@ class PG95Tests(PGBaseTestCase, unittest.TestCase):
 class PG95MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     num_units = 3
     version = "9.6"
-    test_config = dict(version=("" if SERIES == "xenial" else "9.5"), pgdg=(False if SERIES == "xenial" else True),)
+    test_config = dict(
+        version=("" if SERIES == "xenial" else "9.5"),
+        pgdg=(False if SERIES == "xenial" else True),
+    )
 
 
 class PG10Tests(PGBaseTestCase, unittest.TestCase):
     version = "10"
-    test_config = dict(version=("" if SERIES == "bionic" else "10"), pgdg=(False if SERIES == "bionic" else True),)
+    test_config = dict(
+        version=("" if SERIES == "bionic" else "10"),
+        pgdg=(False if SERIES == "bionic" else True),
+    )
 
 
 class PG10MultiTests(PGMultiBaseTestCase, unittest.TestCase):
     num_units = 2
     version = "10"
-    test_config = dict(version=("" if SERIES == "bionic" else "10"), pgdg=(False if SERIES == "bionic" else True),)
+    test_config = dict(
+        version=("" if SERIES == "bionic" else "10"),
+        pgdg=(False if SERIES == "bionic" else True),
+    )
 
 
 class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
@@ -652,7 +705,16 @@ class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
         old_charm_dir = tempfile.mkdtemp(suffix=".charm")
         try:
             subprocess.check_call(
-                ["bzr", "checkout", "-q", "--lightweight", "-r", "127", "lp:charms/trusty/postgresql", old_charm_dir,]
+                [
+                    "bzr",
+                    "checkout",
+                    "-q",
+                    "--lightweight",
+                    "-r",
+                    "127",
+                    "lp:charms/trusty/postgresql",
+                    old_charm_dir,
+                ]
             )
             super(UpgradedCharmTests, cls).setUpClass(old_charm_dir)
         finally:
@@ -679,7 +741,10 @@ class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
         else:
             cmd = ["juju", "upgrade-charm", "postgresql"]
         subprocess.check_call(
-            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, universal_newlines=True,
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            universal_newlines=True,
         )
 
         # Sleep. upgrade-charm first needs to distribute the updated

@@ -103,7 +103,10 @@ def wal_e_backup(params):
         hookenv.log("Running wal-e backup")
         hookenv.log(backup_cmd)
         subprocess.check_call(
-            "sudo -Hu postgres -- " + backup_cmd, stderr=subprocess.STDOUT, shell=True, universal_newlines=True,
+            "sudo -Hu postgres -- " + backup_cmd,
+            stderr=subprocess.STDOUT,
+            shell=True,
+            universal_newlines=True,
         )
         hookenv.action_set({"backup-return-code": 0})
     except subprocess.CalledProcessError as x:
@@ -118,7 +121,10 @@ def wal_e_backup(params):
         hookenv.log("Running wal-e prune")
         hookenv.log(prune_cmd)
         subprocess.check_call(
-            "sudo -Hu postgres -- " + prune_cmd, stderr=subprocess.STDOUT, shell=True, universal_newlines=True,
+            "sudo -Hu postgres -- " + prune_cmd,
+            stderr=subprocess.STDOUT,
+            shell=True,
+            universal_newlines=True,
         )
         hookenv.action_set({"prune-return-code": 0})
     except subprocess.CalledProcessError as x:

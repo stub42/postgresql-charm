@@ -87,7 +87,8 @@ def remount():
         hookenv.log("Remounting existing database at {}".format(new_data_dir), WARNING)
     else:
         status_set(
-            "maintenance", "Migrating data from {} to {}".format(old_data_dir, new_data_dir),
+            "maintenance",
+            "Migrating data from {} to {}".format(old_data_dir, new_data_dir),
         )
         helpers.makedirs(new_data_dir, mode=0o770, user="postgres", group="postgres")
         try:
@@ -96,7 +97,8 @@ def remount():
             subprocess.check_call(rsync_cmd)
         except subprocess.CalledProcessError:
             status_set(
-                "blocked", "Failed to sync data from {} to {}" "".format(old_data_dir, new_data_dir),
+                "blocked",
+                "Failed to sync data from {} to {}" "".format(old_data_dir, new_data_dir),
             )
             return
 
