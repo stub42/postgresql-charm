@@ -991,8 +991,8 @@ def install_administrative_scripts():
     # Install the reaper scripts.
     script = "pgkillidle.py"
     source = os.path.join(hookenv.charm_dir(), "scripts", script)
-    if reactive.helpers.any_file_changed([source]) or not os.path.exists(source):
-        destination = os.path.join(scripts_dir, script)
+    destination = os.path.join(scripts_dir, script)
+    if reactive.helpers.any_file_changed([source]) or not os.path.exists(destination):
         with open(source, "r") as f:
             helpers.write(destination, f.read(), mode=0o755)
 
@@ -1012,7 +1012,7 @@ def install_administrative_scripts():
     reactive.set_state("postgresql.cluster.support-scripts")
 
 
-@when("postgresql.cluster.is_running")
+@when("postgresql.cluster.is_running", "postgresql.cluster.support-scripts")
 def update_postgresql_crontab():
     config = hookenv.config()
     data = dict(config)
