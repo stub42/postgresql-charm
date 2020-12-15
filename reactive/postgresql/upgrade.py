@@ -26,6 +26,7 @@ from reactive import workloadstatus
 from reactive.postgresql import helpers
 from reactive.postgresql import postgresql
 from reactive.postgresql import replication
+from reactive.postgresql import service
 from reactive.postgresql import storage
 
 
@@ -133,6 +134,11 @@ def upgrade_charm():
             hookenv.log("Restarting PostgreSQL under systemd", hookenv.WARNING)
             reactive.clear_flag("postgresql.cluster.is_running")
             postgresql.stop_pgctlcluster()
+
+    # Update the PGDG source, in case the signing key has changed.
+    config = hookenv.config()
+    if config["pgdg"]:
+        service.add_pgdg_source()
 
 
 def migrate_user(old_username, new_username, password, superuser=False):
