@@ -45,6 +45,18 @@ def install():
         reactive.set_flag("postgresql.upgrade.systemd")
 
 
+@hook("post-series-upgrade")
+def post_series_upgrade():
+    postgresql.clear_version_cache()  # PG version upgrades should work on the master, but will break standbys
+    config = hookenv.config()
+    if config["pgdg"]:
+        add_pgdg_source()
+    if host.init_is_systemd():
+        reactive.set_flag("postgresql.upgrade.systemd")
+    reactive.clear_flag("postgresql.cluster.support-scripts")
+    reactive.clear_flag("postgresql.cluster.configured")
+
+
 @when("config.changed")
 def config_changed():
     reactive.clear_flag("postgresql.cluster.support-scripts")

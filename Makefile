@@ -32,19 +32,7 @@ _success_ex:
 export PATH := /usr/lib/juju-$(shell $(JUJU) --version | perl -p -e "s/-.*//")/bin:$(PATH)
 
 
-test: testdeps lint unittest integration
-
-testdeps:
-ifeq ($(HOST_SERIES),trusty)
-	sudo apt-get install -y python-tox python3-psycopg2 bzr moreutils \
-	    software-properties-common
-else
-	sudo apt-get install -y tox python3-psycopg2 bzr moreutils \
-	    software-properties-common
-endif
-	sudo add-apt-repository -y ppa:juju/stable
-	sudo apt-get install charm-tools
-
+test: lint unittest integration
 
 CHARM_NAME := postgresql
 
@@ -69,7 +57,7 @@ $(BUILD_DIR):
 # updates.
 .PHONY: build
 build: | $(BUILD_DIR)
-	charm build -f -o $(BUILD_ROOT) -n $(CHARM_NAME)
+	charm build -f -d $(BUILD_DIR)/.. -n $(CHARM_NAME)
 
 # Generate a fresh development build and commit it to $(TEST_BRANCH).
 # Only builds work committed to $(LAYER_BRANCH).

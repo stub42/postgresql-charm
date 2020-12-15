@@ -26,47 +26,47 @@ sys.path.insert(1, ROOT)
 sys.path.insert(2, os.path.join(ROOT, 'lib'))
 sys.path.insert(3, os.path.join(ROOT, 'lib', 'testdeps'))
 
-from charmhelpers.core import hookenv
-from charmhelpers.core import unitdata
-
+from charmhelpers.core import hookenv, host
 from reactive import workloadstatus
-from reactive.postgresql import helpers
-from reactive.postgresql import postgresql
+from reactive.postgresql import helpers, postgresql
 
 
 class TestPostgresql(unittest.TestCase):
+    @patch.object(postgresql, 'lsclusters_version')
     @patch.object(hookenv, 'config')
     @patch.object(helpers, 'distro_codename')
-    def test_version(self, codename, config):
-
-        def clear_cache():
-            unitdata.kv().unset('postgresql.pg_version')
+    def test_version(self, codename, config, lsclusters_version):
+        # Installed version
+        lsclusters_version.return_value = '9.5'
+        postgresql.clear_version_cache()
+        self.assertEqual(postgresql.version(), '9.5')
+        lsclusters_version.return_value = None
 
         # Explicit version in config.
         config.return_value = {'version': '23'}
-        clear_cache()
+        postgresql.clear_version_cache()
         self.assertEqual(postgresql.version(), '23')
 
         config.return_value = {'version': ''}
 
         # Trusty default
         codename.return_value = 'trusty'
-        clear_cache()
+        postgresql.clear_version_cache()
         self.assertEqual(postgresql.version(), '9.3')
 
         # Xenial default
         codename.return_value = 'xenial'
-        clear_cache()
+        postgresql.clear_version_cache()
         self.assertEqual(postgresql.version(), '9.5')
 
         # Bionic default
         codename.return_value = 'bionic'
-        clear_cache()
+        postgresql.clear_version_cache()
         self.assertEqual(postgresql.version(), '10')
 
         # No other fallbacks, yet.
         codename.return_value = 'whatever'
-        clear_cache()
+        postgresql.clear_version_cache()
         with self.assertRaises(NotImplementedError):
             postgresql.version()
 
@@ -251,8 +251,11 @@ class TestPostgresql(unittest.TestCase):
         is_secondary.return_value = False
         self.assertTrue(postgresql.is_primary())
 
+    @patch.object(postgresql, 'has_version')
+    @patch.object(hookenv, 'config')
     @patch.object(postgresql, 'recovery_conf_path')
-    def test_is_secondary(self, recovery_path):
+    def test_is_secondary(self, recovery_path, config, has_version):
+        has_version.return_value = False
         # if recovery.conf exists, we are a secondary.
         with tempfile.NamedTemporaryFile() as f:
             recovery_path.return_value = f.name
@@ -317,7 +320,7 @@ class TestPostgresql(unittest.TestCase):
         check_call.assert_called_once_with(['pg_createcluster',
                                             '-e', sentinel.encoding,
                                             '--locale', sentinel.locale,
-                                            '9.2', 'main'],
+                                            '9.2', 'main', '--', '--data-checksums'],
                                            universal_newlines=True)
 
     @patch('subprocess.check_call')
@@ -345,7 +348,7 @@ class TestPostgresql(unittest.TestCase):
         cur.execute.assert_has_calls([
             call('SELECT datname FROM pg_database WHERE datname=%s',
                  ('hello',)),
-            call('CREATE DATABASE %s', (ANY,))])
+            call('CREATE DATABASE %s OWNER %s', (ANY, ANY))])
         # The database name in that last call was correctly quoted.
         quoted_dbname = cur.execute.call_args[0][1][0]
         self.assertIsInstance(quoted_dbname, postgresql.AsIs)
@@ -475,14 +478,16 @@ class TestPostgresql(unittest.TestCase):
 
         pgidentifier.side_effect = lambda d: 'q_{}'.format(d)
 
-        existing_extensions = set(['extA', 'extB'])
-        wanted_extensions = set(['extB', 'extC'])
+        existing_extensions = set([('extA', 'public'), ('extB', 'public')])
+        wanted_extensions = set([('extB', 'public'), ('extC', 'custom')])
 
-        cur.fetchall.return_value = [[x] for x in existing_extensions]
+        cur.fetchall.return_value = [x for x in existing_extensions]
         postgresql.ensure_extensions(con, wanted_extensions)
         cur.execute.assert_has_calls([
-            call('SELECT extname FROM pg_extension'),
-            call('CREATE EXTENSION %s', ('q_extC',))])
+            call('SELECT extname, nspname FROM pg_extension, pg_namespace WHERE pg_namespace.oid = extnamespace'),
+            call('CREATE SCHEMA IF NOT EXISTS %s', ('q_custom',)),
+            call('GRANT USAGE ON SCHEMA %s TO PUBLIC', ('q_custom',)),
+            call('CREATE EXTENSION %s WITH SCHEMA %s', ('q_extC','q_custom'))])
 
     def test_addr_to_range(self):
         eggs = [('hostname', 'hostname'),
@@ -532,35 +537,18 @@ class TestPostgresql(unittest.TestCase):
 
     @patch.object(postgresql, 'emit_pg_log')
     @patch.object(workloadstatus, 'status_set')
-    @patch('subprocess.check_call')
+    @patch.object(host, 'service_start')
     @patch.object(postgresql, 'version')
-    def test_start(self, version, check_call, status_set, emit_pg_log):
+    def test_start(self, version, service_start, status_set, emit_pg_log):
         version.return_value = '9.9'
 
         # When it works, it works.
         postgresql.start()
-        # Both -w and -t options are required to wait for startup.
-        # We wait a long time, as startup might take a long time.
-        # Maybe we should wait a lot longer.
-        check_call.assert_called_once_with(['pg_ctlcluster', '9.9', 'main',
-                                            'start', '--', '-w',
-                                            '-t', '86400'],
-                                           universal_newlines=True)
+        service_start.assert_called_once_with('postgresql@9.9-main')
         self.assertFalse(emit_pg_log.called)
 
-        # If it is already running, pg_ctlcluster returns code 2.
-        # We block, and terminate whatever hook is running.
-        check_call.side_effect = subprocess.CalledProcessError(2, 'whoops')
-        check_call.reset_mock()
-        postgresql.start()
-        check_call.assert_called_once_with(['pg_ctlcluster', '9.9', 'main',
-                                            'start', '--', '-w',
-                                            '-t', '86400'],
-                                           universal_newlines=True)
-
-        # Other failures block the unit. Perhaps it is just taking too
-        # perform recovery after a power outage.
-        check_call.side_effect = subprocess.CalledProcessError(42, 'whoops')
+        # Start failure we block, and terminate whatever hook is running.
+        service_start.return_value = False
         with self.assertRaises(SystemExit) as x:
             postgresql.start()
         status_set.assert_called_once_with('blocked', ANY)  # Set blocked.
@@ -569,59 +557,29 @@ class TestPostgresql(unittest.TestCase):
 
     @patch.object(hookenv, 'log')
     @patch.object(workloadstatus, 'status_set')
-    @patch('subprocess.check_call')
+    @patch.object(host, 'service_stop')
     @patch.object(postgresql, 'version')
-    def test_stop(self, version, check_call, status_set, log):
+    def test_stop(self, version, service_stop, status_set, log):
         version.return_value = '9.9'
 
         # Normal shutdown shuts down.
+        service_stop.return_value = True
         postgresql.stop()
-        # -t option is required to wait for shutdown to complete. -w not
-        # required unlike 'start', but lets be explicit.
-        check_call.assert_called_once_with(['pg_ctlcluster',
-                                            '--mode', 'fast', '9.9', 'main',
-                                            'stop', '--', '-w', '-t', '300'],
-                                           universal_newlines=True)
+        service_stop.assert_called_once_with('postgresql@9.9-main')
 
-        # If the server is not running, pg_ctlcluster(1) signals this with
-        # returncode 2.
-        check_call.side_effect = subprocess.CalledProcessError(2, 'whoops')
-        check_call.reset_mock()
-        postgresql.stop()
-        # -t option is required to wait for shutdown to complete. -w not
-        # required unlike 'start', but lets be explicit.
-        check_call.assert_called_once_with(['pg_ctlcluster',
-                                            '--mode', 'fast', '9.9', 'main',
-                                            'stop', '--', '-w', '-t', '300'],
-                                           universal_newlines=True)
-
-        # If 'fast' shutdown fails, we retry with an 'immediate' shutdown
-        check_call.side_effect = iter([subprocess.CalledProcessError(42, 'x'),
-                                       None])
-        check_call.reset_mock()
-        postgresql.stop()
-        check_call.assert_has_calls([
-            call(['pg_ctlcluster', '--mode', 'fast', '9.9', 'main',
-                  'stop', '--', '-w', '-t', '300'],
-                 universal_newlines=True),
-            call(['pg_ctlcluster', '--mode', 'immediate', '9.9', 'main',
-                  'stop', '--', '-w', '-t', '300'],
-                 universal_newlines=True)])
-
-        # If both fail, we block the unit.
-        check_call.side_effect = subprocess.CalledProcessError(42, 'x')
+        # Failed shutdown blocks and terminates
+        service_stop.return_value = False
         with self.assertRaises(SystemExit) as x:
             postgresql.stop()
         status_set.assert_called_once_with('blocked', ANY)
         self.assertEqual(x.exception.code, 0)  # Exit cleanly
 
-    @patch('subprocess.check_call')
+    @patch.object(host, 'service_reload')
     @patch.object(postgresql, 'version')
-    def test_reload_config(self, version, check_call):
+    def test_reload_config(self, version, service_reload):
         version.return_value = '9.9'
         postgresql.reload_config()
-        check_call.assert_called_once_with(['pg_ctlcluster', '9.9', 'main',
-                                            'reload'])
+        service_reload.assert_called_once_with('postgresql@9.9-main')
 
     def test_parse_config(self):
         valid = [(r'# A comment', dict()),
@@ -653,7 +611,7 @@ class TestPostgresql(unittest.TestCase):
 
         with self.assertRaises(SyntaxError) as x:
             postgresql.parse_config("=")
-        self.assertEqual(str(x.exception), 'Missing key (line 1)')
+        self.assertEqual(str(x.exception), "Missing key '=' (line 1)")
         self.assertEqual(x.exception.lineno, 1)
         self.assertEqual(x.exception.text, "=")
 
@@ -665,19 +623,19 @@ class TestPostgresql(unittest.TestCase):
 
         with self.assertRaises(SyntaxError) as x:
             postgresql.parse_config("key='unterminated")
-        self.assertEqual(str(x.exception), 'Badly quoted value (line 1)')
+        self.assertEqual(str(x.exception), r'''Badly quoted value "'unterminated" (line 1)''')
 
         with self.assertRaises(SyntaxError) as x:
             postgresql.parse_config("key='unterminated 2 # comment")
-        self.assertEqual(str(x.exception), 'Badly quoted value (line 1)')
+        self.assertEqual(str(x.exception), r'''Badly quoted value "'unterminated 2" (line 1)''')
 
         with self.assertRaises(SyntaxError) as x:
             postgresql.parse_config("key='unte''''")
-        self.assertEqual(str(x.exception), 'Badly quoted value (line 1)')
+        self.assertEqual(str(x.exception), r"""Badly quoted value "'unte''''" (line 1)""")
 
         with self.assertRaises(SyntaxError) as x:
             postgresql.parse_config(r"key='\'")
-        self.assertEqual(str(x.exception), 'Badly quoted value (line 1)')
+        self.assertEqual(str(x.exception), r'''Badly quoted value "'\\'" (line 1)''')
 
     def test_convert_unit(self):
         c = postgresql.convert_unit

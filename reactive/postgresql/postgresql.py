@@ -70,6 +70,9 @@ class AsIs(psycopg2.extensions.ISQLQuote):
         return "{}({!r})".format(self.__class__.__name__, self._wrapped)
 
 
+distro_version_map = dict(trusty="9.3", xenial="9.5", bionic="10", focal="12")
+
+
 def version():
     """PostgreSQL version. major.minor, as a string."""
     # Use a cached version if available, to ensure this
@@ -77,6 +80,13 @@ def version():
     # across OS release upgrades.
     version = unitdata.kv().get("postgresql.pg_version")
     if version:
+        return version
+
+    # If no cached version, use the version reported by
+    # pg_lsclusters
+    version = lsclusters_version()
+    if version:
+        unitdata.kv().set("postgresql.pg_version", version)
         return version
 
     # We use the charm configuration here, as multiple versions
@@ -89,13 +99,25 @@ def version():
 
     # If the version wasn't set, we are using the default version for
     # the distro release.
-    version_map = dict(trusty="9.3", xenial="9.5", bionic="10", focal="12")
     try:
-        version = version_map[helpers.distro_codename()]
+        version = distro_version_map[helpers.distro_codename()]
     except KeyError:
         raise NotImplementedError("No default version for distro {}".format(helpers.distro_codename()))
     unitdata.kv().set("postgresql.pg_version", version)
     return version
+
+
+def clear_version_cache():
+    unitdata.kv().set("postgresql.pg_version", None)
+
+
+def lsclusters_version():
+    if not os.path.exists('/usr/bin/pg_lsclusters'):
+        return None
+    results = subprocess.check_output(['pg_lsclusters', '--no-header']).decode().splitlines()
+    if len(results) == 1:
+        return results[0].split()[0]
+    return None
 
 
 def point_version():
@@ -473,10 +495,7 @@ def ensure_role(con, role):
 def ensure_extensions(con, extensions):
     """extensions is a list of (name, schema) tuples"""
     cur = con.cursor()
-    cur.execute(
-        """SELECT extname,nspname FROM pg_extension,pg_namespace
-                   WHERE pg_namespace.oid = extnamespace"""
-    )
+    cur.execute("SELECT extname, nspname FROM pg_extension, pg_namespace WHERE pg_namespace.oid = extnamespace")
     installed_extensions = frozenset((x[0], x[1]) for x in cur.fetchall())
     hookenv.log("ensure_extensions({}), have {}".format(extensions, installed_extensions), DEBUG)
     extensions_set = frozenset(set(extensions))
