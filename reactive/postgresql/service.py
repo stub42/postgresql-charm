@@ -143,12 +143,23 @@ def configure_sources():
 
     # Shortcut for the PGDG archive.
     if config["pgdg"]:
-        pgdg_url = "http://apt.postgresql.org/pub/repos/apt/"
-        pgdg_src = "deb {} {}-pgdg main".format(pgdg_url, helpers.distro_codename())
-        pgdg_key_path = os.path.join(hookenv.charm_dir(), "lib", "pgdg.key")
+        add_pgdg_source()
+
+
+def add_pgdg_source():
+    pgdg_url = "http://apt.postgresql.org/pub/repos/apt/"
+    pgdg_src = "deb {} {}-pgdg main".format(pgdg_url, helpers.distro_codename())
+    pgdg_key_path = os.path.join(hookenv.charm_dir(), "lib", "pgdg.key")
+    kv = unitdata.kv()
+    k = "postgresql.service.pgdg_src"
+    # Add the source if the key has changed, or if the src has
+    # changed such as a distro upgrade. Check key change first,
+    # or short circuiting will add the source twice.
+    if reactive.helpers.any_file_changed([pgdg_key_path]) or pgdg_src != kv.get(k):
         with open(pgdg_key_path, "r") as f:
             hookenv.log("Adding PGDG archive")
             apt.add_source(pgdg_src, f.read())
+        kv.set(k, pgdg_src)
 
 
 @when("postgresql.cluster.locale.set")
@@ -192,13 +203,13 @@ def create_cluster():
 def create_pg_ctl_conf():
     contents = textwrap.dedent(
         """\
-                        # Managed by Juju
-                        # Automatic pg_ctl configuration
-                        # This configuration file contains cluster specific options to be passed to
-                        # pg_ctl(1).
+        # Managed by Juju
+        # Automatic pg_ctl configuration
+        # This configuration file contains cluster specific options to be passed to
+        # pg_ctl(1).
 
-                        pg_ctl_options = '-w -t 3600'
-                        """
+        pg_ctl_options = '-w -t 3600'
+        """
     )
     helpers.write(
         postgresql.pg_ctl_conf_path(),
