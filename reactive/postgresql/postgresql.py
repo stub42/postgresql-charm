@@ -70,9 +70,6 @@ class AsIs(psycopg2.extensions.ISQLQuote):
         return "{}({!r})".format(self.__class__.__name__, self._wrapped)
 
 
-distro_version_map = dict(trusty="9.3", xenial="9.5", bionic="10", focal="12")
-
-
 def version():
     """PostgreSQL version. major.minor, as a string."""
     # Use a cached version if available, to ensure this
@@ -99,8 +96,9 @@ def version():
 
     # If the version wasn't set, we are using the default version for
     # the distro release.
+    version_map = dict(trusty="9.3", xenial="9.5", bionic="10", focal="12")
     try:
-        version = distro_version_map[helpers.distro_codename()]
+        version = version_map[helpers.distro_codename()]
     except KeyError:
         raise NotImplementedError("No default version for distro {}".format(helpers.distro_codename()))
     unitdata.kv().set("postgresql.pg_version", version)
