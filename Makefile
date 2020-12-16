@@ -27,11 +27,6 @@ _success_ex:
 	true | ts
 
 
-# Munge the path so the requested version of Juju is found, and thus used
-# by Amulet and juju-deployer.
-export PATH := /usr/lib/juju-$(shell $(JUJU) --version | perl -p -e "s/-.*//")/bin:$(PATH)
-
-
 test: lint unittest integration
 
 CHARM_NAME := postgresql
