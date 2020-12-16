@@ -110,9 +110,9 @@ def clear_version_cache():
 
 
 def lsclusters_version():
-    if not os.path.exists('/usr/bin/pg_lsclusters'):
+    if not os.path.exists("/usr/bin/pg_lsclusters"):
         return None
-    results = subprocess.check_output(['pg_lsclusters', '--no-header']).decode().splitlines()
+    results = subprocess.check_output(["pg_lsclusters", "--no-header"]).decode().splitlines()
     if len(results) == 1:
         return results[0].split()[0]
     return None
