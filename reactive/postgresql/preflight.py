@@ -55,7 +55,7 @@ def block_on_invalid_config():
             valid = False
             status_set("blocked", "Invalid value for {} ({!r})".format(key, config[key]))
 
-    unchangeable_config = ["locale", "encoding", "pgdg", "manual_replication"]
+    unchangeable_config = ["locale", "encoding", "manual_replication"]
     if config._prev_dict is not None:
         for name in unchangeable_config:
             if config.changed(name):
