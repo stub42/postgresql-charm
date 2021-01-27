@@ -1,4 +1,4 @@
-# Copyright 2011-2015 Canonical Ltd.
+# Copyright 2011-2021 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -91,3 +91,8 @@ def block_on_invalid_config():
 
     if not valid:
         raise SystemExit(0)
+
+
+@preflight
+def inhibit_default_cluster_creation():
+    postgresql.inhibit_default_cluster_creation()

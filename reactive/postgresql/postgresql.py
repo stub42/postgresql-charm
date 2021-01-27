@@ -1,4 +1,4 @@
-# Copyright 2015-2018 Canonical Ltd.
+# Copyright 2015-2021 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -15,12 +15,12 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from collections import namedtuple, OrderedDict
-from contextlib import contextmanager
 from distutils.version import LooseVersion
 import functools
 import hashlib
 import itertools
 import json
+import os
 import os.path
 import re
 import subprocess
@@ -190,24 +190,17 @@ def packages():
     return p
 
 
-@contextmanager
 def inhibit_default_cluster_creation():
     """Stop the PostgreSQL packages from creating the default cluster.
 
     We can't use the default cluster as it is likely created with an
     incorrect locale and without options such as data checksumming.
     """
-    path = postgresql_conf_path()
+    path = createcluster_conf_path()
     if os.path.exists(path):
-        yield
-    else:
-        os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
-        with open(path, "w"):
-            pass
-        try:
-            yield
-        finally:
-            os.unlink(path)
+        return
+    os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
+    host.write_file(path, "create_main_cluster = false", perms=0x444)
 
 
 def config_dir():
@@ -244,6 +237,10 @@ def hot_standby_conf_path():
 
 def hot_standby_signal_path():
     return os.path.join(data_dir(), "standby.signal")
+
+
+def createcluster_conf_path():
+    return "/etc/postgresql-common/createcluster.d/pgcharm.conf"
 
 
 def pg_bin_dir():

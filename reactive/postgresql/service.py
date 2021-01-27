@@ -1,4 +1,4 @@
-# Copyright 2011-2018 Canonical Ltd.
+# Copyright 2011-2021 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -205,7 +205,8 @@ def update_kernel_settings():
 @when_not("postgresql.cluster.destroyed")
 def create_cluster():
     """Sets the postgresql.cluster.created state."""
-    postgresql.drop_cluster(stop=True)
+    # Initial cluster creation now correctly inhibited.
+    # postgresql.drop_cluster(stop=True)
     postgresql.create_cluster()
     reactive.set_state("postgresql.cluster.created")
 
