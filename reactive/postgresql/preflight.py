@@ -46,7 +46,7 @@ def block_on_invalid_config():
     config = hookenv.config()
 
     enums = dict(
-        version=set(["", "9.3", "9.4", "9.5", "9.6", "10", "11", "12"]),
+        version=set(["", "9.5", "9.6", "10", "11", "12"]),
         package_status=set(["install", "hold"]),
     )
     for key, vals in enums.items():

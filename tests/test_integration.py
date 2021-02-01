@@ -19,12 +19,10 @@ from datetime import datetime
 from distutils.version import LooseVersion
 import os.path
 import re
-import shutil
 import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 import unittest
 import uuid
@@ -81,7 +79,6 @@ class PGBaseTestCase(object):
     test_config = None
     num_units = 1
     nagios_subordinate = False
-    storage_subordinate = False
 
     keep = set()
 
@@ -123,16 +120,9 @@ class PGBaseTestCase(object):
             deployment.add("nrpe", "cs:nrpe")
             deployment.relate("postgresql:nrpe-external-master", "nrpe:nrpe-external-master")
 
-        # Add a storage subordinate. Defaults just use local disk.
-        # We need to use an unofficial branch, as there is not yet
-        # an official branch of the storage charm for trusty.
-        if cls.storage_subordinate:
-            deployment.add("storage", "lp:~stub/charms/trusty/storage/trunk")
-            deployment.relate("postgresql:data", "storage:data")
-
         # Per Bug #1489237, wait until juju-deployer can no longer see
         # the ghost of serivices we want to redeploy.
-        for service in ["postgresql", "nagios", "storage"]:
+        for service in ["postgresql", "nagios"]:
             while True:
                 cmd = ["juju-deployer", "-f", service]
                 rv = subprocess.call(
@@ -151,8 +141,7 @@ class PGBaseTestCase(object):
 
         try:
             cls.deployment.deploy(keep=cls.keep)
-            if not cls.storage_subordinate:
-                cls.add_juju_storage()
+            cls.add_juju_storage()
         except Exception:
             with suppress(Exception):
                 cls.deployment.tearDown()
@@ -466,10 +455,7 @@ class PGBaseTestCase(object):
             stderr=subprocess.DEVNULL,
             universal_newlines=True,
         ).strip()
-        if self.storage_subordinate:
-            mount = "/srv/data/postgresql"
-        else:
-            mount = "/srv/pgdata"
+        mount = "/srv/pgdata"
         self.assertEqual(
             details,
             "lrwxrwxrwx root root " "'/var/lib/postgresql/{}/main' -> " "'{}/{}/main'".format(ver, mount, ver),
@@ -619,37 +605,6 @@ class PGMultiBaseTestCase(PGBaseTestCase):
         self.assertTrue(table_found, "Replication not replicating")
 
 
-class PG93Tests(PGBaseTestCase, unittest.TestCase):
-    version = "9.3"
-    test_config = dict(
-        version=("" if SERIES == "trusty" else "9.3"),
-        pgdg=(False if SERIES == "trusty" else True),
-        max_connections=150,
-    )
-    storage_subordinate = True if SERIES == "trusty" else False
-    nagios_subordinate = True if SERIES == "trusty" else False
-
-    def test_deprecated_overrides(self):
-        con = self.connect()
-        cur = con.cursor()
-        cur.execute("show max_connections")
-        max_connections = cur.fetchone()[0]
-        self.assertEqual(int(max_connections), 150)
-
-
-class PG93MultiTests(PGMultiBaseTestCase, unittest.TestCase):
-    # Alas, the subordinates do not yet support Xenial so we cannot
-    # test with them.
-    storage_subordinate = True if SERIES == "trusty" else False
-    nagios_subordinate = True if SERIES == "trusty" else False
-
-    version = "9.3"
-    test_config = dict(
-        version=("" if SERIES == "trusty" else "9.3"),
-        pgdg=(False if SERIES == "trusty" else True),
-    )
-
-
 class PG95Tests(PGBaseTestCase, unittest.TestCase):
     # checkpoint_segments to test Bug #1588072
     version = "9.5"
@@ -685,127 +640,3 @@ class PG10MultiTests(PGMultiBaseTestCase, unittest.TestCase):
         version=("" if SERIES == "bionic" else "10"),
         pgdg=(False if SERIES == "bionic" else True),
     )
-
-
-class UpgradedCharmTests(PGBaseTestCase, unittest.TestCase):
-    num_units = 2  # Old charm only supported 2 unit initial deploy.
-    version = "9.3"
-    test_config = dict(version="9.3")
-    # Storage subordinate does not yet work with Xenial.
-    storage_subordinate = True if SERIES == "trusty" else False
-    nagios_subordinate = False  # Nagios was broken with the old revision.
-
-    @classmethod
-    def setUpClass(cls):
-        # Ensure an old version of the charm is first installed (but not
-        # too old!). This version was what we internally recommended
-        # before the rewrite to support Juju leadership and unit status,
-        # and you can tell the correct version is deployed as the unit
-        # status will remain 'unknown'.
-        old_charm_dir = tempfile.mkdtemp(suffix=".charm")
-        try:
-            subprocess.check_call(
-                [
-                    "bzr",
-                    "checkout",
-                    "-q",
-                    "--lightweight",
-                    "-r",
-                    "127",
-                    "lp:charms/trusty/postgresql",
-                    old_charm_dir,
-                ]
-            )
-            super(UpgradedCharmTests, cls).setUpClass(old_charm_dir)
-        finally:
-            shutil.rmtree(old_charm_dir)
-
-        # Replace the pre-leadership charm in the repo with this version,
-        # so we can upgrade.
-        cls.deployment.charm_dir = None
-        cls.deployment.repackage_charm()
-        repo_path = os.path.join(os.environ["JUJU_REPOSITORY"], SERIES, "postgresql")
-        if os.path.exists(repo_path):
-            shutil.rmtree(repo_path)
-        shutil.copytree(cls.deployment.charm_dir, repo_path)
-
-        # Upgrade.
-        if cls.deployment.has_juju_version("2.0"):
-            cmd = [
-                "juju",
-                "upgrade-charm",
-                "--switch",
-                cls.deployment.charm_dir,
-                "postgresql",
-            ]
-        else:
-            cmd = ["juju", "upgrade-charm", "postgresql"]
-        subprocess.check_call(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            universal_newlines=True,
-        )
-
-        # Sleep. upgrade-charm first needs to distribute the updated
-        # charm to the units before the hooks get invoked, and this takes
-        # some time. During this period, the system looks completely idle
-        # and 'juju wait' will consider the environment quiescent.
-        time.sleep(10)
-
-        # Now wait for the upgrade and fallout to finish, having hopefully
-        # left enough time for the upgrade to actually start.
-        cls.deployment.wait()
-
-    def test_username(self):
-        # We change the generated usernames to make disaster recovery
-        # easier. Old usernames based on the relation id and perhaps
-        # with a random component are GRANTed to the new usernames
-        # so that database permissions are not lost.
-        for admin, expected_username in [
-            (False, "juju_client"),
-            (True, "jujuadmin_client"),
-        ]:
-            with self.subTest(admin=admin):
-                con = self.connect(admin=admin)
-                cur = con.cursor()
-                cur.execute("show session_authorization")
-                username = cur.fetchone()[0]
-                self.assertEqual(username, expected_username)
-                cur.execute(
-                    """
-                            select count(*)
-                            from
-                                pg_user as role, pg_user as member,
-                                pg_auth_members
-                            where role.usesysid = pg_auth_members.roleid
-                            and member.usesysid = pg_auth_members.member
-                            and member.usename = %s
-                            """,
-                    (username,),
-                )
-                # The new username has been granted permissions of both
-                # the old user and the old schema user (if there was an
-                # old schema user)
-                self.assertGreaterEqual(cur.fetchone()[0], 1)
-
-
-# Now installed by the Makefile.
-#
-# def setUpModule():
-#     # Mirror charmhelpers into our support charms, since charms
-#     # can't symlink out of their subtree.
-#     main_charmhelpers = os.path.abspath(os.path.join(ROOT, 'lib',
-#                                                      'charmhelpers'))
-#     test_client_charmhelpers = os.path.join(CLIENT_CHARMDIR,
-#                                             'hooks', 'charmhelpers')
-#     if os.path.exists(test_client_charmhelpers):
-#         shutil.rmtree(test_client_charmhelpers)
-#     shutil.copytree(main_charmhelpers, test_client_charmhelpers)
-#
-#
-# def tearDownModule():
-#     test_client_charmhelpers = os.path.join(CLIENT_CHARMDIR,
-#                                             'hooks', 'charmhelpers')
-#     if os.path.exists(test_client_charmhelpers):
-#         shutil.rmtree(test_client_charmhelpers)

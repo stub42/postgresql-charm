@@ -49,11 +49,6 @@ class TestPostgresql(unittest.TestCase):
 
         config.return_value = {'version': ''}
 
-        # Trusty default
-        codename.return_value = 'trusty'
-        postgresql.clear_version_cache()
-        self.assertEqual(postgresql.version(), '9.3')
-
         # Xenial default
         codename.return_value = 'xenial'
         postgresql.clear_version_cache()

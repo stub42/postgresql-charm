@@ -38,7 +38,7 @@ options:
     type: string
     description: >
         Version of PostgreSQL that we want to install. Supported versions
-        are "9.3", "9.4", "9.5", "9.6", "10", "11" & "12". The default
+        are "9.5", "9.6", "10", "11" & "12". The default
         version for the deployed Ubuntu release is used when the version
         is unspecified.
   extra_pg_conf:

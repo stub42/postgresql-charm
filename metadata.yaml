@@ -20,7 +20,6 @@ series:
     - focal
     - bionic
     - xenial
-    - trusty
 provides:
   db:
     interface: pgsql
