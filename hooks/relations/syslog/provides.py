@@ -29,8 +29,8 @@ class SyslogProvides(reactive.relations.RelationBase):
 
     @hook("{provides:syslog}-relation-departed")
     def departed(self):
-        path = self.get_local("path")
-        if os.path.exists(path):
+        path = self._rsyslog_conf_path(hookenv.remote_unit())
+        if path and os.path.exists(path):
             os.remove(path)
             reactive.set_state("syslog.needs_restart")
         self.remove_state("{relation_name}.available")
