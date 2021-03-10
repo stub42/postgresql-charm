@@ -34,7 +34,7 @@ class SyslogProvides(reactive.relations.RelationBase):
             os.remove(path)
             reactive.set_state("syslog.needs_restart")
         self.remove_state("{relation_name}.available")
-        self.depart()
+        self.conversation().depart()
 
     def _rsyslog_conf_path(self, remote_unit):
         # Use both the local unit and remote unit in the config file
