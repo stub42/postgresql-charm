@@ -72,8 +72,6 @@ options:
         checkpoint_completion_target=0.9
         # password_encryption=true
         max_connections=100
-        autovacuum_freeze_max_age=2000000000
-        vacuum_freeze_table_age=1600000000
       type: string
       description: >
           postgresql.conf settings, one per line in standard key=value
