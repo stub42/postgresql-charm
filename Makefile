@@ -94,7 +94,7 @@ publish-stable:
 	rm -rf .tmp-repo
 	git clone --no-single-branch -b $(STABLE_BRANCH) . .tmp-repo
 	cd .tmp-repo \
-	    && git merge --no-ff origin/$(DEVEL_BRANCH) --log \
+	    && git merge --no-ff origin/$(DEVEL_BRANCH) -s theirs --log \
 		-m "charm-build of $(LAYER_BRANCH)" \
 	    && export rev=`charm push . $(CHARM_STORE_URL) 2>&1 \
 		| tee /dev/tty | grep url: | cut -f 2 -d ' '` \

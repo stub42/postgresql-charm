@@ -47,7 +47,7 @@ def maintenance_mode_stop(params):
         return
 
     hookenv.leader_set(maintenance_mode=None)
-    hookenv.status_set("maintenance", "Leaving maintenance mode")
+    hookenv.status_set(hookenv.MAINTENANCE, "Leaving maintenance mode")
     hookenv.action_set({"maintenance-mode": "off"})
 
 
@@ -212,8 +212,7 @@ def main(argv):
             maintenance_mode_start(params)
         elif action == "maintenance-mode-stop":
             maintenance_mode_stop(params)
-
-        if hookenv.leader_get("maintenance_mode") is not None:
+        elif hookenv.leader_get("maintenance_mode") is not None:
             hookenv.action_fail("Application is in maintenance mode")
             return
 

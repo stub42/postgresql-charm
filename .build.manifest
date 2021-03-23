@@ -50,7 +50,7 @@
     },
     {
       "branch": "refs/heads/master",
-      "rev": "2bb1e52a880772ec19deaf2efa268251d39bcf23",
+      "rev": "163407c55ebd4751a64245d6ef67f18513573614",
       "url": "postgresql"
     },
     {
@@ -95,7 +95,7 @@
     "Makefile": [
       "postgresql",
       "static",
-      "456655302f726557314db9adf547ba7d252921c236dafabeb6da6a80c7c566e6"
+      "4b95aa51d867cb02727e60e3d41ef61bb9fabe6893ebc1059a1273fa29d618ba"
     ],
     "README.md": [
       "postgresql",
@@ -110,47 +110,47 @@
     "actions/actions.py": [
       "postgresql",
       "static",
-      "f493226cf56856cd582528b0f7e4d17cc5f9bde48754fbc8d2a15c29772adb82"
+      "a6c4843ad93a83d90b0431e2d25a48b4cacd473af36b2b4bdca3da8f8369ca77"
     ],
     "actions/maintenance-mode-start": [
       "postgresql",
       "static",
-      "f493226cf56856cd582528b0f7e4d17cc5f9bde48754fbc8d2a15c29772adb82"
+      "a6c4843ad93a83d90b0431e2d25a48b4cacd473af36b2b4bdca3da8f8369ca77"
     ],
     "actions/maintenance-mode-stop": [
       "postgresql",
       "static",
-      "f493226cf56856cd582528b0f7e4d17cc5f9bde48754fbc8d2a15c29772adb82"
+      "a6c4843ad93a83d90b0431e2d25a48b4cacd473af36b2b4bdca3da8f8369ca77"
     ],
     "actions/replication-pause": [
       "postgresql",
       "static",
-      "f493226cf56856cd582528b0f7e4d17cc5f9bde48754fbc8d2a15c29772adb82"
+      "a6c4843ad93a83d90b0431e2d25a48b4cacd473af36b2b4bdca3da8f8369ca77"
     ],
     "actions/replication-resume": [
       "postgresql",
       "static",
-      "f493226cf56856cd582528b0f7e4d17cc5f9bde48754fbc8d2a15c29772adb82"
+      "a6c4843ad93a83d90b0431e2d25a48b4cacd473af36b2b4bdca3da8f8369ca77"
     ],
     "actions/switchover": [
       "postgresql",
       "static",
-      "f493226cf56856cd582528b0f7e4d17cc5f9bde48754fbc8d2a15c29772adb82"
+      "a6c4843ad93a83d90b0431e2d25a48b4cacd473af36b2b4bdca3da8f8369ca77"
     ],
     "actions/wal-e-backup": [
       "postgresql",
       "static",
-      "f493226cf56856cd582528b0f7e4d17cc5f9bde48754fbc8d2a15c29772adb82"
+      "a6c4843ad93a83d90b0431e2d25a48b4cacd473af36b2b4bdca3da8f8369ca77"
     ],
     "actions/wal-e-list-backups": [
       "postgresql",
       "static",
-      "f493226cf56856cd582528b0f7e4d17cc5f9bde48754fbc8d2a15c29772adb82"
+      "a6c4843ad93a83d90b0431e2d25a48b4cacd473af36b2b4bdca3da8f8369ca77"
     ],
     "actions/wal-e-restore": [
       "postgresql",
       "static",
-      "f493226cf56856cd582528b0f7e4d17cc5f9bde48754fbc8d2a15c29772adb82"
+      "a6c4843ad93a83d90b0431e2d25a48b4cacd473af36b2b4bdca3da8f8369ca77"
     ],
     "bin/charm-env": [
       "layer:basic",
@@ -1050,7 +1050,7 @@
     "version": [
       "postgresql",
       "dynamic",
-      "b2b49a6b042fe75c82260ce17b3cb2e251eed5c7d8be2be681c09341c881295b"
+      "8c0fc0410cde3955bbea45b37a7ed41d3517ce41249bd910d245c4f0dfbca007"
     ],
     "wheelhouse.txt": [
       "layer:snap",
