@@ -66,7 +66,7 @@ build-dev: | $(BUILD_DIR)
 		-m "charm-build of $(LAYER_BRANCH)" $(LAYER_BRANCH)
 	rm -rf .tmp-repo
 	git clone -b $(LAYER_BRANCH) . .tmp-repo
-	charm build -f -o $(JUJU_REPOSITORY) -n $(CHARM_NAME) --no-local-layers .tmp-repo
+	charm build -f -d $(BUILD_DIR)/.. -n $(CHARM_NAME) --no-local-layers .tmp-repo
 	rm -rf .tmp-repo
 	cd $(BUILD_DIR) && \
 	    if [ -n "`git status --porcelain`" ]; then \
