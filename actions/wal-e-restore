@@ -47,7 +47,7 @@ def maintenance_mode_stop(params):
         return
 
     hookenv.leader_set(maintenance_mode=None)
-    hookenv.status_set(hookenv.MAINTENANCE, "Leaving maintenance mode")
+    hookenv.status_set("maintenance", "Leaving maintenance mode")
     hookenv.action_set({"maintenance-mode": "off"})
 
 
