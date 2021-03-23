@@ -1,6 +1,6 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
-# Copyright 2008-2016 Canonical Ltd.  All rights reserved.
+# Copyright 2008-2018 Canonical Ltd.  All rights reserved.
 
 """
 Backup one or more PostgreSQL databases.
@@ -16,7 +16,7 @@ import os
 import os.path
 import stat
 import logging
-import commands
+import subprocess
 from datetime import datetime
 from optparse import OptionParser
 
@@ -38,16 +38,15 @@ def main(options, databases):
             "-U", "postgres",
             "--format=c",
             "--blobs",
-            ])
+        ])
 
         # alter the cmd to be used based on compression chosen
         if options.compression_cmd == 'postgres':
             cmd = " ".join([
                 cmd,
                 "--compress=%d" % options.compression_level
-                    if options.compression_level else "",
-                "--file=%s" % dest,
-                database])
+                if options.compression_level else "",
+                "--file=%s" % dest, database])
         elif options.compression_cmd == 'none':
             cmd = " ".join([
                 cmd,
@@ -83,16 +82,19 @@ def main(options, databases):
             log.error("%s already exists. Skipping." % dest)
             continue
 
-        (rv, outtext) = commands.getstatusoutput(cmd)
-        if rv != 0:
-            log.critical("Failed to backup %s (%d)" % (database, rv))
-            log.critical(outtext)
+        try:
+            subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as x:
+            log.critical("Failed to backup %s (%d)" % (database, x.returncode))
+            log.critical(x.output.decode(errors='ignore'))
+            rv = x.returncode
             continue
 
         size = os.stat(dest)[stat.ST_SIZE]
         log.info("Backed up %s (%0.2fMB)" % (database, size / MB))
 
     return rv
+
 
 if __name__ == '__main__':
     valid_compression_cmd = ['none'] + sorted([

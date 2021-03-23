@@ -23,10 +23,9 @@ args = list(sys.argv[1:])
 # # Strip the -W option, as its noise messes with test output.
 # if '-W' in args:
 #     args.remove('-W')
-cmd = ['juju-deployer'] + args
+cmd = ["juju-deployer"] + args
 try:
-    subprocess.check_output(cmd, stderr=subprocess.STDOUT,
-                            universal_newlines=True)
+    subprocess.check_output(cmd, stderr=subprocess.STDOUT, universal_newlines=True)
 except subprocess.CalledProcessError as x:
     sys.stderr.write(x.output)
     sys.exit(x.returncode)

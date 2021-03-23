@@ -27,24 +27,7 @@ _success_ex:
 	true | ts
 
 
-# Munge the path so the requested version of Juju is found, and thus used
-# by Amulet and juju-deployer.
-export PATH := /usr/lib/juju-$(shell $(JUJU) --version | perl -p -e "s/-.*//")/bin:$(PATH)
-
-
-test: testdeps lint unittest integration
-
-testdeps:
-ifeq ($(HOST_SERIES),trusty)
-	sudo apt-get install -y python-tox python3-psycopg2 bzr moreutils \
-	    software-properties-common
-else
-	sudo apt-get install -y tox python3-psycopg2 bzr moreutils \
-	    software-properties-common
-endif
-	sudo add-apt-repository -y ppa:juju/stable
-	sudo apt-get install charm-tools
-
+test: lint unittest integration
 
 CHARM_NAME := postgresql
 
@@ -69,7 +52,7 @@ $(BUILD_DIR):
 # updates.
 .PHONY: build
 build: | $(BUILD_DIR)
-	charm build -f -o $(BUILD_ROOT) -n $(CHARM_NAME)
+	charm build -f -d $(BUILD_DIR)/.. -n $(CHARM_NAME)
 
 # Generate a fresh development build and commit it to $(TEST_BRANCH).
 # Only builds work committed to $(LAYER_BRANCH).
@@ -83,7 +66,7 @@ build-dev: | $(BUILD_DIR)
 		-m "charm-build of $(LAYER_BRANCH)" $(LAYER_BRANCH)
 	rm -rf .tmp-repo
 	git clone -b $(LAYER_BRANCH) . .tmp-repo
-	charm build -f -o $(JUJU_REPOSITORY) -n $(CHARM_NAME) .tmp-repo --no-local-layers
+	charm build -f -d $(BUILD_DIR)/.. -n $(CHARM_NAME) --no-local-layers .tmp-repo
 	rm -rf .tmp-repo
 	cd $(BUILD_DIR) && \
 	    if [ -n "`git status --porcelain`" ]; then \

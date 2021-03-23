@@ -18,9 +18,9 @@ from charmhelpers.core import hookenv, unitdata
 from charms.reactive import when
 
 
-@when('syslog.available', 'postgresql.cluster.configured')
+@when("syslog.available", "postgresql.cluster.configured")
 def configure_syslog(syslog):
-    programname = hookenv.local_unit().replace('/', '_')
+    programname = hookenv.local_unit().replace("/", "_")
     syslog.configure(programname=programname)
 
     # Extend the basic syslog interface. Add programname and
@@ -28,11 +28,11 @@ def configure_syslog(syslog):
     # decode the logs.
     log_line_prefix = get_log_line_prefix()
     for conv in syslog.conversations():
-        conv.set_remote('programname', programname)
-        conv.set_remote('log_line_prefix', log_line_prefix)
+        conv.set_remote("programname", programname)
+        conv.set_remote("log_line_prefix", log_line_prefix)
 
 
 def get_log_line_prefix():
     store = unitdata.kv()
-    log_line_prefix_key = 'postgresql.cluster.pgconf.current.log_line_prefix'
+    log_line_prefix_key = "postgresql.cluster.pgconf.current.log_line_prefix"
     return store.get(log_line_prefix_key)

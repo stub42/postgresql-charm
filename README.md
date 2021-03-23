@@ -127,18 +127,6 @@ Learn about the SQL `GRANT` statement in the excellect [PostgreSQL
 reference guide][3].
 
 
-### block-storage-broker
-
-If you are using external storage provided by the block storage broker,
-recovery or a failed unit is simply a matter of ensuring the old unit
-is fully shut down, and then bringing up a fresh unit with the old
-external storage mounted. The charm will see the old database there
-and use it.
-
-If you are unable or do not wish to to simply remount the same
-filesystem, you can of course copy all the data from the old filesystem
-to the new one before bringing up the new unit.
-
 ### dump/restore
 
 PostgreSQL dumps, such as those that can be scheduled in the charm, can

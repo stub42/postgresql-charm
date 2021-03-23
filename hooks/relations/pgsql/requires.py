@@ -13,7 +13,77 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+'''
+pgsql charms.reactive Endpoint for relating clients to the PostgreSQL
+charm.
 
+The Endpoint provides the following flags:
+
+* {endpoint_name}.connected          - The relation exists
+* {endpoint_name}.master.available   - A master database is available
+* {endpoint_name}.master.changed     - Master database details have changed
+* {endpoint_name}.database.available - A database is available (master or standby)
+* {endpoint_name}.database.changed   - Database details have changed (master or standby)
+* {endpoint_name}.standbys.available - At least one standby database is available
+* {endpoint_name}.standbys.changed   - Standby database details have changed
+
+If your charm does support horizontal scalability of the PostgreSQL
+backend or ability to fallback to a read-only PostgreSQL replica, you
+only need to use the 'master' flags and should ignore the standby
+databases (read-only replicas of the master).
+
+
+The charm is responsible for clearing the 'changed' flags, if it cares.
+
+
+Usage:
+
+    from charmhelpers.core import hookenv
+    from charms import reactive
+
+    @when_not('myrelname.connected')
+    def blocked():
+        hookenv.status_set('blocked', 'myrelname relation to PostgreSQL is required')
+
+    @when('myrelname.connected')
+    def choose_db():
+        pgsql = reactive.endpoint_from_flag('myrelname.connected')
+        pgsql.set_database('specdb')
+        pgsql.set_extensons(['citext'])
+
+    @when('myrelname.master.available')
+    def blocked():
+        pgsql = reactive.endpoint_from_flag('myrelname.master.available')
+        hookenv.status_set('active',
+                           'connected to PostgreSQL {}'.format(pgsql.version()))
+
+    @when('myrelname.master.changed')
+    def update_db_details():
+        pgsql = reactive.endpoint_from_flag('myrelname.master.changed')
+        update_my_config(pg_conn_str=pgsql.master)
+        reactive.clear_flag('myrelname.master.changed')
+
+
+Triggers may also be used:
+
+    from charms import reactive
+
+    register_trigger(when='myrelname.standbys.changed',
+                     clear_flag='metrics.configured')
+
+    @when('mydb.standbys.available')
+    @when_not('metrics.configured')
+    def configure_metrics():
+        pgsql = reactive.endpoint_from_flag('mydb.standbys.available')
+        config_statsd(pgsql.standbys)
+        restart_statsd()
+        reactive.set_flag('metrics.configured')
+
+    @reactive.hook('upgrade-charm')
+    def upgrade_charm():
+        reactive.clear_flag('metrics.configured')
+
+'''
 from collections import OrderedDict
 import ipaddress
 import itertools
@@ -21,14 +91,21 @@ import re
 import urllib.parse
 
 from charmhelpers.core import hookenv
-from charms.reactive import set_flag, clear_flag, Endpoint, when, when_not
+from charms.reactive import (
+    clear_flag,
+    data_changed,
+    Endpoint,
+    set_flag,
+    when,
+    when_not,
+)
+
+__all__ = ['ConnectionString', 'ConnectionStrings', 'PostgreSQLClient']
 
 
 # This data structure cannot be in an external library,
 # as interfaces have no way to declare dependencies
 # (https://github.com/juju/charm-tools/issues/243).
-# It also must be defined in this file
-# (https://github.com/juju-solutions/charms.reactive/pull/51)
 #
 class ConnectionString(str):
     """A libpq connection string.
@@ -57,7 +134,6 @@ class ConnectionString(str):
 
     """
     def __new__(self, conn_str=None, **kw):
-
         # Parse libpq key=value style connection string. Components
         # passed by keyword argument override. If the connection string
         # is invalid, some components may be skipped (but in practice,
@@ -203,7 +279,7 @@ class ConnectionStrings(OrderedDict):
     def standbys(self):
         """list of :class:`ConnectionString` for active hot standbys."""
         if not self._authorized():
-            return None
+            return []
 
         # New v2 protocol, each unit advertises all standbys.
         for unit in self.relation.joined_units.values():
@@ -260,14 +336,20 @@ class PostgreSQLClient(Endpoint):
     (so one per relation name). To access the connection strings, use
     the master and standbys attributes::
 
-        @when('productdb.master.available')
-        def setup_database(pgsql):
-            conn_str = pgsql.master  # A ConnectionString.
-            update_db_conf(conn_str)
+        from charms import reactive
 
-        @when('productdb.standbys.available')
-        def setup_cache_databases(pgsql):
-            set_cache_db_list(pgsql.standbys)  # set of ConnectionString.
+        @when('productdb.master.changed')
+        def setup_database():
+            pgsql = reactive.endpoint_from_flag('productdb.master.changed')
+            conn_str = pgsql.master  # A ConnectionString
+            update_db_conf(conn_str)
+            reactive.clear_flag('productdb.master.changed')
+
+        @when('productdb.standbys.changed')
+        def setup_cache_databases():
+            pgsql = reactive.endpoint_from_flag('productdb.standbys.changed')
+            set_cache_db_list(pgsql.standbys)  # set of ConnectionString
+            reactive.clear_flag('productdb.standbys.changed')
 
     In somecases, a relation name may be related to several PostgreSQL
     services. You can also access the ConnectionStrings for a particular
@@ -276,7 +358,7 @@ class PostgreSQLClient(Endpoint):
         @when('db.master.available')
         def set_dbs(pgsql):
             update_monitored_dbs(cs.master
-                                 for cs in pgsql  # ConnectionStrings.
+                                 for cs in pgsql  # ConnectionStrings
                                  if cs.master)
     """
     def _set_flag(self, flag):
@@ -308,15 +390,41 @@ class PostgreSQLClient(Endpoint):
         self._set_flag('{endpoint_name}.connected')
 
     @when_not('endpoint.{endpoint_name}.joined')
+    @when('{endpoint_name}.connected')
     def _departed(self):
         self._clear_all_flags()
+        self._clear_flag('{endpoint_name}.database.changed')
+        self._set_flag('{endpoint_name}.database.changed')
+        self._clear_flag('{endpoint_name}.master.changed')
+        self._set_flag('{endpoint_name}.master.changed')
+        self._clear_flag('{endpoint_name}.standbys.changed')
+        self._set_flag('{endpoint_name}.standbys.changed')
+        self._set_flag('{endpoint_name}.departed')
 
     @when('endpoint.{endpoint_name}.changed')
     def _changed(self):
+        # Set the master/standby changed flags. The charm is
+        # responsible for clearing this, if it cares. Flags are
+        # cleared before being set to ensure triggers are triggered.
+        upgrade = hookenv.hook_name() == 'upgrade-charm'
         self._reset_all_flags()
+        key = self.expand_name('endpoint.{endpoint_name}.master.changed')
+        if data_changed(key, [str(cs.master) for cs in self]) or (self.master and upgrade):
+            self._clear_flag('{endpoint_name}.master.changed')
+            self._set_flag('{endpoint_name}.master.changed')
+            self._clear_flag('{endpoint_name}.database.changed')
+            self._set_flag('{endpoint_name}.database.changed')
+        key = self.expand_name('endpoint.{endpoint_name}.standbys.changed')
+        if data_changed(key, [sorted(str(s) for s in cs.standbys) for cs in self]) or (self.standbys and upgrade):
+            self._clear_flag('{endpoint_name}.standbys.changed')
+            self._set_flag('{endpoint_name}.standbys.changed')
+            self._clear_flag('{endpoint_name}.database.changed')
+            self._set_flag('{endpoint_name}.database.changed')
         self._clear_flag('endpoint.{endpoint_name}.changed')
 
     def _set_raw_value(self, key, value, relid=None):
+        # The PostgreSQL charm predates the charms.reactive for JSON
+        # encoded relation data, and needs to be sent raw.
         for relation in self.relations:
             if relid is None or relid == relation.relation_id:
                 relation.to_publish_raw[key] = value
@@ -420,7 +528,7 @@ class PostgreSQLClient(Endpoint):
             if unit not in relation.joined_units:
                 continue
             found = True
-            conn_str = _cs(relation[unit].received_raw)
+            conn_str = _cs(relation.joined_units[unit])
             if conn_str:
                 return conn_str
 
@@ -464,10 +572,10 @@ def _cs(unit):
         if local_unit not in allowed_units:
             return None  # Not yet authorized
 
-    if locdata.get('database', '') != reldata.get('database', ''):
+    if locdata.get('database') and locdata.get('database', '') != reldata.get('database', ''):
         return None  # Requested database does not match yet
-    if locdata.get('roles', '') != reldata.get('roles', ''):
+    if locdata.get('roles') and locdata.get('roles', '') != reldata.get('roles', ''):
         return None  # Requested roles have not yet been assigned
-    if locdata.get('extensions', '') != reldata.get('extensions', ''):
+    if locdata.get('extensions') and locdata.get('extensions', '') != reldata.get('extensions', ''):
         return None  # Requested extensions have not yet been installed
     return ConnectionString(**d)

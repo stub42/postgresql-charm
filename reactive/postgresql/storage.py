@@ -30,123 +30,120 @@ from reactive.postgresql import service
 from reactive.workloadstatus import status_set
 
 
-pgdata_mount_key = 'postgresql.storage.pgdata.mount'
-pgdata_path_key = 'postgresql.storage.pgdata.path'
+pgdata_mount_key = "postgresql.storage.pgdata.mount"
+pgdata_path_key = "postgresql.storage.pgdata.path"
 
 
-@hook('pgdata-storage-attached')
+@hook("pgdata-storage-attached")
 def attach():
-    storageids = hookenv.storage_list('pgdata')
+    storageids = hookenv.storage_list("pgdata")
     if not storageids:
-        hookenv.status_set('blocked', 'Cannot locate attached storage')
+        hookenv.status_set("blocked", "Cannot locate attached storage")
         return
     storageid = storageids[0]
 
-    mount = hookenv.storage_get('location', storageid)
+    mount = hookenv.storage_get("location", storageid)
     if not mount:
-        hookenv.status_set('blocked', 'Cannot locate attached storage mount')
+        hookenv.status_set("blocked", "Cannot locate attached storage mount")
         return
 
-    pgdata = os.path.join(mount, postgresql.version(), 'main')
+    pgdata = os.path.join(mount, postgresql.version(), "main")
     unitdata.kv().set(pgdata_mount_key, mount)
     unitdata.kv().set(pgdata_path_key, pgdata)
 
-    hookenv.log('PGDATA storage attached at {}'.format(mount))
+    hookenv.log("PGDATA storage attached at {}".format(mount))
 
     existingdb = os.path.exists(pgdata)
     if os.path.exists(postgresql.data_dir()) and not existingdb:
         required_space = shutil.disk_usage(postgresql.data_dir()).used
         free_space = shutil.disk_usage(mount).free
         if required_space > free_space:
-            hookenv.status_set('blocked',
-                               'Not enough free space in pgdata storage')
+            hookenv.status_set("blocked", "Not enough free space in pgdata storage")
             return
 
-    apt.queue_install(['rsync'])
-    coordinator.acquire('restart')
-    reactive.set_state('postgresql.storage.pgdata.attached')
+    apt.queue_install(["rsync"])
+    coordinator.acquire("restart")
+    reactive.set_state("postgresql.storage.pgdata.attached")
 
 
-@hook('pgdata-storage-detaching')
+@hook("pgdata-storage-detaching")
 def detaching():
-    if reactive.is_state('postgresql.storage.pgdata.migrated'):
+    if reactive.is_state("postgresql.storage.pgdata.migrated"):
         # We don't attempt to migrate data back to local storage as there
         # is probably not enough of it. And we are most likely destroying
         # the unit, so it would be a waste of time even if there is enough
         # space.
-        hookenv.status_set('blocked', 'Storage detached. Database destroyed.')
-        reactive.set_state('postgresql.cluster.destroyed')
-        reactive.remove_state('postgresql.cluster.created')
-        reactive.remove_state('postgresql.cluster.configured')
-        reactive.remove_state('postgresql.cluster.is_running')
+        hookenv.status_set("blocked", "Storage detached. Database destroyed.")
+        reactive.set_state("postgresql.cluster.destroyed")
+        reactive.remove_state("postgresql.cluster.created")
+        reactive.remove_state("postgresql.cluster.configured")
+        reactive.remove_state("postgresql.cluster.is_running")
         postgresql.stop()
     else:
         unitdata.kv().unset(pgdata_mount_key)
         unitdata.kv().unset(pgdata_path_key)
-        reactive.remove_state('postgresql.storage.pgdata.attached')
+        reactive.remove_state("postgresql.storage.pgdata.attached")
 
 
-@when('postgresql.storage.pgdata.attached')
-@when('postgresql.cluster.created')
-@when('coordinator.granted.restart')
-@when('apt.installed.rsync')
-@when_not('postgresql.storage.pgdata.migrated')
+@when("postgresql.storage.pgdata.attached")
+@when("postgresql.cluster.created")
+@when("coordinator.granted.restart")
+@when("apt.installed.rsync")
+@when_not("postgresql.storage.pgdata.migrated")
 def migrate_pgdata():
-    '''
+    """
     Copy the data from /var/lib/postgresql/9.x/main to the
     new path and replace the original PGDATA with a symlink.
     Note that the original may already be a symlink, either from
     the block storage broker or manual changes by admins.
-    '''
-    if reactive.is_state('postgresql.cluster.is_running'):
+    """
+    if reactive.is_state("postgresql.cluster.is_running"):
         # Attempting this while PostgreSQL is live would be really, really bad.
         service.stop()
 
     old_data_dir = postgresql.data_dir()
     new_data_dir = unitdata.kv().get(pgdata_path_key)
 
-    backup_data_dir = '{}-{}'.format(old_data_dir, int(time.time()))
+    backup_data_dir = "{}-{}".format(old_data_dir, int(time.time()))
 
     if os.path.isdir(new_data_dir):
         # This never happens with Juju storage, at least with 2.0,
         # because we have no way of reusing old partitions.
-        hookenv.log('Remounting existing database at {}'.format(new_data_dir),
-                    WARNING)
+        hookenv.log("Remounting existing database at {}".format(new_data_dir), WARNING)
     else:
-        status_set('maintenance',
-                   'Migrating data from {} to {}'.format(old_data_dir,
-                                                         new_data_dir))
-        helpers.makedirs(new_data_dir, mode=0o770,
-                         user='postgres', group='postgres')
+        status_set(
+            "maintenance",
+            "Migrating data from {} to {}".format(old_data_dir, new_data_dir),
+        )
+        helpers.makedirs(new_data_dir, mode=0o770, user="postgres", group="postgres")
         try:
-            rsync_cmd = ['rsync', '-av',
-                         old_data_dir + '/',
-                         new_data_dir + '/']
-            hookenv.log('Running {}'.format(' '.join(rsync_cmd)), DEBUG)
+            rsync_cmd = ["rsync", "-av", old_data_dir + "/", new_data_dir + "/"]
+            hookenv.log("Running {}".format(" ".join(rsync_cmd)), DEBUG)
             subprocess.check_call(rsync_cmd, universal_newlines=True)
         except subprocess.CalledProcessError:
-            status_set('blocked',
-                       'Failed to sync data from {} to {}'
-                       ''.format(old_data_dir, new_data_dir))
+            status_set(
+                "blocked",
+                "Failed to sync data from {} to {}" "".format(old_data_dir, new_data_dir),
+            )
             return
 
     os.replace(old_data_dir, backup_data_dir)
     os.symlink(new_data_dir, old_data_dir)
     fix_perms(new_data_dir)
-    reactive.set_state('postgresql.storage.pgdata.migrated')
+    reactive.set_state("postgresql.storage.pgdata.migrated")
 
 
 def fix_perms(data_dir):
     # The path to data_dir must be world readable, so the postgres user
     # can traverse to it.
     p = data_dir
-    while p != '/':
+    while p != "/":
         p = os.path.dirname(p)
-        subprocess.check_call(['chmod', 'a+rX', p], universal_newlines=True)
+        subprocess.check_call(["chmod", "a+rX", p], universal_newlines=True)
 
     # data_dir and all of its contents should be owned by the postgres
     # user and group.
-    host.chownr(data_dir, 'postgres', 'postgres', follow_links=False)
+    host.chownr(data_dir, "postgres", "postgres", follow_links=False)
 
     # data_dir should not be world readable.
     os.chmod(data_dir, 0o700)

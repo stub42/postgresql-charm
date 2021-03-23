@@ -1,23 +1,7 @@
-"options":
-  "coordinator":
-    "class": "charms.coordinator.SimpleCoordinator"
-    "log_level": "debug"
-  "basic":
-    "use_venv": !!bool "true"
-    "include_system_packages": !!bool "true"
-    "packages":
-    - "python3-psycopg2"
-    - "run-one"
-  "postgresql": {}
-  "apt":
-    "version_package": ""
-    "packages": []
-    "full_version": !!bool "false"
-  "nagios": {}
-  "leadership": {}
-  "snap": {}
 "includes":
+- "layer:options"
 - "layer:basic"
+- "layer:status"
 - "interface:nrpe-external-master"
 - "layer:apt"
 - "layer:snap"
@@ -25,5 +9,30 @@
 - "layer:coordinator"
 - "layer:nagios"
 - "interface:pgsql"
+"exclude": [".travis.yml", "tests", "tox.ini", "test-requirements.txt", "unit_tests"]
+"options":
+  "coordinator":
+        # Absolute path to the charmhelpers.coordinator.BaseCoordinator to use.
+    "class": "charms.coordinator.SimpleCoordinator"
+        # Layer log level (debug, info, warning, error, critical)
+    "log_level": "debug"
+  "basic":
+    "use_venv": !!bool "true"
+    "include_system_packages": !!bool "true"
+    "packages":
+    - "python3-psycopg2"
+    - "run-one"
+    "python_packages": []
+  "status":
+    "patch-hookenv": !!bool "true"
+  "apt":
+    "packages": []
+    "version_package": ""
+    "full_version": !!bool "false"
+    "keys": []
+  "snap": {}
+  "leadership": {}
+  "nagios": {}
+  "postgresql": {}
 "repo": "git+ssh://git.launchpad.net/postgresql-charm"
 "is": "postgresql"

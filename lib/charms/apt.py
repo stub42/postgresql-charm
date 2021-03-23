@@ -1,4 +1,4 @@
-# Copyright 2015-2016 Canonical Ltd.
+# Copyright 2015-2020 Canonical Ltd.
 #
 # This file is part of the Apt layer for Juju.
 #
@@ -19,7 +19,7 @@ charms.reactive helpers for dealing with deb packages.
 
 Add apt package sources using add_source(). Queue deb packages for
 installation with install(). Configure and work with your software
-once the apt.installed.{packagename} state is set.
+once the apt.installed.{packagename} flag is set.
 '''
 import itertools
 import re
@@ -28,16 +28,17 @@ import subprocess
 from charmhelpers import fetch
 from charmhelpers.core import hookenv, unitdata
 from charms import layer, reactive
+from charms.layer import status
+from charms.reactive import flags
 
 
-__all__ = ['add_source', 'update', 'queue_install', 'install_queued',
-           'installed', 'purge', 'ensure_package_status']
+__all__ = ['add_source', 'update', 'queue_install', 'install_queued', 'installed', 'purge', 'ensure_package_status']
 
 
 def add_source(source, key=None):
     '''Add an apt source.
 
-    Sets the apt.needs_update state.
+    Sets the apt.needs_update flag.
 
     A source may be either a line that can be added directly to
     sources.list(5), or in the form ppa:<user>/<ppa-name> for adding
@@ -51,38 +52,39 @@ def add_source(source, key=None):
     # Maybe we should remember which sources have been added already
     # so we don't waste time re-adding them. Is this time significant?
     fetch.add_source(source, key)
-    reactive.set_state('apt.needs_update')
+    reactive.set_flag('apt.needs_update')
 
 
 def queue_install(packages, options=None):
     """Queue one or more deb packages for install.
 
-    The `apt.installed.{name}` state is set once the package is installed.
+    The `apt.installed.{name}` flag is set once the package is installed.
 
     If a package has already been installed it will not be reinstalled.
 
     If a package has already been queued it will not be requeued, and
     the install options will not be changed.
 
-    Sets the apt.queued_installs state.
+    Sets the apt.queued_installs flag.
     """
     if isinstance(packages, str):
         packages = [packages]
     # Filter installed packages.
     store = unitdata.kv()
     queued_packages = store.getrange('apt.install_queue.', strip=True)
-    packages = {package: options for package in packages
-                if not (package in queued_packages or
-                        reactive.helpers.is_state('apt.installed.' + package))}
+    packages = {
+        package: options
+        for package in packages
+        if not (package in queued_packages or reactive.is_flag_set('apt.installed.' + package))
+    }
     if packages:
         unitdata.kv().update(packages, prefix='apt.install_queue.')
-        reactive.set_state('apt.queued_installs')
+        reactive.set_flag('apt.queued_installs')
 
 
 def installed():
     '''Return the set of deb packages completed install'''
-    return set(state.split('.', 2)[2] for state in reactive.bus.get_states()
-               if state.startswith('apt.installed.'))
+    return set(flag.split('.', 2)[2] for flag in flags.get_flags() if flag.startswith('apt.installed.'))
 
 
 def purge(packages):
@@ -91,52 +93,48 @@ def purge(packages):
     store = unitdata.kv()
     store.unsetrange(packages, prefix='apt.install_queue.')
     for package in packages:
-        reactive.remove_state('apt.installed.{}'.format(package))
+        reactive.clear_flag('apt.installed.{}'.format(package))
 
 
 def update():
     """Update the apt cache.
 
-    Removes the apt.needs_update state.
+    Removes the apt.needs_update flag.
     """
-    status_set(None, 'Updating apt cache')
+    status.maintenance('Updating apt cache')
     fetch.apt_update(fatal=True)  # Friends don't let friends set fatal=False
-    reactive.remove_state('apt.needs_update')
+    reactive.clear_flag('apt.needs_update')
 
 
 def install_queued():
     '''Installs queued deb packages.
 
-    Removes the apt.queued_installs state and sets the apt.installed state.
+    Removes the apt.queued_installs flag and sets the apt.installed flag.
 
-    On failure, sets the unit's workload state to 'blocked' and returns
+    On failure, sets the unit's workload status to 'blocked' and returns
     False. Package installs remain queued.
 
-    On success, sets the apt.installed.{packagename} state for each
+    On success, sets the apt.installed.{packagename} flag for each
     installed package and returns True.
     '''
     store = unitdata.kv()
-    queue = sorted((options, package)
-                   for package, options in store.getrange('apt.install_queue.',
-                                                          strip=True).items())
+    queue = sorted((options, package) for package, options in store.getrange('apt.install_queue.', strip=True).items())
 
     installed = set()
     for options, batch in itertools.groupby(queue, lambda x: x[0]):
         packages = [b[1] for b in batch]
         try:
-            status_set(None, 'Installing {}'.format(','.join(packages)))
+            status.maintenance('Installing {}'.format(','.join(packages)))
             fetch.apt_install(packages, options, fatal=True)
             store.unsetrange(packages, prefix='apt.install_queue.')
             installed.update(packages)
         except subprocess.CalledProcessError:
-            status_set('blocked',
-                       'Unable to install packages {}'
-                       .format(','.join(packages)))
-            return False  # Without setting reactive state.
+            status.blocked('Unable to install packages {}'.format(','.join(packages)))
+            return False  # Without setting reactive flag.
 
     for package in installed:
-        reactive.set_state('apt.installed.{}'.format(package))
-    reactive.remove_state('apt.queued_installs')
+        reactive.set_flag('apt.installed.{}'.format(package))
+    reactive.clear_flag('apt.queued_installs')
 
     reset_application_version()
 
@@ -156,7 +154,7 @@ def get_package_version(package, full_version=False):
     if not full_version:
         # Attempt to strip off Debian style metadata from the end of the
         # version number.
-        m = re.search('^([\d.a-z]+)', full, re.I)
+        m = re.search(r'^([\d.a-z]+)', full, re.I)
         if m is not None:
             return m.group(1)
     return full
@@ -188,8 +186,7 @@ def ensure_package_status():
         return
     config = hookenv.config()
     package_status = config.get('package_status') or ''
-    changed = reactive.helpers.data_changed('apt.package_status',
-                                            (package_status, sorted(packages)))
+    changed = reactive.data_changed('apt.package_status', (package_status, sorted(packages)))
     if changed:
         if package_status == 'hold':
             hookenv.log('Holding packages {}'.format(','.join(packages)))
@@ -197,21 +194,16 @@ def ensure_package_status():
         else:
             hookenv.log('Unholding packages {}'.format(','.join(packages)))
             fetch.apt_unhold(packages)
-    reactive.remove_state('apt.needs_hold')
+    reactive.clear_flag('apt.needs_hold')
 
 
 def status_set(state, message):
-    '''Set the unit's workload status.
+    '''DEPRECATED, set the unit's workload status.
 
     Set state == None to keep the same state and just change the message.
     '''
     if state is None:
         state = hookenv.status_get()[0]
-        if state == 'unknown':
+        if state not in ('active', 'waiting', 'blocked'):
             state = 'maintenance'  # Guess
-    if state in ('error', 'blocked'):
-        lvl = hookenv.WARNING
-    else:
-        lvl = hookenv.INFO
-    hookenv.status_set(state, message)
-    hookenv.log('{}: {}'.format(state, message), lvl)
+    status.status_set(state, message)

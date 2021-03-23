@@ -11,5 +11,6 @@ python-swiftclient
 charms.reactive
 charmhelpers
 juju-deployer
-pip<8.1.2
-websocket-client<=0.40.0
+pip
+websocket-client
+tenacity

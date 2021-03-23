@@ -16,9 +16,9 @@
 "tags":
 - "databases"
 "series":
-- "xenial"
-- "trusty"
+- "focal"
 - "bionic"
+- "xenial"
 "provides":
   "nrpe-external-master":
     "interface": "nrpe-external-master"
@@ -35,6 +35,7 @@
   "master":
     "interface": "pgreplication"
     "optional": !!bool "true"
+  # Can local-monitors be dropped? Did it ever get used?
   "local-monitors":
     "interface": "local-monitors"
     "scope": "container"
@@ -42,11 +43,17 @@
     "interface": "block-storage"
     "scope": "container"
     "optional": !!bool "true"
+  # We do not yet support slaving a PostgreSQL service to another
+  # PostgreSQL service.
+  # replica:
+  #   interface: pgreplication
+  #   optional: true
 "peers":
   "coordinator":
     "interface": "coordinator"
   "replication":
     "interface": "pgpeer"
+"display-name": "PostgreSQL"
 "resources":
   "wal-e":
     "type": "file"
@@ -55,9 +62,30 @@
 "storage":
   "pgdata":
     "type": "filesystem"
-    "description": "Database data files (ie. $PGDATA). Stores all of your data and\
-      \ indexes. Mainly random access reads and writes.\n"
+    "description": >
+      Database data files (ie. $PGDATA). Stores all of your data and
+      indexes. Mainly random access reads and writes.
+    # We need a small minimum-size for testing.
     "minimum-size": "5M"
     "location": "/srv/pgdata"
+    # Bug #1504658 means only optional storage.
     "multiple":
       "range": "0-1"
+#   wal:
+#     type: filesystem
+#     description: >
+#         WAL (Write Ahead Log) files. Database updates are first stored
+#         in WAL before being applied to the actual data files, providing
+#         PostgreSQL with ACID writes. Mainly sequential writes, with the
+#         bulk of files exactly 16MB in size.
+#     shared: false
+#     read-only: false
+#     location: /srv/wal
+#   backups:
+#     type: filesystem
+#     description: >
+#         Storage for logical dumps, as scheduled by the 'backup_schedule'
+#         configuration item.
+#     shared: false
+#     read-only: false
+#     location: /srv/backups
