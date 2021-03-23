@@ -1,6 +1,6 @@
 #!/usr/local/sbin/charm-env python3
 
-# Copyright 2015-2018 Canonical Ltd.
+# Copyright 2015-2021 Canonical Ltd.
 #
 # This file is part of the PostgreSQL Charm for Juju.
 #
@@ -30,6 +30,25 @@ from charms import reactive
 
 from reactive.postgresql import postgresql
 from reactive.postgresql import wal_e
+
+
+def maintenance_mode_start(params):
+    if not hookenv.is_leader():
+        hookenv.action_fail("Not the leader")
+        return
+
+    hookenv.leader_set(maintenance_mode="on")
+    hookenv.action_set({"maintenance-mode": "on"})
+
+
+def maintenance_mode_stop(params):
+    if not hookenv.is_leader():
+        hookenv.action_fail("Not the leader")
+        return
+
+    hookenv.leader_set(maintenance_mode=None)
+    hookenv.status_set("maintenance", "Leaving maintenance mode")
+    hookenv.action_set({"maintenance-mode": "off"})
 
 
 def replication_pause(params):
@@ -186,8 +205,18 @@ def reactive_action(state):
 
 def main(argv):
     action = os.path.basename(argv[0])
-    params = hookenv.action_get()
     try:
+        params = hookenv.action_get()
+
+        if action == "maintenance-mode-start":
+            maintenance_mode_start(params)
+        elif action == "maintenance-mode-stop":
+            maintenance_mode_stop(params)
+
+        if hookenv.leader_get("maintenance_mode") is not None:
+            hookenv.action_fail("Application is in maintenance mode")
+            return
+
         if action == "replication-pause":
             replication_pause(params)
         elif action == "replication-resume":
@@ -200,6 +229,8 @@ def main(argv):
             reactive_action("action.wal-e-restore")
         elif action == "switchover":
             reactive_action("action.switchover")
+        elif action in ("maintenance-mode-start", "maintenance-mode-stop"):
+            reactive_action("action.{}".format(action))  # Sets status, exits.
         else:
             hookenv.action_fail("Action {} not implemented".format(action))
     except Exception:

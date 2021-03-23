@@ -18,16 +18,24 @@ from charmhelpers.core import hookenv
 
 from reactive.workloadstatus import status_set
 from reactive.postgresql import postgresql
+from reactive.postgresql import replication
 
 from preflight import preflight
 
 
 @preflight
-def block_on_bad_juju():
-    if not hookenv.has_juju_version("1.24"):
-        status_set("blocked", "Requires Juju 1.24 or higher")
-        # Error state, since we don't have 1.24 to give a nice blocked state.
-        raise SystemExit(1)
+def block_on_maintenance_mode():
+    if hookenv.leader_get("maintenance_mode"):
+        master = replication.get_master()
+        if master is None:
+            msg = "Application in maintenance mode"
+        elif master == hookenv.local_unit():
+            msg = "Master unit in maintenance mode"
+        else:
+            msg = "Standby unit in maintenance mode"
+        hookenv.status_set("blocked", msg)
+        hookenv.log("Application is in maintenance mode, terminating hook", hookenv.WARNING)
+        raise SystemExit(0)  # Terminate now without error. hookenv.atexit() not invoked.
 
 
 @preflight

@@ -1,3 +1,21 @@
+maintenance-mode-start:
+  description: >
+    Put the cluster into maintenance mode, where Juju hooks will
+    do nothing and the charm will make no changes to the deployment.
+    This action must be run on the Juju leader. It is your responsibility
+    to ensure that any manual maintenance work you perform will not
+    confuse the charm and it will regain control once maintenance mode is
+    ended. Turning off mainenance mode after significant changes, such as
+    a manual failover, can result in catastrophic dataloss. It is also
+    important to not instruct Juju to make changes during maintenance
+    mode, such as adding storage to units or upgrading the charm, as
+    the charm will not react to these changes and the operations can
+    also result in catestrophic dataloss when required preamble steps
+    are not performed.
+
+maintenance-mode-stop:
+  description: See maintenance-mode-start.
+
 replication-pause:
   description: Pause replication replay on a hot standby unit.
 
