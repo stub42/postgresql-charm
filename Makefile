@@ -86,24 +86,26 @@ publish-dev: build-dev
 	git push -f --tags upstream $(LAYER_BRANCH) $(DEVEL_BRANCH)
 	git push -f --tags github $(LAYER_BRANCH) $(DEVEL_BRANCH)
 
-# Publish the latest development build as the stable release in
-# both the charm store and in $(STABLE_BRANCH).
-.PHONY: publish-stable
-publish-stable:
-	-git branch $(STABLE_BRANCH) $(DEVEL_BRANCH)
-	rm -rf .tmp-repo
-	git clone --no-single-branch -b $(STABLE_BRANCH) . .tmp-repo
-	cd .tmp-repo \
-	    && git merge --no-ff origin/$(DEVEL_BRANCH) -s theirs --log \
-		-m "charm-build of $(LAYER_BRANCH)" \
-	    && export rev=`charm push . $(CHARM_STORE_URL) 2>&1 \
-		| tee /dev/tty | grep url: | cut -f 2 -d ' '` \
-	    && git tag -f -m "$$rev" `echo $$rev | tr -s '~:/' -` \
-	    && git push -f --tags .. $(STABLE_BRANCH) \
-	    && charm release -c stable $$rev --resource wal-e-0
-	rm -rf .tmp-repo
-	git push -f --tags upstream master built
-	git push -f --tags github master built
+# # This rule fails
+#
+# # Publish the latest development build as the stable release in
+# # both the charm store and in $(STABLE_BRANCH).
+# .PHONY: publish-stable
+# publish-stable:
+# 	-git branch $(STABLE_BRANCH) $(DEVEL_BRANCH)
+# 	rm -rf .tmp-repo
+# 	git clone --no-single-branch -b $(STABLE_BRANCH) . .tmp-repo
+# 	cd .tmp-repo \
+# 	    && git merge --no-ff origin/$(DEVEL_BRANCH) -s theirs --log \
+# 		-m "charm-build of $(LAYER_BRANCH)" \
+# 	    && export rev=`charm push . $(CHARM_STORE_URL) 2>&1 \
+# 		| tee /dev/tty | grep url: | cut -f 2 -d ' '` \
+# 	    && git tag -f -m "$$rev" `echo $$rev | tr -s '~:/' -` \
+# 	    && git push -f --tags .. $(STABLE_BRANCH) \
+# 	    && charm release -c stable $$rev --resource wal-e-0
+# 	rm -rf .tmp-repo
+# 	git push -f --tags upstream master built
+# 	git push -f --tags github master built
 
 # Clean crud from running tests etc.
 #buildclean:
