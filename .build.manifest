@@ -50,7 +50,7 @@
     },
     {
       "branch": "refs/heads/master",
-      "rev": "f370ca8472b5a64b9fc9ebd73040ee031faa1b3c",
+      "rev": "2a9d306d1712317f7df568b888761bd1885a474f",
       "url": "postgresql"
     },
     {
@@ -1050,7 +1050,7 @@
     "version": [
       "postgresql",
       "dynamic",
-      "7654cdf3c0b7ce42f646884f584b48a53a79cb77b1cdc2f8a2df0937b18ed413"
+      "36abc1f2131e5bed34f7373fe32878e05ea118098ba9ba033a8599d8451ac04f"
     ],
     "wheelhouse.txt": [
       "layer:snap",
