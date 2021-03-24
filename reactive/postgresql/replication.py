@@ -17,7 +17,6 @@
 import os.path
 import shutil
 import subprocess
-from textwrap import dedent
 import time
 
 import psycopg2
@@ -302,16 +301,19 @@ def failover():
 
     # Stop replicating the doomed master, or we risk diverging
     # timelines.
-    helpers.rewrite(
-        postgresql.recovery_conf_path(),
-        dedent(
-            """\
-                           # Managed by Juju. Failover in progress.
-                           standby_mode = on
-                           recovery_target_timeline = latest
-                           """
-        ),
-    )
+
+    pg12 = postgresql.has_version("12")
+    if pg12:
+        path = postgresql.hot_standby_conf_path()
+        template = "hot_standby.conf.tmpl"
+    else:
+        path = postgresql.recovery_conf_path()
+        template = "recovery.conf.tmpl"
+
+    templating.render(template, path, {}, owner="postgres", group="postgres", perms=0o600)
+
+    if pg12:
+        touch(postgresql.hot_standby_signal_path())
 
     # Kick off a rolling restart to apply the change.
     reactive.set_state("postgresql.cluster.needs_restart")

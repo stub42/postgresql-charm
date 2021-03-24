@@ -50,7 +50,7 @@
     },
     {
       "branch": "refs/heads/master",
-      "rev": "677a2f2698597d6e3b540533e4beeb730003dd4b",
+      "rev": "038644aeb00ff03c1fb9c53cbe4b9b42696fef4c",
       "url": "postgresql"
     },
     {
@@ -885,7 +885,7 @@
     "reactive/postgresql/replication.py": [
       "postgresql",
       "static",
-      "fac977f00691813e6388746ffeb915b09751b85f1342d73fd4d520f8384faf2d"
+      "a2ce8b421f4280b99bcb910a6edf0d95e1cf918950c79b716b665ec8e6877658"
     ],
     "reactive/postgresql/service.py": [
       "postgresql",
@@ -1050,7 +1050,7 @@
     "version": [
       "postgresql",
       "dynamic",
-      "243528dda5b7a545d770aa122ee3b77736e5c29d03f2a33ea5408b3734f3183d"
+      "142a86aa4638d4f5f2baaef2023144a8a34daa2b1d47d88553a63bbb7cc17160"
     ],
     "wheelhouse.txt": [
       "layer:snap",
