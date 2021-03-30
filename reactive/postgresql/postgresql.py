@@ -200,7 +200,7 @@ def inhibit_default_cluster_creation():
     if os.path.exists(path):
         return
     os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
-    host.write_file(path, "create_main_cluster = false", perms=0x444)
+    host.write_file(path, "create_main_cluster = false", perms=0o444)
 
 
 def config_dir():
