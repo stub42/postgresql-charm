@@ -195,6 +195,11 @@ def inhibit_default_cluster_creation():
 
     We can't use the default cluster as it is likely created with an
     incorrect locale and without options such as data checksumming.
+    Allowing the package to create the cluster is problematic, as the
+    charm can't really tell between a cluster created by package
+    installation that can be safely destroyed, and a cluster left
+    from a previous installation that might contain precious data that
+    we can't risk destroying.
     """
     if host.get_distrib_codename() == "xenial":
         # Xenial's postgresql-common package does not support includes in
