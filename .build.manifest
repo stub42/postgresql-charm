@@ -50,7 +50,7 @@
     },
     {
       "branch": "refs/heads/master",
-      "rev": "8989fbeb2460b90e9b334169820314751d4b899c",
+      "rev": "6a287827a2b9d2eb63fdf660c0f83fddce6dc972",
       "url": "postgresql"
     },
     {
@@ -875,7 +875,7 @@
     "reactive/postgresql/postgresql.py": [
       "postgresql",
       "static",
-      "260b4be59d6d6fc9d33e43f1eee056662de7fe5b4f04e7a75c904cb89d86a1bb"
+      "57675237ce31eb81888ed32bdc913376f246c9e06aa292a69a17bf0053a5db52"
     ],
     "reactive/postgresql/preflight.py": [
       "postgresql",
@@ -1050,7 +1050,7 @@
     "version": [
       "postgresql",
       "dynamic",
-      "d236a3dd44c3ad5d78b6954a02bda49247c3a987bde25bac1b09f25471d1c889"
+      "7d2c046003a8f0e77db34917510e162e4a2616431d801b7881aac7167ecaa80d"
     ],
     "wheelhouse.txt": [
       "layer:snap",

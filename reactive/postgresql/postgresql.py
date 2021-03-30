@@ -196,6 +196,21 @@ def inhibit_default_cluster_creation():
     We can't use the default cluster as it is likely created with an
     incorrect locale and without options such as data checksumming.
     """
+    if host.get_distrib_codename() == "xenial":
+        # Xenial's postgresql-common package does not support includes in
+        # cluster configuration files.
+        os.makedirs("/etc/postgresql-common", mode=0o755, exist_ok=True)
+        content = "\n".join(
+            [
+                "ssl = on",
+                "stats_temp_directory = '/var/run/postgresql/%v-%c.pg_stat_tmp'",
+                "log_line_prefix = '%%t [%%p-%%l] %%q%%u@%%d '",
+                "create_main_cluster = false",
+            ]
+        )
+        host.write_file("/etc/postgresql-common/createcluster.conf", content, perms=0o444)
+        return
+
     path = createcluster_conf_path()
     if os.path.exists(path):
         return
